@@ -15,6 +15,7 @@ const Dashboard = () => {
   const [pollMultiple, setPollMultiple] = useState(false);
   const [pollOptions, setPollOptions] = useState(["", ""]);
   const [loading, setLoading] = useState(false);
+  const [category, setCategory] = useState("")
   const [uploading, setUploading] = useState(false);
 
   const router = useRouter();
@@ -84,10 +85,10 @@ const Dashboard = () => {
       const typeToSend = mediaUrl
         ? mediaType
         : mediaUrlLink
-        ? mediaUrlLink.includes("video") || mediaUrlLink.includes("tiktok")
-          ? "video"
-          : "image"
-        : null;
+          ? mediaUrlLink.includes("video") || mediaUrlLink.includes("tiktok")
+            ? "video"
+            : "image"
+          : null;
 
       const res = await fetch("/api/posts", {
         method: "POST",
@@ -103,6 +104,7 @@ const Dashboard = () => {
           pollOptions: hasPoll
             ? pollOptions.filter((opt) => opt.trim() !== "").map((opt) => ({ text: opt }))
             : [],
+          category
         }),
       });
 
@@ -127,11 +129,15 @@ const Dashboard = () => {
   };
 
   return (
-    <div style={{ padding: "2rem" }}>
-      <div className=" flex gap-4">
-      <h1 className="text-2xl">Welcome, {user.username} 👋</h1>
+    <div className="min-h-[70vh] relative" style={{ padding: "2rem" }}>
+      {/* Subtle anime glow */}
+      <div className="absolute top-10 left-10 w-48 h-48 bg-blue-300 dark:bg-indigo-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
+      <div className="absolute bottom-10 right-10 w-56 h-56 bg-pink-300 dark:bg-pink-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
 
-      <Link className=" text-2xl hover:text-red-500 hover:underline" href={"authordiary/profile"}>Edit Profile Details</Link>
+      <div className=" flex gap-4">
+        <h1 className="text-2xl">Welcome, {user.username} 👋</h1>
+
+        <Link className=" text-2xl hover:text-red-500 hover:underline" href={"authordiary/profile"}>Edit Profile Details</Link>
       </div>
       <hr className="my-6" />
 
@@ -145,7 +151,16 @@ const Dashboard = () => {
           rows={5}
           className="w-full border p-2 rounded"
         />
-
+        <select
+          value={category}
+          onChange={(e) => setCategory(e.target.value)}
+          className="border p-2 rounded-md"
+        >
+          <option value="News">News</option>
+          <option value="Memes">Memes</option>
+          <option value="Videos/Edits">Videos/Edits</option>
+          <option value="Polls">Polls</option>
+        </select>
         <div className="flex flex-col gap-2">
           <input
             type="text"

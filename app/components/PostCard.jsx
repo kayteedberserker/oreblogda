@@ -7,7 +7,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import Poll from "./Poll";
 
-export default function PostCard({ post, posts, setPosts, isFeed, hideComments = false }) {
+export default function PostCard({ post, posts, setPosts, isFeed, hideComments = false, hideMedia, className }) {
 	const [liked, setLiked] = useState(false);
 	const [likeAnim, setLikeAnim] = useState(false);
 	const [burst, setBurst] = useState(false);
@@ -170,9 +170,9 @@ export default function PostCard({ post, posts, setPosts, isFeed, hideComments =
 
 	return (
 		<>
-			<div className="bg-white dark:bg-gray-800 shadow-md rounded-md p-4 mb-6 relative overflow-hidden">
+			<div className={`bg-white dark:bg-gray-800 shadow-md rounded-md p-4 mb-6 relative overflow-hidden ${className}`}>
 				{/* Author & Views */}
-				<div className="flex justify-between items-center mb-2">
+				<div className="flex justify-between items-center mb-1">
 					<Link href={`/author/${post.authorId}`} className="flex items-center space-x-2 hover:underline">
 						{author.image ? (
 							<img
@@ -191,7 +191,7 @@ export default function PostCard({ post, posts, setPosts, isFeed, hideComments =
 				</div>
 
 				{/* Message */}
-				<p className="text-gray-800 dark:text-gray-100 mb-2">
+				<p className="text-gray-800 dark:text-gray-100 mb-1">
 					{isFeed ? (
 						isLongMessage && !showFullMessage ? (
 							<>
@@ -213,35 +213,35 @@ export default function PostCard({ post, posts, setPosts, isFeed, hideComments =
 				</p>
 
 				{/* Media */}
-{post.mediaUrl && (
-  post.mediaUrl.includes("tiktok.com") ? (
-    <>
-      <blockquote
-        className="tiktok-embed"
-        cite={post.mediaUrl.split("?")[0]}
-        data-video-id={post.mediaUrl.match(/video\/(\d+)/)?.[1]}
-        style={{ maxWidth: "100%", minWidth: "325px" }}
-      >
-        <section> </section>
-      </blockquote>
-      <script async src="https://www.tiktok.com/embed.js"></script>
-    </>
-  ) : post.mediaType?.startsWith("image") ? (
-    <img
-      src={post.mediaUrl}
-      alt="post media"
-      className="rounded-md mb-2 max-h-80 w-full object-cover cursor-pointer"
-      onClick={() => openLightbox(post.mediaUrl, "image")}
-    />
-  ) : (
-    <video
-      src={post.mediaUrl}
-      controls
-      className="rounded-md mb-2 max-h-80 w-full object-cover cursor-pointer"
-      onClick={() => openLightbox(post.mediaUrl, "video")}
-    />
-  )
-)}
+				{!hideMedia && post.mediaUrl && (
+					post.mediaUrl.includes("tiktok.com") ? (
+						<>
+							<blockquote
+								className="tiktok-embed"
+								cite={post.mediaUrl.split("?")[0]}
+								data-video-id={post.mediaUrl.match(/video\/(\d+)/)?.[1]}
+								style={{ maxWidth: "100%", minWidth: "325px" }}
+							>
+								<section> </section>
+							</blockquote>
+							<script async src="https://www.tiktok.com/embed.js"></script>
+						</>
+					) : post.mediaType?.startsWith("image") ? (
+						<img
+							src={post.mediaUrl}
+							alt="post media"
+							className="rounded-md mb-2 max-h-80 w-full object-cover cursor-pointer"
+							onClick={() => openLightbox(post.mediaUrl, "image")}
+						/>
+					) : (
+						<video
+							src={post.mediaUrl}
+							controls
+							className="rounded-md mb-2 max-h-80 w-full object-cover cursor-pointer"
+							onClick={() => openLightbox(post.mediaUrl, "video")}
+						/>
+					)
+				)}
 
 
 

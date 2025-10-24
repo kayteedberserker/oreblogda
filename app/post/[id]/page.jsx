@@ -6,6 +6,7 @@ import PostCard from "@/components/PostCard";
 import { useParams } from "next/navigation";
 import { ToastContainer } from "react-toastify";
 import CommentSection from "@/components/CommentSection";
+import SimilarPosts from "@/components/SimilarPosts";
 
 export default function PostPage() {
   const params = useParams();
@@ -50,7 +51,11 @@ export default function PostPage() {
   const postImage = post.mediaUrl || "https://yourdomain.com/og-image.jpg";
 
   return (
-    <div className="max-w-7xl mx-auto py-10 px-4 min-h-[70vh]">
+    <div className="max-w-7xl mx-auto py-10 px-4 min-h-[70vh] relative">
+      {/* Subtle anime glow */}
+      <div className="absolute top-10 left-10 w-48 h-48 bg-blue-300 dark:bg-indigo-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
+      <div className="absolute bottom-10 right-10 w-56 h-56 bg-pink-300 dark:bg-pink-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
+
       {/* Page SEO */}
       <NextSeo
         title={post.title || "Post title"}
@@ -82,9 +87,8 @@ export default function PostPage() {
         authorName={post.authorName || "Oreblogda"}
         description={description}
       />
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Post content (2/3 width) */}
+        {/* Post content */}
         <div className="lg:col-span-2">
           <PostCard
             post={post}
@@ -93,11 +97,21 @@ export default function PostPage() {
             setPosts={setPost}
             hideComments={true}
           />
+
+          {/* Similar posts for large screens */}
+          <div className="hidden lg:block">
+            <SimilarPosts category={post.category} currentPostId={post._id} />
+          </div>
         </div>
 
-        {/* Comments section (1/3 width) */}
+        {/* Comments section */}
         <div className="lg:col-span-1">
           <CommentSection postId={id} />
+
+          {/* Similar posts for small screens */}
+          <div className="lg:hidden mt-6">
+            <SimilarPosts category={post.category} currentPostId={post._id} />
+          </div>
         </div>
       </div>
 
