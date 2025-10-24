@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import UserModel from "@/models/UserModel";
-import cloudinary from "@/lib/cloudinary";
+import connectDB from "@/app/lib/mongodb";
+import UserModel from "@/app/models/UserModel";
+import cloudinary from "@/app/lib/cloudinary";
 
 export async function PUT(req) {
   await connectDB();
