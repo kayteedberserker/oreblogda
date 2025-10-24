@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Post from "@/models/PostModel";
-import { verifyToken } from "@/lib/auth";
-import Newsletter from "@/models/Newsletter";
+import connectDB from "@/app/lib/mongodb";
+import Post from "@/app/models/PostModel";
+import { verifyToken } from "@/app/lib/auth";
+import Newsletter from "@/app/models/Newsletter";
 import nodemailer from "nodemailer";
 
 
