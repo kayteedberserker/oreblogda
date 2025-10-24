@@ -1,8 +1,8 @@
 // /app/api/auth/me/route.js
 import { NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
-import connectDB from "@/lib/mongodb";
-import UserModel from "@/models/UserModel";
+import connectDB from "@/app/lib/mongodb";
+import UserModel from "@/app/models/UserModel";
 
 export async function GET(req) {
   try {
