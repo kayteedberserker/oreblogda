@@ -1,5 +1,4 @@
 @import "tailwindcss";
-
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -22,5 +21,24 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: "Space Grotesk", sans-serif;
+  font-optical-sizing: auto;
+  font-style: normal;
 }
+
+
+.postCardImg {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+/* postCard.module.css */
+.likeButton {
+  transition: transform 0.2s ease;
+}
+
+.likeButton.liked {
+  transform: scale(1.3);
+  color: #f87171; /* red-400 */
+}
+
