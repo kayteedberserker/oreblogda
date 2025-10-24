@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Post from "@/models/PostModel";
-import cloudinary from "@/lib/cloudinary";
+import connectDB from "@/app/lib/mongodb";
+import Post from "@/app/models/PostModel";
+import cloudinary from "@/app/lib/cloudinary";
 
 export async function DELETE(req) {
   await connectDB();
