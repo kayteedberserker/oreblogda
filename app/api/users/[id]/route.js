@@ -1,5 +1,5 @@
-import connectDB from "@/lib/mongodb";
-import UserModel from "@/models/UserModel";
+import connectDB from "@/app/lib/mongodb";
+import UserModel from "@/app/models/UserModel";
 
 export async function GET(req, { params }) {
     const resolvedParams = await params;  // ✅ unwrap the Promise
