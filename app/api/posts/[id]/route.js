@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import connectDB from "@/lib/mongodb";
-import Post from "@/models/PostModel";
+import connectDB from "@/app/lib/mongodb";
+import Post from "@/app/models/PostModel";
 
 // PATCH — like, comment, vote, share, etc.
 export async function PATCH(req, { params }) {
