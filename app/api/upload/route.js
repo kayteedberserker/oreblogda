@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import cloudinary from "@/lib/cloudinary";
+import cloudinary from "@/app/lib/cloudinary";
 import fs from "fs";
 import path from "path";
 
