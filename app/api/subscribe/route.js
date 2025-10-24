@@ -1,6 +1,6 @@
 // app/api/subscribe/route.js
-import Newsletter from "@/models/Newsletter";
-import connectDB from "@/lib/mongodb";
+import Newsletter from "@/app/models/Newsletter";
+import connectDB from "@/app/lib/mongodb";
 import nodemailer from "nodemailer";
 
 export async function POST(req) {
