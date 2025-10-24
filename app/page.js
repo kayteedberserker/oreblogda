@@ -1,7 +1,7 @@
 // app/page.jsx
-import PostsViewer from "@/components/PostsViewer";
+import PostsViewer from "@/app/components/PostsViewer";
 import { ToastContainer } from "react-toastify";
-import Navbar from "./components/Navbar";
+import Navbar from "./app/components/Navbar";
 
 export default async function HomePage() {
 	return (
