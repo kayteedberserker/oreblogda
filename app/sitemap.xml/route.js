@@ -1,5 +1,5 @@
 import { connectDB } from "@/app/lib/connectDB";
-import Post from "@/models/PostModel";
+import Post from "@/app/models/PostModel";
 
 export async function GET() {
   await connectDB();
