@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import connectDB  from "./lib/mongodb";
-import User from "./models/UserModel";
+import connectDB  from "@/app/lib/mongodb";
+import User from "@/app/models/UserModel";
 
 
