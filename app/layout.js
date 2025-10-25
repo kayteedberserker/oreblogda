@@ -5,8 +5,8 @@ import Footer from "@/app/components/Footer";
 import { fetcher } from "./lib/fetcher";
 import CategoryNav from "@/app/components/CategoryNav";
 import { ThemeProvider } from "next-themes";
-import { SpeedInsights } from "@vercel/speed-insights/next"
-import { Analytics } from "@vercel/analytics/next"
+import { SpeedInsights } from "@vercel/speed-insights/react"
+import { Analytics } from "@vercel/analytics/react"
 import { SWRConfig } from "swr";
 import { ToastContainer } from "react-toastify";
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"] });
@@ -71,8 +71,6 @@ export default function RootLayout({ children }) {
      crossorigin="anonymous"></script>
       </head>
       <body className={`antialiased ${spaceGrotesk.className} h-screen`}>
-        <Analytics />
-        <SpeedInsights />
         {/* ✅ Only client-side hook component */}
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem={true}>
         <SWRConfig value={{
@@ -91,6 +89,8 @@ export default function RootLayout({ children }) {
             <Footer />
         </SWRConfig>
           </ThemeProvider>
+              <Analytics />
+        <SpeedInsights />
       </body>
     </html>
   );
