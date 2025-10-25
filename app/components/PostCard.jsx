@@ -268,6 +268,7 @@ export default function PostCard({
         <div className="flex items-center space-x-4 mt-2 text-gray-600 dark:text-gray-300 relative">
           <div className="relative">
             <motion.button
+			name="Add like"
               onClick={handleLike}
               whileTap={{ scale: 1.3 }}
               className={`flex items-center space-x-1 transition-transform duration-300 ${likeAnim ? "scale-125" : "scale-100"}`}
@@ -293,6 +294,7 @@ export default function PostCard({
           </div>
 
           <motion.button
+		  name="Open comment"
             onClick={() => setShowCommentInput((prev) => !prev)}
             whileHover={{ scale: 1.05 }}
             className="flex items-center space-x-1"
@@ -309,6 +311,7 @@ export default function PostCard({
           </motion.button>
 
           <motion.button
+		  name="share"
             onClick={handleShare}
             whileHover={{ scale: 1.05 }}
             className="flex items-center space-x-1"
@@ -347,6 +350,7 @@ export default function PostCard({
               className="w-full border rounded-md p-2 text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 resize-none"
             />
             <button
+			name="Add comment"
               onClick={handleAddComment}
               className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
             >
@@ -395,6 +399,7 @@ export default function PostCard({
           onClick={closeLightbox}
         >
           <button
+		  name="close image"
             onClick={closeLightbox}
             className="absolute top-4 right-4 text-white text-2xl"
           >

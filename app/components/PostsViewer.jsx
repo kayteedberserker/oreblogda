@@ -70,6 +70,7 @@ export default function PostsViewer() {
         {/* Mini drawer - small screens */}
         <div className="md:hidden">
           <button
+          name="Open Poll"
             onClick={() => setDrawerOpen((p) => !p)}
             className="fixed top-1/3 right-[-20px] z-50 w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg"
           >
