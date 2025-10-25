@@ -12,25 +12,17 @@ const Navbar = () => {
 
   if (hideNavbarRoutes.includes(pathname)) return null;
   const [isMobileOpen, setIsMobileOpen] = useState(false);
-  const [theme, setTheme] = useState("light");
+  const [theme, setTheme] = useState(
+  typeof window !== "undefined" && document.documentElement.classList.contains("dark")
+    ? "dark"
+    : "light"
+);
 
   const links = [
     { name: "Home", href: "/" },
     { name: "About", href: "/about" },
     { name: "Contact", href: "/contact" },
   ];
-
-  // Detect system theme automatically and react to changes
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = (e) => setTheme(e.matches ? "dark" : "light");
-
-    setTheme(mediaQuery.matches ? "dark" : "light"); // initial check
-    mediaQuery.addEventListener("change", handleChange);
-
-    return () => mediaQuery.removeEventListener("change", handleChange);
-  }, []);
-
   return (
     <nav
       className={`w-full fixed top-0 left-0 z-50 transition-colors duration-300 ${
