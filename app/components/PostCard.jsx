@@ -237,7 +237,7 @@ export default function PostCard({
               </Link>
             )
           ) : (
-            displayMessage
+            post?.message
           )}
         </p>
 
