@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useRef } from "react";
 import { useParams } from "next/navigation";
-import PostCard from "@/components/PostCard";
-import RecentPollsCard from "@/components/RecentPollsCard";
+import PostCard from "@/app/components/PostCard";
+import RecentPollsCard from "@/app/components/RecentPollsCard";
 import { FaPoll } from "react-icons/fa";
 
 export default function CategoryPage() {
