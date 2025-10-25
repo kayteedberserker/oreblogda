@@ -47,6 +47,18 @@ export default function RootLayout({ children }) {
         </div>
         <Footer />
       </body>
+          <script
+    dangerouslySetInnerHTML={{
+      __html: `
+        (function() {
+          try {
+            const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            document.documentElement.classList.add(theme);
+          } catch(e) {}
+        })();
+      `,
+    }}
+  />
     </html>
   );
 }
