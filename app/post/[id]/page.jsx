@@ -2,10 +2,10 @@
 import { useEffect, useState } from "react";
 import Cookies from "js-cookie";
 import { NextSeo, ArticleJsonLd } from "next-seo";
-import PostCard from "@/components/PostCard";
+import PostCard from "@/app/components/PostCard";
 import { useParams } from "next/navigation";
 import { ToastContainer } from "react-toastify";
-import CommentSection from "@/components/CommentSection";
+import CommentSection from "@/app/components/CommentSection";
 import SimilarPosts from "@/components/SimilarPosts";
 
 export default function PostPage() {
