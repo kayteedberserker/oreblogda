@@ -1,9 +1,8 @@
 import { NextResponse } from "next/server";
 import cloudinary from "@/app/lib/cloudinary";
-import fs from "fs";
-import path from "path";
+import streamifier from "streamifier"; // ⬅️ need to install this
 
-export const runtime = "nodejs"; // ✅ Correct
+export const runtime = "nodejs"; // required for cloudinary uploads
 
 export async function POST(req) {
   try {
@@ -11,21 +10,28 @@ export async function POST(req) {
     const data = await req.arrayBuffer();
     const buffer = Buffer.from(data);
 
-    // ✅ Save temporary file in Vercel’s writable /tmp directory
-    const tmpPath = path.join("/tmp", `upload_${Date.now()}.jpg`);
-    fs.writeFileSync(tmpPath, buffer);
+    // ✅ Wrap Cloudinary’s upload_stream in a Promise
+    const uploadToCloudinary = () => {
+      return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          { folder: "posts" },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
 
-    // ✅ Upload to Cloudinary
-    const result = await cloudinary.uploader.upload(tmpPath, {
-      folder: "posts",
-    });
+        // ✅ Send file buffer as a stream
+        streamifier.createReadStream(buffer).pipe(stream);
+      });
+    };
 
-    // ✅ Clean up
-    fs.unlinkSync(tmpPath);
+    // Upload directly (no local write)
+    const result = await uploadToCloudinary();
 
     return NextResponse.json({ url: result.secure_url });
   } catch (err) {
-    console.error(err);
+    console.error("Upload error:", err);
     return NextResponse.json(
       { message: "Upload failed", error: err.message },
       { status: 500 }
