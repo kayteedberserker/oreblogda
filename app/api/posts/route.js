@@ -29,14 +29,13 @@ export async function GET(req) {
       .skip(skip)
       .limit(limit)
       .lean();
-
+    
     const serializedPosts = posts.map((p) => ({
       ...p,
       _id: p._id.toString(), // ✅ Convert ObjectId to string
     }));
 
     const total = await Post.countDocuments(query);
-
     return new Response(
       JSON.stringify({ posts: serializedPosts, total, page, limit }),
       { status: 200 }
