@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HiMenu, HiX } from "react-icons/hi";
+import { HiMenu, HiX, HiSun, HiMoon } from "react-icons/hi";
 import { motion, AnimatePresence } from "framer-motion";
 
 const Navbar = () => {
@@ -11,14 +11,8 @@ const Navbar = () => {
   const hideNavbarRoutes = ["/auth/login", "/auth/signup"];
   if (hideNavbarRoutes.includes(pathname)) return null;
 
-  // Initialize theme from <html> class
-  const [theme, setTheme] = useState(
-    typeof window !== "undefined" &&
-      document.documentElement.classList.contains("dark")
-      ? "dark"
-      : "light"
-  );
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [theme, setTheme] = useState("light");
 
   const links = [
     { name: "Home", href: "/" },
@@ -26,22 +20,28 @@ const Navbar = () => {
     { name: "Contact", href: "/contact" },
   ];
 
-  // Keep state in sync with system theme changes
+  // ✅ Initialize theme on mount
   useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const handleChange = (e) => {
-      const newTheme = e.matches ? "dark" : "light";
-      setTheme(newTheme);
-      if (newTheme === "dark") {
-        document.documentElement.classList.add("dark");
-      } else {
-        document.documentElement.classList.remove("dark");
-      }
-    };
-
-    mediaQuery.addEventListener("change", handleChange);
-    return () => mediaQuery.removeEventListener("change", handleChange);
+    // Try localStorage first
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme) {
+      setTheme(savedTheme);
+      document.documentElement.classList.toggle("dark", savedTheme === "dark");
+    } else {
+      // fallback to system preference
+      const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
+      setTheme(darkQuery.matches ? "dark" : "light");
+      document.documentElement.classList.toggle("dark", darkQuery.matches);
+    }
   }, []);
+
+  // ✅ Toggle theme handler
+  const toggleTheme = () => {
+    const newTheme = theme === "dark" ? "light" : "dark";
+    setTheme(newTheme);
+    localStorage.setItem("theme", newTheme);
+    document.documentElement.classList.toggle("dark", newTheme === "dark");
+  };
 
   return (
     <nav
@@ -90,10 +90,23 @@ const Navbar = () => {
                 </motion.div>
               );
             })}
+            {/* Theme toggle button */}
+            <button
+              onClick={toggleTheme}
+              className="ml-4 p-2 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+            >
+              {theme === "dark" ? <HiSun size={20} /> : <HiMoon size={20} />}
+            </button>
           </div>
 
           {/* Mobile Menu Button */}
-          <div className="md:hidden flex items-center">
+          <div className="md:hidden flex items-center space-x-2">
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+            >
+              {theme === "dark" ? <HiSun size={20} /> : <HiMoon size={20} />}
+            </button>
             <button
               onClick={() => setIsMobileOpen(!isMobileOpen)}
               className="p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
