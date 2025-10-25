@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams } from "next/navigation";
-import PostCard from "@/components/PostCard";
+import PostCard from "@/app/components/PostCard";
 
 export default function AuthorPage() {
   const { id } = useParams();
