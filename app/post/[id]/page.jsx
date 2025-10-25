@@ -6,7 +6,7 @@ import PostCard from "@/app/components/PostCard";
 import { useParams } from "next/navigation";
 import { ToastContainer } from "react-toastify";
 import CommentSection from "@/app/components/CommentSection";
-import SimilarPosts from "@/components/SimilarPosts";
+import SimilarPosts from "@/app/components/SimilarPosts";
 
 export default function PostPage() {
   const params = useParams();
