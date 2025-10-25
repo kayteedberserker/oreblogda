@@ -10,32 +10,57 @@ import { Analytics } from "@vercel/analytics/next"
 import { SWRConfig } from "swr";
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"] });
 
-
 export const metadata = {
   title: "Oreblogda - My Anime Blog",
-  description: "An anime blog for anime fans",
+  description: "A modern anime blog where users can post, share, and explore trending anime stories, memes, and news.",
+  
+  keywords: "anime, anime blog, anime news, anime memes, anime stories, trending anime, anime edits, anime votes",
+  
+  authors: [
+    { name: "Kaytee", url: "https://oreblogda.vercel.app" }
+  ],
+  
+  creator: "Kaytee",
+  
+  robots: "index, follow",
+  
+  themeColor: "#ff6600",
+  
+  // Open Graph (for social previews)
   openGraph: {
-    title: "Oreblogda – My Anime blog",
-    description:
-      "A modern blog where users can post, share, and explore trending anime stories, anime memes, anime news etc.",
+    title: "Oreblogda – My Anime Blog",
+    description: "A modern anime blog where users can post, share, and explore trending anime stories, memes, and news.",
     url: "https://oreblogda.vercel.app",
     siteName: "Oreblogda",
     images: [
       {
-        url: "https://oreblogda.vercel.app/og-image.png",
+        url: "https://oreblogda.vercel.app/ogimage.png",
         width: 1200,
         height: 630,
-        alt: "Oreblogda",
+        alt: "Oreblogda - Anime Blog",
       },
     ],
+    type: "website",
   },
+  
+  // Twitter card
   twitter: {
     card: "summary_large_image",
-    title: "Oreblogda – My Anime blog",
-    description: "A modern anime blog",
-    images: ["https://oreblogda.vercel.app/og-image.png"],
+    title: "Oreblogda – My Anime Blog",
+    description: "A modern anime blog where users can post, share, and explore trending anime stories, memes, and news.",
+    images: ["https://oreblogda.vercel.app/ogimage.png"],
+    creator: "@YourTwitterHandle",
+  },
+  
+  alternates: {
+    canonical: "https://oreblogda.vercel.app",
+  },
+  
+  icons: {
+    icon: "/favicon.ico",
   },
 };
+
 
 
 
