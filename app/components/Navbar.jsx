@@ -7,22 +7,42 @@ import { HiMenu, HiX } from "react-icons/hi";
 import { motion, AnimatePresence } from "framer-motion";
 
 const Navbar = () => {
-    const pathname = usePathname();
-    const hideNavbarRoutes = ["/auth/login", "/auth/signup"];
-
+  const pathname = usePathname();
+  const hideNavbarRoutes = ["/auth/login", "/auth/signup"];
   if (hideNavbarRoutes.includes(pathname)) return null;
-  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  // Initialize theme from <html> class
   const [theme, setTheme] = useState(
-  typeof window !== "undefined" && document.documentElement.classList.contains("dark")
-    ? "dark"
-    : "light"
-);
+    typeof window !== "undefined" &&
+      document.documentElement.classList.contains("dark")
+      ? "dark"
+      : "light"
+  );
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   const links = [
     { name: "Home", href: "/" },
     { name: "About", href: "/about" },
     { name: "Contact", href: "/contact" },
   ];
+
+  // Keep state in sync with system theme changes
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const handleChange = (e) => {
+      const newTheme = e.matches ? "dark" : "light";
+      setTheme(newTheme);
+      if (newTheme === "dark") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    };
+
+    mediaQuery.addEventListener("change", handleChange);
+    return () => mediaQuery.removeEventListener("change", handleChange);
+  }, []);
+
   return (
     <nav
       className={`w-full fixed top-0 left-0 z-50 transition-colors duration-300 ${
