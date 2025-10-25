@@ -43,7 +43,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en" suppressHydrationWarning>
 
-      <body className={`antialiased ${spaceGrotesk.className} `}>
+      <body className={`antialiased ${spaceGrotesk.className} h-screen`}>
         <Analytics />
         <SpeedInsights />
         {/* ✅ Only client-side hook component */}
