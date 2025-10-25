@@ -48,7 +48,7 @@ export default function PostPage() {
 
   const description = post.message?.slice(0, 150) || "Read this post on Oreblogda";
   const postUrl = `https://oreblogda.vercel.app/post/${post._id}`;
-  const postImage = post.mediaUrl || "https://oreblogda.vercel.app/ogimage.jpg";
+  const postImage = post.mediaUrl || "https://oreblogda.vercel.app/ogimage.png";
 
   return (
     <div className="max-w-7xl mx-auto py-10 px-4 min-h-[70vh] relative">
