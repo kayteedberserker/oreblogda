@@ -32,11 +32,15 @@ const Navbar = () => {
 
   // Toggle theme
   const toggleTheme = () => {
-    const newTheme = theme === "light" ? "dark" : "light";
-    setTheme(newTheme);
-    localStorage.setItem("theme", newTheme);
-    document.documentElement.classList.toggle("dark", newTheme === "dark");
-  };
+  const html = document.documentElement;
+  if(html.classList.contains("dark")){
+    html.classList.remove("dark");
+    localStorage.setItem("theme", "light");
+  } else {
+    html.classList.add("dark");
+    localStorage.setItem("theme", "dark");
+  }
+};
 
   return (
     <nav
