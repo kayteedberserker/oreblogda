@@ -115,7 +115,7 @@ export default function PostPage() {
         </div>
       </div>
 
-      <ToastContainer autoClose={2500} />
+      <ToastContainer autoClose={1500} />
     </div>
   );
 }

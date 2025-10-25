@@ -44,8 +44,9 @@ export default function RootLayout({ children }) {
     <html lang="en" suppressHydrationWarning>
 
       <body className={`antialiased ${spaceGrotesk.className} `}>
+        <Analytics />
+        <SpeedInsights />
         {/* ✅ Only client-side hook component */}
-        {/* <SeoClient config={defaultSEOConfig} /> */}
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem={true}>
         <SWRConfig value={{
             fetcher,
