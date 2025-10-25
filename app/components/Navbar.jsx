@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { HiMenu, HiX } from "react-icons/hi";
 import { motion, AnimatePresence } from "framer-motion";
+import { BsSun, BsMoon } from "react-icons/bs";
 
 const Navbar = () => {
   const pathname = usePathname();
@@ -20,29 +21,21 @@ const Navbar = () => {
     { name: "Contact", href: "/contact" },
   ];
 
-  // Initialize theme from system or localStorage
+  // On mount, get theme from localStorage
   useEffect(() => {
     const savedTheme = localStorage.getItem("theme");
-    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
-      document.documentElement.classList.add("dark");
-      setTheme("dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      setTheme("light");
+    if (savedTheme) {
+      setTheme(savedTheme);
+      document.documentElement.classList.toggle("dark", savedTheme === "dark");
     }
   }, []);
 
+  // Toggle theme
   const toggleTheme = () => {
-    if (document.documentElement.classList.contains("dark")) {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-      setTheme("light");
-    } else {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-      setTheme("dark");
-    }
+    const newTheme = theme === "light" ? "dark" : "light";
+    setTheme(newTheme);
+    localStorage.setItem("theme", newTheme);
+    document.documentElement.classList.toggle("dark", newTheme === "dark");
   };
 
   return (
@@ -53,6 +46,7 @@ const Navbar = () => {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
+          {/* Logo */}
           <div className="shrink-0 font-bold text-xl">
             <Link href="/">MyLogo</Link>
           </div>
@@ -80,14 +74,24 @@ const Navbar = () => {
                   >
                     {link.name}
                   </Link>
+                  {isActive && (
+                    <motion.span
+                      layoutId="underline"
+                      className={`absolute left-0 bottom-0 h-0.5 w-full ${
+                        theme === "dark" ? "bg-blue-400" : "bg-blue-600"
+                      } rounded`}
+                    />
+                  )}
                 </motion.div>
               );
             })}
+
+            {/* Theme Toggle Button */}
             <button
               onClick={toggleTheme}
-              className="ml-4 px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+              className="ml-4 p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
             >
-              {theme === "dark" ? "Light" : "Dark"}
+              {theme === "light" ? <BsMoon size={20} /> : <BsSun size={20} />}
             </button>
           </div>
 
@@ -98,6 +102,14 @@ const Navbar = () => {
               className="p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               {isMobileOpen ? <HiX size={28} /> : <HiMenu size={28} />}
+            </button>
+
+            {/* Theme Toggle Mobile */}
+            <button
+              onClick={toggleTheme}
+              className="ml-2 p-2 rounded-full bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+            >
+              {theme === "light" ? <BsMoon size={20} /> : <BsSun size={20} />}
             </button>
           </div>
         </div>
@@ -140,12 +152,6 @@ const Navbar = () => {
                   </motion.div>
                 );
               })}
-              <button
-                onClick={toggleTheme}
-                className="w-full mt-2 px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
-              >
-                {theme === "dark" ? "Light" : "Dark"}
-              </button>
             </div>
           </motion.div>
         )}
