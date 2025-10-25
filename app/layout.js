@@ -48,17 +48,21 @@ export default function RootLayout({ children }) {
         <Footer />
       </body>
           <script
-    dangerouslySetInnerHTML={{
-      __html: `
-        (function() {
-          try {
-            const theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-            document.documentElement.classList.add(theme);
-          } catch(e) {}
-        })();
-      `,
-    }}
-  />
+  dangerouslySetInnerHTML={{
+    __html: `
+      (function() {
+        try {
+          const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+          if(darkQuery.matches){
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        } catch(e) {}
+      })();
+    `,
+  }}
+/>
     </html>
   );
 }
