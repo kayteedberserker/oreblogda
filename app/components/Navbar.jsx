@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HiMenu, HiX, HiSun, HiMoon } from "react-icons/hi";
+import { HiMenu, HiX } from "react-icons/hi";
 import { motion, AnimatePresence } from "framer-motion";
 
 const Navbar = () => {
@@ -20,27 +20,29 @@ const Navbar = () => {
     { name: "Contact", href: "/contact" },
   ];
 
-  // ✅ Initialize theme on mount
+  // Initialize theme from system or localStorage
   useEffect(() => {
-    // Try localStorage first
     const savedTheme = localStorage.getItem("theme");
-    if (savedTheme) {
-      setTheme(savedTheme);
-      document.documentElement.classList.toggle("dark", savedTheme === "dark");
+    const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    if (savedTheme === "dark" || (!savedTheme && prefersDark)) {
+      document.documentElement.classList.add("dark");
+      setTheme("dark");
     } else {
-      // fallback to system preference
-      const darkQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      setTheme(darkQuery.matches ? "dark" : "light");
-      document.documentElement.classList.toggle("dark", darkQuery.matches);
+      document.documentElement.classList.remove("dark");
+      setTheme("light");
     }
   }, []);
 
-  // ✅ Toggle theme handler
   const toggleTheme = () => {
-    const newTheme = theme === "dark" ? "light" : "dark";
-    setTheme(newTheme);
-    localStorage.setItem("theme", newTheme);
-    document.documentElement.classList.toggle("dark", newTheme === "dark");
+    if (document.documentElement.classList.contains("dark")) {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+      setTheme("light");
+    } else {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+      setTheme("dark");
+    }
   };
 
   return (
@@ -51,7 +53,6 @@ const Navbar = () => {
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between h-16 items-center">
-          {/* Logo */}
           <div className="shrink-0 font-bold text-xl">
             <Link href="/">MyLogo</Link>
           </div>
@@ -79,34 +80,19 @@ const Navbar = () => {
                   >
                     {link.name}
                   </Link>
-                  {isActive && (
-                    <motion.span
-                      layoutId="underline"
-                      className={`absolute left-0 bottom-0 h-0.5 w-full ${
-                        theme === "dark" ? "bg-blue-400" : "bg-blue-600"
-                      } rounded`}
-                    />
-                  )}
                 </motion.div>
               );
             })}
-            {/* Theme toggle button */}
             <button
               onClick={toggleTheme}
-              className="ml-4 p-2 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+              className="ml-4 px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
             >
-              {theme === "dark" ? <HiSun size={20} /> : <HiMoon size={20} />}
+              {theme === "dark" ? "Light" : "Dark"}
             </button>
           </div>
 
           {/* Mobile Menu Button */}
-          <div className="md:hidden flex items-center space-x-2">
-            <button
-              onClick={toggleTheme}
-              className="p-2 rounded-md bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200"
-            >
-              {theme === "dark" ? <HiSun size={20} /> : <HiMoon size={20} />}
-            </button>
+          <div className="md:hidden flex items-center">
             <button
               onClick={() => setIsMobileOpen(!isMobileOpen)}
               className="p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -154,6 +140,12 @@ const Navbar = () => {
                   </motion.div>
                 );
               })}
+              <button
+                onClick={toggleTheme}
+                className="w-full mt-2 px-3 py-2 rounded bg-blue-600 text-white hover:bg-blue-700"
+              >
+                {theme === "dark" ? "Light" : "Dark"}
+              </button>
             </div>
           </motion.div>
         )}
