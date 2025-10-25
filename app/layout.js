@@ -6,18 +6,17 @@ import CategoryNav from "@/app/components/CategoryNav";
 
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"] });
 
-
 export const metadata = {
   title: "Oreblogda - My Anime Blog",
   description: "An anime blog for anime fans",
   openGraph: {
     title: "Oreblogda – My Anime blog",
     description: "A modern blog where users can post, share, and explore trending anime stories, anime memes, anime news etc.",
-    url: "https://yourdomain.com",
+    url: "https://oreblogda.vercel.app",
     siteName: "Oreblogda",
     images: [
       {
-        url: "https://yourdomain.com/og-image.jpg",
+        url: "https://oreblogda.vercel.app/og-image.jpg",
         width: 1200,
         height: 630,
         alt: "Oreblogda",
@@ -28,41 +27,40 @@ export const metadata = {
     card: "summary_large_image",
     title: "Oreblogda – My Anime blog",
     description: "A modern anime blog",
-    images: ["https://yourdomain.com/og-image.jpg"],
+    images: ["https://oreblogda.vercel.app/og-image.jpg"],
   },
 };
 
-
-
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <body className={`antialiased ${spaceGrotesk.className} `}>
-        {/* ✅ Only client-side hook component */}
-        {/* <SeoClient config={defaultSEOConfig} /> */}
+    <html lang="en" className={spaceGrotesk.className}>
+      <head>
+        {/* Immediate theme setting to prevent flash */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              (function() {
+                try {
+                  const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
+                  if(darkQuery.matches){
+                    document.documentElement.classList.add('dark');
+                  } else {
+                    document.documentElement.classList.remove('dark');
+                  }
+                } catch(e) {}
+              })();
+            `,
+          }}
+        />
+      </head>
+      <body className="antialiased transition-colors duration-300">
         <Navbar />
         <div className="mt-15 pt-1 bg-linear-to-br from-blue-50 via-white to-pink-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950 transition-colors relative">
-        <CategoryNav />
+          <CategoryNav />
           {children}
         </div>
         <Footer />
       </body>
-          <script
-  dangerouslySetInnerHTML={{
-    __html: `
-      (function() {
-        try {
-          const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
-          if(darkQuery.matches){
-            document.documentElement.classList.add('dark');
-          } else {
-            document.documentElement.classList.remove('dark');
-          }
-        } catch(e) {}
-      })();
-    `,
-  }}
-/>
     </html>
   );
 }
