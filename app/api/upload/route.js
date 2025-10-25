@@ -3,7 +3,7 @@ import cloudinary from "@/app/lib/cloudinary";
 import fs from "fs";
 import path from "path";
 
-export const runtime = "nodejs"; // ✅ Must be 'nodejs', not 'node'
+export const runtime = "nodejs"; // ✅ Correct
 
 export async function POST(req) {
   try {
@@ -11,21 +11,24 @@ export async function POST(req) {
     const data = await req.arrayBuffer();
     const buffer = Buffer.from(data);
 
-    // Save temporary file
-    const tmpPath = path.join(process.cwd(), "tmp_upload_file");
+    // ✅ Save temporary file in Vercel’s writable /tmp directory
+    const tmpPath = path.join("/tmp", `upload_${Date.now()}.jpg`);
     fs.writeFileSync(tmpPath, buffer);
 
-    // Upload to Cloudinary
+    // ✅ Upload to Cloudinary
     const result = await cloudinary.uploader.upload(tmpPath, {
       folder: "posts",
     });
 
-    // Delete temp file
+    // ✅ Clean up
     fs.unlinkSync(tmpPath);
 
     return NextResponse.json({ url: result.secure_url });
   } catch (err) {
     console.error(err);
-    return NextResponse.json({ message: "Upload failed", error: err.message }, { status: 500 });
+    return NextResponse.json(
+      { message: "Upload failed", error: err.message },
+      { status: 500 }
+    );
   }
 }
