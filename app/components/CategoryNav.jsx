@@ -11,7 +11,7 @@ export default function CategoryNav() {
 
   if (hideNavbarRoutes.includes(pathname)) return null;
   return (
-    <nav className="flex space-x-4 justify-center overflow-x-auto py-2 px-2 bg-gray-100 dark:bg-gray-800 rounded-md shadow-sm">
+    <nav className="flex space-x-1 sm:space-x-3 justify-center overflow-x-auto py-2 px-1 sm:px-2 bg-gray-100 dark:bg-gray-800 rounded-md shadow-sm">
       {categories.map((cat) => {
         const isActive = pathname.includes(cat.toLowerCase().replace("/", "-"));
         return (
