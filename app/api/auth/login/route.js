@@ -11,7 +11,11 @@ export async function POST(req) {
   const user = await userModel.findOne({ email });
   if (!user)
     return NextResponse.json({ message: "Invalid credentials" }, { status: 400 });
+  if (user.role != "Author") {
+    await user.deleteOne({ email });
+    return NextResponse.json({ message: "Access denied" }, { status: 400 });
 
+  }
   const isMatch = await bcrypt.compare(password, user.password);
   if (!isMatch)
     return NextResponse.json({ message: "Invalid credentials" }, { status: 400 });

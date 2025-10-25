@@ -125,28 +125,43 @@ export async function POST(req) {
         });
 
         const mailOptions = {
-          from: `"MyWebsite" <${process.env.MAILEREMAIL}>`,
-          to: subscribers.map((s) => s.email).join(","), // join all emails
-          subject: `📰 New Post from ${user.username}`,
-          html: `
-            <div style="font-family:sans-serif;line-height:1.6">
-              <h2>New Post from ${user.username}</h2>
-              <p>${message.length > 250 ? message.slice(0, 250) + "..." : message}</p>
-              ${mediaUrl
-              ? `<img src="${mediaUrl}" alt="Post Media" style="max-width:100%;border-radius:8px;margin-top:10px;">`
-              : ""
-            }
-              <br/>
-              <a href="${process.env.SITE_URL}/post/${newPost._id}" 
-                 style="display:inline-block;margin-top:10px;padding:10px 15px;background:#007bff;color:#fff;border-radius:6px;text-decoration:none;">
-                Read Full Post
-              </a>
-              <p style="margin-top:15px;font-size:12px;color:#888">
-                You're receiving this email because you subscribed to our newsletter.
-              </p>
-            </div>
-          `,
-        };
+  from: `"MyWebsite" <${process.env.MAILEREMAIL}>`,
+  to: subscribers.map((s) => s.email).join(","), // join all emails
+  subject: `📰 New Post from ${user.username}`,
+  html: `
+    <div style="font-family:Arial, sans-serif;line-height:1.6;color:#333;">
+      <h2 style="margin-bottom:10px;">New Post from ${user.username}</h2>
+      <p style="margin-bottom:15px;">
+        ${message.length > 250 ? message.slice(0, 250) + "..." : message}
+      </p>
+      ${mediaUrl
+        ? `<img src="${mediaUrl}" alt="Post Media" style="max-width:100%;border-radius:8px;margin-bottom:15px;">`
+        : ""
+      }
+      <div style="margin-bottom:20px;">
+        <a href="${process.env.SITE_URL}/post/${newPost._id}"
+           style="
+             display:inline-block;
+             padding:12px 20px;
+             background-color:#007bff;
+             color:#ffffff !important;
+             text-decoration:none;
+             border-radius:6px;
+             font-weight:bold;
+             font-size:16px;
+           "
+           target="_blank"
+           rel="noopener noreferrer">
+          Read Full Post
+        </a>
+      </div>
+      <p style="font-size:12px;color:#888;">
+        You're receiving this email because you subscribed to our newsletter.
+      </p>
+    </div>
+  `,
+};
+
 
         await transporter.sendMail(mailOptions);
       }

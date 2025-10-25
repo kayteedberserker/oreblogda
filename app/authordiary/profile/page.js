@@ -155,7 +155,7 @@ const ProfilePage = () => {
     }
   };
 
-  if (!user) return <div className="p-6 text-center">Loading profile...</div>;
+  if (!user) return <div className="p-6 text-center min-h-[75vh]">Loading profile...</div>;
 
   return (
     <div className="p-6 max-w-xl mx-auto">

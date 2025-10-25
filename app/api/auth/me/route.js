@@ -14,7 +14,9 @@ export async function GET(req) {
 
     await connectDB();
     const user = await UserModel.findById(userId).select("-password").lean();
-
+    if (user.role != "Author") {
+      return NextResponse.json({ error: "User not found" }, { status: 404 });
+    }
     if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
     return NextResponse.json({ user });

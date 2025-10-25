@@ -8,6 +8,7 @@ import { ThemeProvider } from "next-themes";
 import { SpeedInsights } from "@vercel/speed-insights/next"
 import { Analytics } from "@vercel/analytics/next"
 import { SWRConfig } from "swr";
+import { ToastContainer } from "react-toastify";
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"] });
 
 export const metadata = {
@@ -23,8 +24,6 @@ export const metadata = {
   creator: "Kaytee",
   
   robots: "index, follow",
-  
-  themeColor: "#ff6600",
   
   // Open Graph (for social previews)
   openGraph: {
@@ -85,6 +84,7 @@ export default function RootLayout({ children }) {
               <CategoryNav />
               {children}
             </div>
+            <ToastContainer />
             <Footer />
         </SWRConfig>
           </ThemeProvider>

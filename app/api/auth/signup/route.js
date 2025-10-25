@@ -28,6 +28,7 @@ export async function POST(req) {
       username,
       email,
       password: hashedPassword,
+      role: "User"
     });
 
     await newUser.save();
@@ -38,7 +39,6 @@ export async function POST(req) {
     );
 
   } catch (error) {
-    console.error("Signup error:", error);
     return NextResponse.json({ message: "Internal Server Error" }, { status: 500 });
   }
 }

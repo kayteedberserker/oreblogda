@@ -53,7 +53,6 @@ export default function AuthorPage() {
   useEffect(() => {
     fetchAuthorData();
   }, [id]);
-  console.log(author);
   
 
   // Infinite scroll observer

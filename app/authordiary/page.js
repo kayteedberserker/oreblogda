@@ -37,7 +37,7 @@ const Dashboard = () => {
     fetchUser();
   }, [router]);
 
-  if (!user) return <p>Loading...</p>;
+  if (!user) return <p className="min-h-[75vh]">Loading...</p>;
 
   // --- Poll Logic ---
   const handlePollOptionChange = (i, val) => {

@@ -64,72 +64,91 @@ export default function PostCard({
     }
   }, [post._id]);
 
-  const handleLike = async () => {
-    if (liked) return;
-    setLiked(true);
-    setLikeAnim(true);
-    setBurst(true);
-    setTimeout(() => setLikeAnim(false), 300);
-    setTimeout(() => setBurst(false), 700);
+ const handleLike = async () => {
+  if (liked) return;
 
-    try {
-      const res = await fetch(`/api/posts/${post._id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "like", payload: { userId: "anon" } }),
-      });
-      const data = await res.json();
-      refreshPosts(data); // ✅ Re-render after like
-    } catch (err) {
-      console.error(err);
-      setLiked(false);
-    }
-  };
+  // Immediate UI update
+  setLiked(true);
+  setBurst(true);
+  refreshPosts({ ...post, likes: [...(post.likes || []), "anon"] });
+
+  setTimeout(() => setBurst(false), 700);
+
+  // Send request in background
+  try {
+    const res = await fetch(`/api/posts/${post._id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "like", payload: { userId: "anon" } }),
+    });
+    const data = await res.json();
+    refreshPosts(data); // Optional: sync with server response
+  } catch (err) {
+    console.error(err);
+    // Revert if server fails
+    setLiked(false);
+    refreshPosts(post);
+  }
+};
+
+
 
   const handleShare = async () => {
-    try {
-      await fetch(`/api/posts/${post._id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "share" }),
-      });
-      refreshPosts({ ...post, shares: totalShares + 1 }); // ✅ Local refresh
-      navigator.clipboard.writeText(`${window.location.origin}/post/${post._id}`);
-      toast.success("Link copied to clipboard!");
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to share");
-    }
-  };
+  // Immediate UI update
+  refreshPosts({ ...post, shares: (post.shares || 0) + 1 });
+  navigator.clipboard.writeText(`${window.location.origin}/post/${post._id}`);
+  toast.success("Link copied to clipboard!");
+
+  try {
+    await fetch(`/api/posts/${post._id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "share" }),
+    });
+  } catch (err) {
+    console.error(err);
+    refreshPosts(post); // Revert if failed
+    toast.error("Failed to share");
+  }
+};
+
+
 
   const handleAddComment = async () => {
-    if (!commentText.trim() || !commentName.trim()) {
-      toast.error("Please enter your name and comment");
-      return;
-    }
-    try {
-      const res = await fetch(`/api/posts/${post._id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "comment",
-          payload: { name: commentName, text: commentText },
-        }),
-      });
-      const data = await res.json();
-      refreshPosts({
-        ...post,
-        comments: data.comments,
-      });
-      setCommentText("");
-      setCommentName("");
-      setShowCommentInput(false);
-      toast.success("Comment added!");
-    } catch (err) {
-      console.error(err);
-      toast.error("Failed to add comment");
-    }
-  };
+  if (!commentText.trim() || !commentName.trim()) {
+    toast.error("Please enter your name and comment");
+    return;
+  }
+
+  const newComment = { name: commentName, text: commentText, _id: Date.now().toString() };
+
+  // Immediate UI update
+  refreshPosts({ ...post, comments: [...(post.comments || []), newComment] });
+  setCommentText("");
+  setCommentName("");
+  setShowCommentInput(false);
+  toast.success("Comment added!");
+
+  // Send request in background
+  try {
+    const res = await fetch(`/api/posts/${post._id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "comment",
+        payload: { name: newComment.name, text: newComment.text },
+      }),
+    });
+    const data = await res.json();
+    refreshPosts({ ...post, comments: data.comments }); // Sync with server
+  } catch (err) {
+    console.error(err);
+    refreshPosts(post); // Revert on failure
+    toast.error("Failed to add comment");
+  }
+};
+
+
 
   const [author, setAuthor] = useState({ name: post.authorName, image: null });
 
