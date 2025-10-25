@@ -5,7 +5,7 @@ import mongoose from "mongoose";
 
 let isConnected = false;
 
-function connectDB() {
+async function connectDB() {
   if (isConnected) return;
 
   try {
