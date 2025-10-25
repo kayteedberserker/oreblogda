@@ -13,10 +13,9 @@ export async function GET(req) {
   await connectDB();
 
   try {
-    // Use req.nextUrl for query params in Next.js 13+ route handlers
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page")) || 1;
-    const limit = parseInt(searchParams.get("limit")) || 5; // now correctly reads from query
+    const limit = parseInt(searchParams.get("limit")) || 5;
     const author = searchParams.get("author");
     const category = searchParams.get("category");
     const skip = (page - 1) * limit;
@@ -28,12 +27,20 @@ export async function GET(req) {
     const posts = await Post.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)
-      .limit(limit) // now limit will be 2 if you pass ?limit=2
+      .limit(limit)
       .lean();
+
+    const serializedPosts = posts.map((p) => ({
+      ...p,
+      _id: p._id.toString(), // ✅ Convert ObjectId to string
+    }));
 
     const total = await Post.countDocuments(query);
 
-    return new Response(JSON.stringify({ posts, total, page, limit }), { status: 200 });
+    return new Response(
+      JSON.stringify({ posts: serializedPosts, total, page, limit }),
+      { status: 200 }
+    );
   } catch (err) {
     console.error(err);
     return new Response(JSON.stringify({ message: "Failed to fetch posts" }), { status: 500 });

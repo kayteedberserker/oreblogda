@@ -22,7 +22,7 @@ export async function POST(req) {
     });
 
     await transporter.sendMail({
-      from: `"MyWebsite" <${process.env.MAILEREMAIL}>`,
+      from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
       to: email,
       subject: "Subscribed to Newsletter ✅",
       html: `<p>Thanks for subscribing! We'll keep you updated with new posts.</p>`,

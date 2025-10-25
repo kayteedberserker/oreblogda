@@ -1,32 +1,22 @@
 "use client";
-
-import { useEffect, useState } from "react";
+import useSWR from "swr";
 import PostCard from "./PostCard";
 
+const fetcher = (url) => fetch(url).then((res) => res.json());
+
 export default function SimilarPosts({ category, currentPostId }) {
-  const [similarPosts, setSimilarPosts] = useState([]);
+  const { data, error, isLoading } = useSWR(
+    category ? `/api/posts?category=${category}&limit=10` : null,
+    fetcher,
+    { refreshInterval: 10000 } // revalidate every 10s
+  );
 
-  useEffect(() => {
-    if (!category) return;
+  const similarPosts = (Array.isArray(data) ? data : data?.posts || []).filter(
+    (p) => p._id !== currentPostId
+  );
 
-    const fetchSimilar = async () => {
-      try {
-        const res = await fetch(
-          `/api/posts?category=${category}&limit=10`
-        );
-        const data = await res.json();
-        const postsArray = Array.isArray(data) ? data : data.posts || [];
-        setSimilarPosts(postsArray.filter((p) => p._id !== currentPostId));
-      } catch (err) {
-        console.error(err);
-        setSimilarPosts([]);
-      }
-    };
-
-    fetchSimilar();
-  }, [category, currentPostId]);
-
-  if (!similarPosts.length) return null;
+  if (isLoading) return null;
+  if (error || !similarPosts.length) return null;
 
   return (
     <div className="mt-6">
@@ -35,26 +25,20 @@ export default function SimilarPosts({ category, currentPostId }) {
       </h3>
       <div className="flex overflow-x-auto space-x-4 py-2 scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600">
         {similarPosts.map((post) => (
-          <div
-            key={post._id}
-            className="flex-none  w-64 sm:w-72 md:w-80 lg:w-80"
-          >
+          <div key={post._id} className="flex-none w-64 sm:w-72 md:w-80 lg:w-80">
             <PostCard
               post={post}
               posts={similarPosts}
-              setPosts={setSimilarPosts}
+              setPosts={() => {}}
               isFeed={true}
-              className={`max-h-[440px] min-h-[430px] flex flex-col justify-between`}
-              hideMedia={
-                post.category === "Polls" // hide media for polls
-              }
+              className="max-h-[440px] min-h-[430px] flex flex-col justify-between"
+              hideMedia={post.category === "Polls"}
             />
           </div>
         ))}
       </div>
 
       <style jsx>{`
-        /* Thin horizontal scrollbar */
         .scrollbar-thin::-webkit-scrollbar {
           height: 6px;
         }

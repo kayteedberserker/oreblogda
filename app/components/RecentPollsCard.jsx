@@ -1,46 +1,51 @@
 "use client";
-import { useEffect, useState } from "react";
+import useSWR from "swr";
 import Link from "next/link";
-import Poll from "./Poll"; // your existing Poll component
+import Poll from "./Poll";
+
+const fetcher = (url) => fetch(url).then((res) => res.json());
 
 export default function RecentPollsCard() {
-  const [polls, setPolls] = useState([]);
+  const { data, error, isLoading } = useSWR(
+    "/api/posts?category=Polls&page=1&limit=2",
+    fetcher,
+    { refreshInterval: 10000 } // refetch every 10s
+  );
 
-  useEffect(() => {
-    const fetchPolls = async () => {
-      try {
-        const res = await fetch("/api/posts?category=Polls&page=1&limit=2");
-        const data = await res.json();
-        setPolls(Array.isArray(data) ? data : data.posts || []);
-      } catch (err) {
-        console.error(err);
-        setPolls([]);
-      }
-    };
-    fetchPolls();
-  }, []);
+  const polls = Array.isArray(data) ? data : data?.posts || [];
+
+  if (isLoading) return <p className="text-gray-500">Loading polls...</p>;
+  if (error) return <p className="text-red-500">Failed to load polls</p>;
 
   return (
     <div className="bg-white dark:bg-gray-800 p-4 rounded-md max-h-[50vh] md:max-h-[70vh] shadow-md overflow-y-scroll">
-      <h2 className="font-semibold mb-3 text-gray-900 dark:text-gray-100">Recent Polls</h2>
-      
+      <h2 className="font-semibold mb-3 text-gray-900 dark:text-gray-100">
+        Recent Polls
+      </h2>
+
       {polls.length > 0 ? (
         <ul className="space-y-4">
           {polls.map((poll) => (
-            <li key={poll._id} className="p-2 border rounded-md border-gray-200 dark:border-gray-700">
+            <li
+              key={poll._id}
+              className="p-2 border rounded-md border-gray-200 dark:border-gray-700"
+            >
               <p className="text-gray-800 dark:text-gray-100 mb-2 font-medium">
-                {poll.message.length > 50 ? poll.message.slice(0, 50) + "..." : poll.message}
+                {poll.message.length > 50
+                  ? poll.message.slice(0, 50) + "..."
+                  : poll.message}
               </p>
 
-              {/* Poll Component */}
               <Poll
                 poll={poll.poll}
                 postId={poll._id}
-                setPosts={setPolls}
-                readOnly={false} // allow voting
+                readOnly={false}
               />
 
-              <Link href={`/post/${poll._id}`} className="text-blue-500 hover:underline text-sm mt-1 block">
+              <Link
+                href={`/post/${poll._id}`}
+                className="text-blue-500 hover:underline text-sm mt-1 block"
+              >
                 View full poll
               </Link>
             </li>
@@ -50,7 +55,6 @@ export default function RecentPollsCard() {
         <p className="text-gray-500">No recent polls</p>
       )}
 
-      {/* Custom thin scrollbar via CSS */}
       <style jsx>{`
         div::-webkit-scrollbar {
           width: 6px;

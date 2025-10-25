@@ -1,91 +1,62 @@
 "use client";
-
-import { useEffect, useState, useRef } from "react";
+import { useState } from "react";
 import { useParams } from "next/navigation";
+import useSWRInfinite from "swr/infinite";
 import PostCard from "@/app/components/PostCard";
 import RecentPollsCard from "@/app/components/RecentPollsCard";
 import { FaPoll } from "react-icons/fa";
+
+const fetcher = (url) => fetch(url).then((res) => res.json());
+const limit = 5;
 
 export default function CategoryPage() {
   const params = useParams();
   const { id } = params;
 
-  const [category, setCategory] = useState("");
-  const [posts, setPosts] = useState([]);
-  const [page, setPage] = useState(1);
-  const [hasMore, setHasMore] = useState(true);
-  const [loading, setLoading] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const prevScrollHeight = useRef(0);
-  const limit = 5;
 
-  // Format category from URL
-  useEffect(() => {
-    if (!id) return;
-    if (id.includes("-")) {
-      setCategory(
-        id
+  const category = id
+    ? id.includes("-")
+      ? id
           .split("-")
           .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
           .join("/")
-      );
-    } else {
-      setCategory(id.charAt(0).toUpperCase() + id.slice(1).toLowerCase());
-    }
-  }, [id]);
+      : id.charAt(0).toUpperCase() + id.slice(1).toLowerCase()
+    : "";
 
-  // Fetch posts for category
-  const fetchPosts = async (pageNum = 1) => {
-    if (!category) return;
-    try {
-      setLoading(true);
-      const res = await fetch(
-        `/api/posts?category=${category}&page=${pageNum}&limit=${limit}`
-      );
-      const data = await res.json();
-      const newPosts = Array.isArray(data) ? data : data.posts || [];
-
-      if (newPosts.length < limit) setHasMore(false);
-
-      prevScrollHeight.current = document.body.scrollHeight;
-      setPosts((prev) => [...prev, ...newPosts]);
-
-      setTimeout(() => {
-        const diff = document.body.scrollHeight - prevScrollHeight.current;
-        window.scrollBy({ top: -diff, behavior: "instant" });
-      }, 0);
-
-      setLoading(false);
-    } catch (err) {
-      console.error(err);
-      setLoading(false);
-    }
+  // SWR Infinite (handles pagination)
+  const getKey = (pageIndex, previousPageData) => {
+    if (!category) return null;
+    if (previousPageData && previousPageData.posts?.length < limit) return null;
+    return `/api/posts?category=${category}&page=${pageIndex + 1}&limit=${limit}`;
   };
 
-  useEffect(() => {
-    fetchPosts(page);
-  }, [page, category]);
+  const { data, error, size, setSize, isLoading } = useSWRInfinite(
+    getKey,
+    fetcher,
+    { refreshInterval: 10000 } // revalidate every 10s
+  );
+
+  const posts = data ? data.flatMap((d) => (Array.isArray(d) ? d : d.posts || [])) : [];
+  const hasMore = data ? data[data.length - 1]?.posts?.length >= limit : true;
 
   // Infinite scroll
-  useEffect(() => {
-    const handleScroll = () => {
+  if (typeof window !== "undefined") {
+    window.onscroll = () => {
       if (
         window.innerHeight + window.scrollY >= document.body.offsetHeight - 200 &&
         hasMore &&
-        !loading
+        !isLoading
       ) {
-        setPage((prev) => prev + 1);
+        setSize((prev) => prev + 1);
       }
     };
-
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, [hasMore, loading]);
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-2 md:px-8 py-6 relative min-h-[75vh]">
       <h1 className="text-2xl font-bold mb-6 capitalize">{category}</h1>
-      {/* Subtle anime glow */}
+
       <div className="absolute top-10 left-10 w-48 h-48 bg-blue-300 dark:bg-indigo-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
       <div className="absolute bottom-10 right-10 w-56 h-56 bg-pink-300 dark:bg-pink-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
 
@@ -94,11 +65,20 @@ export default function CategoryPage() {
         <div className="md:flex-2 max-h-[80vh] overflow-y-auto pr-2 scrollbar-hide">
           {posts.map((post) => (
             <div key={post._id} className="break-inside-avoid mb-6">
-              <PostCard post={post} posts={posts} setPosts={setPosts} isFeed={true} />
+              <PostCard post={post} posts={posts} setPosts={() => {}} isFeed={true} />
             </div>
           ))}
-          {loading && <p className="text-center text-gray-500 mt-4 h-max-[70vh]">Loading more...</p>}
-          {!hasMore && <p className="text-center text-gray-400 mt-4">No more posts to show</p>}
+
+          {isLoading && (
+            <p className="text-center text-gray-500 mt-4 h-max-[70vh]">
+              Loading more...
+            </p>
+          )}
+          {!hasMore && (
+            <p className="text-center text-gray-400 mt-4">
+              No more posts to show
+            </p>
+          )}
         </div>
 
         {/* Sidebar - large screens */}
@@ -108,7 +88,6 @@ export default function CategoryPage() {
 
         {/* Mini drawer - small screens */}
         <div className="md:hidden">
-          {/* Circular toggle button */}
           <button
             onClick={() => setDrawerOpen((prev) => !prev)}
             className="fixed top-1/3 right-[-20px] transform -translate-y-1/2 z-50 w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg"
@@ -116,10 +95,10 @@ export default function CategoryPage() {
             <FaPoll />
           </button>
 
-          {/* Drawer */}
           <div
-            className={`fixed top-1/4 right-0 z-40 w-64 bg-white dark:bg-gray-800 p-4 shadow-lg rounded-l-lg transition-transform duration-300
-              ${drawerOpen ? "translate-x-0" : "translate-x-full"}`}
+            className={`fixed top-1/4 right-0 z-40 w-64 bg-white dark:bg-gray-800 p-4 shadow-lg rounded-l-lg transition-transform duration-300 ${
+              drawerOpen ? "translate-x-0" : "translate-x-full"
+            }`}
           >
             <RecentPollsCard />
           </div>
@@ -131,11 +110,9 @@ export default function CategoryPage() {
           width: 0px;
         }
         .scrollbar-hide {
-          -ms-overflow-style: none; 
+          -ms-overflow-style: none;
           scrollbar-width: none;
         }
-
-        /* Custom scrollbar for drawer */
         div[style*="overflow-y: auto"]::-webkit-scrollbar {
           width: 6px;
         }
