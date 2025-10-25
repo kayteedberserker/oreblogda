@@ -111,7 +111,7 @@ export default function Footer() {
           <a href="#" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
             Instagram
           </a>
-          <a href="#" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
+          <a href="https://web.facebook.com/profile.php?id=61582505145912" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
             Facebook
           </a>
         </motion.div>
