@@ -3,7 +3,7 @@ import React from "react";
 
 const TermsAndConditions = () => {
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 py-16 bg-linear-to-br from-blue-50 via-white to-pink-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950 transition-colors duration-500 relative overflow-hidden">
+    <div className="min-h-[75vh] flex items-center justify-center px-6 py-16 bg-linear-to-br from-blue-50 via-white to-pink-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950 transition-colors duration-500 relative overflow-hidden">
       
       {/* Subtle anime glow background */}
       <div className="absolute top-10 left-10 w-48 h-48 bg-blue-300 dark:bg-indigo-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>

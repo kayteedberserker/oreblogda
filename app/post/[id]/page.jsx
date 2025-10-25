@@ -43,12 +43,12 @@ export default function PostPage() {
     fetchPost();
   }, [id]);
 
-  if (loading) return <p className="text-center mt-8">Loading...</p>;
+  if (loading) return <p className="text-center mt-8 min-h-[70vh]">Loading...</p>;
   if (!post) return <p className="text-center mt-8">Post not found</p>;
 
   const description = post.message?.slice(0, 150) || "Read this post on Oreblogda";
-  const postUrl = `https://yourdomain.com/post/${post._id}`;
-  const postImage = post.mediaUrl || "https://yourdomain.com/og-image.jpg";
+  const postUrl = `https://oreblogda.vercel.app/post/${post._id}`;
+  const postImage = post.mediaUrl || "https://oreblogda.vercel.app/og-image.jpg";
 
   return (
     <div className="max-w-7xl mx-auto py-10 px-4 min-h-[70vh] relative">
@@ -58,12 +58,12 @@ export default function PostPage() {
 
       {/* Page SEO */}
       <NextSeo
-        title={post.title || "Post title"}
+        title={post.message?.slice(0, 30) || "Post title"}
         description={description}
         canonical={postUrl}
         openGraph={{
           url: postUrl,
-          title: post.title || "Post title",
+          title: post.message?.slice(0, 30) || "Post title",
           description,
           images: [
             {
@@ -80,16 +80,16 @@ export default function PostPage() {
       <ArticleJsonLd
         type="BlogPosting"
         url={postUrl}
-        title={post.title || "Post title"}
+        title={post.message?.slice(0, 30) || "Post title"}
         images={[postImage]}
         datePublished={post.createdAt}
         dateModified={post.updatedAt || post.createdAt}
         authorName={post.authorName || "Oreblogda"}
         description={description}
       />
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
         {/* Post content */}
-        <div className="lg:col-span-2">
+        <div className="md:col-span-3">
           <PostCard
             post={post}
             isFeed={false}
@@ -99,17 +99,17 @@ export default function PostPage() {
           />
 
           {/* Similar posts for large screens */}
-          <div className="hidden lg:block">
+          <div className="hidden md:block">
             <SimilarPosts category={post.category} currentPostId={post._id} />
           </div>
         </div>
 
         {/* Comments section */}
-        <div className="lg:col-span-1">
+        <div className="md:col-span-2">
           <CommentSection postId={id} />
 
           {/* Similar posts for small screens */}
-          <div className="lg:hidden mt-6">
+          <div className="md:hidden mt-6">
             <SimilarPosts category={post.category} currentPostId={post._id} />
           </div>
         </div>

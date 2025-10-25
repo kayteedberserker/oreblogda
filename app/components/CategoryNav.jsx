@@ -7,8 +7,7 @@ const categories = ["News", "Memes", "Videos/Edits", "Polls"];
 
 export default function CategoryNav() {
   const pathname = usePathname(); // current URL
-
-    const hideNavbarRoutes = ["/auth/login", "/auth/signup"];
+    const hideNavbarRoutes = ["/auth/login", "/auth/signup", "/about", "/terms", "/privacy", "/contact"];
 
   if (hideNavbarRoutes.includes(pathname)) return null;
   return (

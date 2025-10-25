@@ -1,4 +1,5 @@
 @import "tailwindcss";
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -25,6 +26,10 @@ body {
   font-optical-sizing: auto;
   font-style: normal;
 }
+/* globals.css */
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
 
 
 .postCardImg {
@@ -32,6 +37,7 @@ body {
   background-repeat: no-repeat;
   background-size: cover;
 }
+
 /* postCard.module.css */
 .likeButton {
   transition: transform 0.2s ease;
@@ -39,6 +45,33 @@ body {
 
 .likeButton.liked {
   transform: scale(1.3);
-  color: #f87171; /* red-400 */
+  color: #f87171;
+  /* red-400 */
 }
 
+.scrollbar-hide::-webkit-scrollbar {
+  width: 0px;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Custom scrollbar for drawer */
+div[style*="overflow-y: auto"]::-webkit-scrollbar {
+  width: 6px;
+}
+
+div[style*="overflow-y: auto"]::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
+  background-color: rgba(107, 114, 128, 0.5);
+  border-radius: 10px;
+}
+
+.dark div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.3);
+}

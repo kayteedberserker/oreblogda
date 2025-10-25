@@ -58,6 +58,7 @@ useEffect(() => {
 
   return (
     <div className="max-w-7xl mx-auto px-2 md:px-8 py-6">
+      <h1 className=" text-4xl">Posts</h1>
       <div className="md:flex md:gap-8">
         {/* Posts */}
         <div className="md:flex-2 max-h-[80vh] overflow-y-auto pr-2 scrollbar-hide">
@@ -95,31 +96,6 @@ useEffect(() => {
           </div>
         </div>
       </div>
-
-      <style jsx>{`
-        .scrollbar-hide::-webkit-scrollbar {
-          width: 0px;
-        }
-        .scrollbar-hide {
-          -ms-overflow-style: none; 
-          scrollbar-width: none;
-        }
-
-        /* Custom scrollbar for drawer */
-        div[style*="overflow-y: auto"]::-webkit-scrollbar {
-          width: 6px;
-        }
-        div[style*="overflow-y: auto"]::-webkit-scrollbar-track {
-          background: transparent;
-        }
-        div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
-          background-color: rgba(107, 114, 128, 0.5);
-          border-radius: 10px;
-        }
-        .dark div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
-          background-color: rgba(156, 163, 175, 0.3);
-        }
-      `}</style>
     </div>
   );
 }

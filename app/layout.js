@@ -3,8 +3,11 @@ import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import Footer from "@/app/components/Footer";
 import CategoryNav from "@/app/components/CategoryNav";
-
+import { ThemeProvider } from "next-themes";
+import { SpeedInsights } from "@vercel/speed-insights/next"
+import { Analytics } from "@vercel/analytics/next"
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"] });
+
 
 export const metadata = {
   title: "Oreblogda - My Anime Blog",
@@ -17,7 +20,7 @@ export const metadata = {
     siteName: "Oreblogda",
     images: [
       {
-        url: "https://oreblogda.vercel.app/og-image.jpg",
+        url: "https://oreblogda.vercel.app/og-image.png",
         width: 1200,
         height: 630,
         alt: "Oreblogda",
@@ -28,40 +31,28 @@ export const metadata = {
     card: "summary_large_image",
     title: "Oreblogda – My Anime blog",
     description: "A modern anime blog",
-    images: ["https://oreblogda.vercel.app/og-image.jpg"],
+    images: ["https://oreblogda.vercel.app/og-image.png"],
   },
 };
 
+
+
 export default function RootLayout({ children }) {
   return (
-    <html lang="en">
-      <head>
-        {/* Inline script to set theme immediately */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                try {
-                  const theme = localStorage.getItem('theme');
-                  if(theme === 'dark') {
-                    document.documentElement.classList.add('dark');
-                  } else {
-                    document.documentElement.classList.remove('dark');
-                  }
-                } catch(e) {}
-              })();
-            `,
-          }}
-        />
-      </head>
-      <body className={`antialiased ${spaceGrotesk.className}`}>
+    <html lang="en" suppressHydrationWarning>
+      
+      <body className={`antialiased ${spaceGrotesk.className} `}>
+        {/* ✅ Only client-side hook component */}
+        {/* <SeoClient config={defaultSEOConfig} /> */}
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem={true}>
         <Navbar />
         <div className="mt-15 pt-1 bg-linear-to-br from-blue-50 via-white to-pink-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950 transition-colors relative">
-          <CategoryNav />
+        <CategoryNav />
           {children}
         </div>
         <Footer />
+        </ThemeProvider>
       </body>
     </html>
   );
-          }
+}

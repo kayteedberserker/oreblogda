@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
+import { useTheme } from "next-themes";
 
 export default function Footer() {
     const pathname = usePathname();
@@ -12,18 +13,11 @@ export default function Footer() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const [theme, setTheme] = useState("light");
+  const {systemTheme} = useTheme()
+    const [mounted, setMounted] = useState(false);
 
-  // Detect system theme automatically and react to changes
-    useEffect(() => {
-      const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-      const handleChange = (e) => setTheme(e.matches ? "dark" : "light");
-  
-      setTheme(mediaQuery.matches ? "dark" : "light"); // initial check
-      mediaQuery.addEventListener("change", handleChange);
-  
-      return () => mediaQuery.removeEventListener("change", handleChange);
-    }, []);
+  useEffect(() => setMounted(true), []);
+   if (!mounted) return null;
 
   const handleSubscribe = async (e) => {
     e.preventDefault();
@@ -56,7 +50,7 @@ export default function Footer() {
   return (
     <footer
       className={`py-10 relative transition-colors duration-300 ${
-        theme === "dark" ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
+        systemTheme === "dark" ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
       }`}
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -68,7 +62,7 @@ export default function Footer() {
           className="text-center mb-8"
         >
           <h3 className="text-2xl font-bold mb-2">Subscribe to our Newsletter</h3>
-          <p className={theme === "dark" ? "text-gray-400 mb-4" : "text-gray-700 mb-4"}>
+          <p className={systemTheme === "dark" ? "text-gray-400 mb-4" : "text-gray-700 mb-4"}>
             Get updates when we post new content!
           </p>
           <form
@@ -81,7 +75,7 @@ export default function Footer() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className={`p-2 border shadow rounded-md w-full sm:w-auto flex-1 transition-colors duration-300 ${
-                theme === "dark"
+                systemTheme === "dark"
                   ? "bg-gray-800 text-gray-100 border-gray-700"
                   : "bg-white text-gray-900 border-gray-300"
               }`}
@@ -96,7 +90,7 @@ export default function Footer() {
             </button>
           </form>
           {message && (
-            <p className={theme === "dark" ? "mt-2 text-green-400" : "mt-2 text-green-600"}>
+            <p className={systemTheme === "dark" ? "mt-2 text-green-400" : "mt-2 text-green-600"}>
               {message}
             </p>
           )}
@@ -108,7 +102,7 @@ export default function Footer() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.5 }}
           className={`flex justify-center gap-6 mb-6 transition-colors duration-300 ${
-            theme === "dark" ? "text-gray-400" : "text-gray-600"
+            systemTheme === "dark" ? "text-gray-400" : "text-gray-600"
           }`}
         >
           <a href="#" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
@@ -128,7 +122,7 @@ export default function Footer() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4, duration: 0.5 }}
           className={`flex flex-col sm:flex-row justify-between items-center text-sm transition-colors duration-300 ${
-            theme === "dark" ? "text-gray-500" : "text-gray-700"
+            systemTheme === "dark" ? "text-gray-500" : "text-gray-700"
           }`}
         >
           <div className="mb-2 sm:mb-0">
@@ -139,7 +133,7 @@ export default function Footer() {
               Privacy Policy
             </a>
           </div>
-          <div>&copy; {new Date().getFullYear()} MyWebsite. All rights reserved.</div>
+          <div>&copy; {new Date().getFullYear()} Oreblogda. All rights reserved.</div>
         </motion.div>
       </div>
 

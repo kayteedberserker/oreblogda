@@ -83,7 +83,7 @@ export default function CategoryPage() {
   }, [hasMore, loading]);
 
   return (
-    <div className="max-w-7xl mx-auto px-2 md:px-8 py-6 relative">
+    <div className="max-w-7xl mx-auto px-2 md:px-8 py-6 relative min-h-[75vh]">
       <h1 className="text-2xl font-bold mb-6 capitalize">{category}</h1>
       {/* Subtle anime glow */}
       <div className="absolute top-10 left-10 w-48 h-48 bg-blue-300 dark:bg-indigo-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
@@ -97,7 +97,7 @@ export default function CategoryPage() {
               <PostCard post={post} posts={posts} setPosts={setPosts} isFeed={true} />
             </div>
           ))}
-          {loading && <p className="text-center text-gray-500 mt-4">Loading more...</p>}
+          {loading && <p className="text-center text-gray-500 mt-4 h-max-[70vh]">Loading more...</p>}
           {!hasMore && <p className="text-center text-gray-400 mt-4">No more posts to show</p>}
         </div>
 
