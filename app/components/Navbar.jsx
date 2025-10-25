@@ -18,7 +18,7 @@ const Navbar = () => {
   useEffect(() => setMounted(true), []);
    if (!mounted) return null;
     
-    const logoSrc = systemTheme === "dark" ? "/logo_white.png" : "/og-image.png";
+    const logoSrc = systemTheme === "dark" ? "/logowhite.png" : "/ogimage.png";
 
   const links = [
     { name: "Home", href: "/" },
@@ -27,7 +27,7 @@ const Navbar = () => {
   ];
   return (
     <nav
-      className={`w-full fixed top-0 left-0 z-50 transition-colors duration-300 ${
+      className={`w-full fixed top-0  left-0 z-50 transition-colors duration-300 ${
         systemTheme === "dark" ? "bg-gray-900 text-white" : "bg-white text-gray-900"
       } shadow-md`}
     >
@@ -35,7 +35,7 @@ const Navbar = () => {
         <div className="flex justify-between h-16 items-center">
           {/* Logo */}
           <div className="shrink-0 font-bold text-xl">
-            <Link href="/"><Image src={logoSrc} alt="My_Logo" width={200} height={60}/></Link>
+            <Link href="/"><Image src={logoSrc} alt="My_Logo" className="w-[140px] h-[30px]" width={200} height={60}/></Link>
           </div>
 
           {/* Desktop Links */}

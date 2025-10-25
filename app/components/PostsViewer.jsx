@@ -11,7 +11,7 @@ export default function PostsViewer() {
 
   const getKey = (pageIndex, previousPageData) => {
     if (previousPageData && previousPageData.length === 0) return null; // no more
-    
+
     return `/api/posts?page=${pageIndex + 1}&limit=${limit}`;
   };
 
@@ -27,7 +27,16 @@ export default function PostsViewer() {
 
   const posts = data ? data.flatMap((page) => page.posts).filter(Boolean) : [];
   const hasMore = data ? data[data.length - 1]?.length >= limit : true;
-  
+  const [showHint, setShowHint] = useState(false);
+
+  useEffect(() => {
+    // Only auto-show on mobile viewports
+    if (window.innerWidth < 768) {
+      setShowHint(true);
+      const timeout = setTimeout(() => setShowHint(false), 4000); // hide after 4s
+      return () => clearTimeout(timeout);
+    }
+  }, []);
   // Infinite scroll
   useEffect(() => {
     const handleScroll = () => {
@@ -54,7 +63,7 @@ export default function PostsViewer() {
           {posts.map((post) => (
             <div key={post?._id || "i"} className="mb-6">
 
-              <PostCard post={post} posts={posts} isFeed={true}/>
+              <PostCard post={post} posts={posts} isFeed={true} />
             </div>
           ))}
 
@@ -68,14 +77,29 @@ export default function PostsViewer() {
         </div>
 
         {/* Mini drawer - small screens */}
-        <div className="md:hidden">
-          <button
+        <div className="md:hidden ">
+          <div className="fixed top-1/3 right-[-20px] z-50">
+             <div className="relative group flex items-center justify-center">
+        {/* Poll Button */}
+        <button
           name="Open Poll"
-            onClick={() => setDrawerOpen((p) => !p)}
-            className="fixed top-1/3 right-[-20px] z-50 w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg"
-          >
-            <FaPoll />
-          </button>
+          onClick={() => setDrawerOpen((p) => !p)}
+          className="w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg hover:bg-blue-700 transition"
+        >
+          <FaPoll />
+        </button>
+
+        {/* Tooltip / Hint */}
+        <div
+          className={`absolute right-14 top-1/2 -translate-y-1/2 bg-gray-900 text-white text-sm px-2 py-1 rounded-md whitespace-nowrap pointer-events-none
+          opacity-0 group-hover:opacity-100 transition-all duration-300 
+          ${showHint ? "opacity-100 translate-x-[-4px]" : "translate-x-0"}`}
+        >
+          See recent polls
+        </div>
+      </div>
+          </div>
+
 
           <div
             className={`fixed top-1/4 right-0 z-40 w-64 bg-white dark:bg-gray-800 p-4 shadow-lg rounded-l-lg transition-transform duration-300
