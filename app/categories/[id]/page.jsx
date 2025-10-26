@@ -66,7 +66,7 @@ export default function CategoryPage() {
       initial="hidden"
       animate={controls}
       variants={variants}
-      className="p-6 bg-zinc-900 rounded-2xl shadow-md"
+      className="p-6 bg-transparent rounded-2xl shadow-md"
     >
     <div className="max-w-7xl mx-auto px-2 md:px-8 py-6 relative min-h-[75vh]">
       <h1 className="text-2xl font-bold mb-6 capitalize">{category}</h1>

@@ -7,8 +7,11 @@ import { useParams } from "next/navigation";
 import { ToastContainer } from "react-toastify";
 import CommentSection from "@/app/components/CommentSection";
 import SimilarPosts from "@/app/components/SimilarPosts";
+import { useScrollAnimation } from "@/app/components/useScrollAnimation";
+import { motion } from "framer-motion";
 
 export default function PostPage() {
+  const { ref, controls, variants } = useScrollAnimation();
   const params = useParams();
   const { id } = params;
   const [post, setPost] = useState(null);
@@ -51,6 +54,13 @@ export default function PostPage() {
   const postImage = post.mediaUrl || "https://oreblogda.vercel.app/ogimage.png";
 
   return (
+    <motion.div
+          ref={ref}
+          initial="hidden"
+          animate={controls}
+          variants={variants}
+          className="p-6 bg-transparent rounded-2xl shadow-md"
+        >
     <div className="max-w-7xl mx-auto py-10 px-4 min-h-[70vh] relative">
       {/* Subtle anime glow */}
       <div className="absolute top-10 left-10 w-48 h-48 bg-blue-300 dark:bg-indigo-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
@@ -117,5 +127,6 @@ export default function PostPage() {
 
       <ToastContainer autoClose={1500} />
     </div>
+    </motion.div>
   );
 }
