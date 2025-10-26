@@ -59,9 +59,9 @@ export default function PostPage() {
           initial="hidden"
           animate={controls}
           variants={variants}
-          className="p-6 bg-transparent rounded-2xl shadow-md"
+          className="p-2 md:p-6 bg-transparent rounded-2xl shadow-md"
         >
-    <div className="max-w-7xl mx-auto py-10 px-4 min-h-[70vh] relative">
+    <div className="max-w-7xl mx-auto py-4 md:py-10 px-2 md:px-4 min-h-[70vh] relative">
       {/* Subtle anime glow */}
       <div className="absolute top-10 left-10 w-48 h-48 bg-blue-300 dark:bg-indigo-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
       <div className="absolute bottom-10 right-10 w-56 h-56 bg-pink-300 dark:bg-pink-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>

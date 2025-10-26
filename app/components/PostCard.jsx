@@ -178,7 +178,7 @@ export default function PostCard({
 
   return (
     <>
-      <div className={`bg-white dark:bg-gray-800 shadow-md rounded-md p-4 mb-6 relative overflow-hidden ${className}`}>
+      <div className={`bg-white dark:bg-gray-800 shadow-md rounded-md py-4 px-1 mb-6 relative overflow-hidden ${className}`}>
         {/* Author & Views */}
         <div className="flex justify-between items-center mb-1">
           <Link href={`/author/${post.authorId}`} className="flex items-center space-x-2 hover:underline">
@@ -201,7 +201,7 @@ export default function PostCard({
         </div>
 
         {/* Message */}
-        <p className="text-gray-800 dark:text-gray-100 mb-1">
+        <p className="text-gray-800 text-[12px] md:text-[16px] dark:text-gray-100 mb-1">
           {isFeed ? (
             isLongMessage && !showFullMessage ? (
               <>
