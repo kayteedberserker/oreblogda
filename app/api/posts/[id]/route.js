@@ -3,21 +3,43 @@ import { NextResponse } from "next/server";
 import connectDB from "@/app/lib/mongodb";
 import Post from "@/app/models/PostModel";
 
+
+function getClientIp(req) {
+  // req can be a Node IncomingMessage (pages/api) or a Fetch Request-like (App Router)
+  // Try common headers first (x-forwarded-for, cf-connecting-ip, x-real-ip)
+  const xfwd = req.headers?.get
+    ? req.headers.get("x-forwarded-for")
+    : req.headers?.["x-forwarded-for"];
+
+  const cf = req.headers?.get ? req.headers.get("cf-connecting-ip") : req.headers?.["cf-connecting-ip"];
+  const xr = req.headers?.get ? req.headers.get("x-real-ip") : req.headers?.["x-real-ip"];
+
+  let ip = (xfwd && xfwd.split(",")[0].trim()) || cf || xr;
+
+  // fallback for Node req.socket.remoteAddress (pages/api or Express)
+  if (!ip && req.socket && req.socket.remoteAddress) {
+    ip = req.socket.remoteAddress;
+  }
+
+  // Normalize IPv6-mapped IPv4 like "::ffff:127.0.0.1"
+  if (ip && ip.includes("::ffff:")) ip = ip.split("::ffff:").pop();
+
+  return ip || "unknown";
+}
 export async function PATCH(req, { params }) {
   await connectDB();
   const theparam = await params
   const { id } = theparam;
-
+  console.log(id);
+  
   try {
     const { action, payload } = await req.json();
     const post = await Post.findById(id);
     if (!post) {
       return NextResponse.json({ message: "Post not found" }, { status: 404 });
     }
-
-    // Get visitor IP
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0] || req.ip || "anon";
-
+    const ip = getClientIp(req)
+    
     // ===== VOTE =====
     if (action === "vote") {
       const { selectedOptions } = payload;
@@ -48,10 +70,11 @@ export async function PATCH(req, { params }) {
 
     // ===== LIKE =====
     if (action === "like") {
-      if (!post.likes.includes(ip)) {
-        post.likes.push(ip);
-        await post.save();
+      if (post.likes.includes(ip)) {
+        return NextResponse.json({ message: "You have liked this post" }, { status: 400 });
       }
+      post.likes.push(ip);
+      await post.save();
       return NextResponse.json(post, { status: 200 });
     }
 
@@ -72,10 +95,10 @@ export async function PATCH(req, { params }) {
 
     // ===== VIEW =====
     if (action === "view") {
-      post.viewsByIP = post.viewsByIP || [];
-      if (!post.viewsByIP.includes(ip)) {
+      post.viewsIPs = post.viewsIPs || [];
+      if (!post.viewsIPs.includes(ip)) {
         post.views += 1;
-        post.viewsByIP.push(ip);
+        post.viewsIPs.push(ip);
         await post.save();
       }
       return NextResponse.json(post, { status: 200 });

@@ -17,7 +17,7 @@ export default function PostCard({
   hideMedia,
   className,
 }) {
-  const [liked, setLiked] = useState(false);
+  const [liked, setLiked] = useState(localStorage.getItem(post._id) || false);
   const [likeAnim, setLikeAnim] = useState(false);
   const [burst, setBurst] = useState(false);
   const [commentName, setCommentName] = useState("");
@@ -42,13 +42,16 @@ export default function PostCard({
     }
     // ✅ Trigger SWR revalidation if using SWR in feed
     mutate("/api/posts");
+    
   };
-
+  console.log(post);
+  
   // ✅ Handle view count once per user
   useEffect(() => {
     if (!post?._id) return;
     const viewedPosts = JSON.parse(localStorage.getItem("viewedPosts") || "[]");
-
+    
+    
     if (!viewedPosts.includes(post._id)) {
       fetch(`/api/posts/${post._id}`, {
         method: "PATCH",
@@ -80,6 +83,7 @@ export default function PostCard({
     });
     const data = await res.json();
     refreshPosts(data);
+    localStorage.setItem(post._id, "true")
   } catch (err) {
     console.error(err);
     setLiked(false);
@@ -273,7 +277,7 @@ export default function PostCard({
               whileTap={{ scale: 1.3 }}
               className={`flex items-center space-x-1 transition-transform duration-300 ${likeAnim ? "scale-125" : "scale-100"}`}
             >
-              {liked || post.likes?.includes("anon") ? <FaHeart className="text-red-500" /> : <FaRegHeart />}
+              {liked == "true" ? <FaHeart className="text-red-500" /> : <FaRegHeart />}
               <motion.span
                 key={totalLikes}
                 initial={{ scale: 0.8 }}
