@@ -1,18 +1,20 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import useSWRInfinite from "swr/infinite";
 import PostCard from "@/app/components/PostCard";
 import RecentPollsCard from "@/app/components/RecentPollsCard";
 import { FaPoll } from "react-icons/fa";
+import { useScrollAnimation } from "@/app/components/useScrollAnimation";
+import { motion } from "framer-motion";
 
-const fetcher = (url) => fetch(url).then((res) => res.json());
+const fetcher = (url) => fetch(url, { cache: "no-store" }).then((res) => res.json());
 const limit = 5;
 
 export default function CategoryPage() {
+  const { ref, controls, variants } = useScrollAnimation();
   const params = useParams();
   const { id } = params;
-
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const category = id
@@ -24,60 +26,89 @@ export default function CategoryPage() {
       : id.charAt(0).toUpperCase() + id.slice(1).toLowerCase()
     : "";
 
-  // SWR Infinite (handles pagination)
+  // --- SWR Infinite Pagination ---
   const getKey = (pageIndex, previousPageData) => {
     if (!category) return null;
     if (previousPageData && previousPageData.posts?.length < limit) return null;
     return `/api/posts?category=${category}&page=${pageIndex + 1}&limit=${limit}`;
   };
 
-  const { data, error, size, setSize, isLoading } = useSWRInfinite(
+  const { data, error, size, setSize, isLoading, isValidating } = useSWRInfinite(
     getKey,
     fetcher,
-    { refreshInterval: 10000 } // revalidate every 10s
+    { refreshInterval: 10000 }
   );
 
-  const posts = data ? data.flatMap((d) => (Array.isArray(d) ? d : d.posts || [])) : [];
-  const hasMore = data ? data[data.length - 1]?.posts?.length >= limit : true;
+  // --- Combine & Remove Duplicates ---
+  const posts = data ? data.flatMap((page) => page.posts || []) : [];
+  const uniquePosts = Array.from(new Map(posts.map((p) => [p._id, p])).values());
+  const hasMore = data && data[data.length - 1]?.posts?.length === limit;
 
-  // Infinite scroll
-  if (typeof window !== "undefined") {
-    window.onscroll = () => {
+  // --- Infinite Scroll ---
+  useEffect(() => {
+    const handleScroll = () => {
       if (
         window.innerHeight + window.scrollY >= document.body.offsetHeight - 200 &&
         hasMore &&
-        !isLoading
+        !isLoading &&
+        !isValidating
       ) {
         setSize((prev) => prev + 1);
       }
     };
-  }
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, [hasMore, isLoading, isValidating, setSize]);
 
   return (
+    <motion.div
+      ref={ref}
+      initial="hidden"
+      animate={controls}
+      variants={variants}
+      className="p-6 bg-zinc-900 rounded-2xl shadow-md"
+    >
     <div className="max-w-7xl mx-auto px-2 md:px-8 py-6 relative min-h-[75vh]">
       <h1 className="text-2xl font-bold mb-6 capitalize">{category}</h1>
 
+      {/* Background effects */}
       <div className="absolute top-10 left-10 w-48 h-48 bg-blue-300 dark:bg-indigo-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
       <div className="absolute bottom-10 right-10 w-56 h-56 bg-pink-300 dark:bg-pink-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
 
       <div className="md:flex md:gap-8">
         {/* Posts */}
-        <div className="md:flex-2 max-h-[80vh] overflow-y-auto pr-2 scrollbar-hide">
-          {posts.map((post) => (
+        <div id="postsContainer" className="md:flex-2 max-h-[80vh] overflow-y-auto pr-2 scrollbar-hide">
+          {uniquePosts.map((post) => (
             <div key={post._id} className="break-inside-avoid mb-6">
-              <PostCard post={post} posts={posts} setPosts={() => {}} isFeed={true} />
+              <PostCard post={post} posts={uniquePosts} setPosts={() => {}} isFeed={true} />
             </div>
           ))}
 
-          {isLoading && (
-            <p className="text-center text-gray-500 mt-4 h-max-[70vh]">
-              Loading more...
-            </p>
+          {/* Loading indicator */}
+          {isLoading || isValidating ? (
+            <p className="text-center text-gray-500 mt-4">Loading more...</p>
+          ) : null}
+
+          {/* Load More Button Fallback */}
+          {hasMore && !isLoading && !isValidating && (
+            <div className="text-center mt-6">
+              <button
+                onClick={() => setSize((prev) => prev + 1)}
+                className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+              >
+                Load more
+              </button>
+            </div>
           )}
-          {!hasMore && (
-            <p className="text-center text-gray-400 mt-4">
-              No more posts to show
-            </p>
+
+          {/* No more posts */}
+          {!hasMore && uniquePosts.length > 0 && (
+            <p className="text-center text-gray-400 mt-4">No more posts to show</p>
+          )}
+
+          {/* Empty state */}
+          {!isLoading && uniquePosts.length === 0 && (
+            <p className="text-center text-gray-500 mt-4">No posts found in this category</p>
           )}
         </div>
 
@@ -89,7 +120,7 @@ export default function CategoryPage() {
         {/* Mini drawer - small screens */}
         <div className="md:hidden">
           <button
-          name="Open drawer"
+            name="Open drawer"
             onClick={() => setDrawerOpen((prev) => !prev)}
             className="fixed top-1/3 right-[-20px] transform -translate-y-1/2 z-50 w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg"
           >
@@ -106,6 +137,7 @@ export default function CategoryPage() {
         </div>
       </div>
 
+      {/* Scrollbar & Styles */}
       <style jsx>{`
         .scrollbar-hide::-webkit-scrollbar {
           width: 0px;
@@ -129,5 +161,6 @@ export default function CategoryPage() {
         }
       `}</style>
     </div>
+    </motion.div>
   );
 }

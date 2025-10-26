@@ -12,7 +12,7 @@ const pollOptionSchema = new mongoose.Schema({
 });
 
 const pollSchema = new mongoose.Schema({
-  pollMultiple: { type: Boolean, default: false }, // allow multiple selections
+  pollMultiple: { type: Boolean, default: false },
   options: [pollOptionSchema],
 });
 
@@ -23,10 +23,12 @@ const postSchema = new mongoose.Schema(
     message: { type: String, required: true },
     mediaUrl: { type: String },
     mediaType: { type: String },
-    likes: [{ type: String }],
+    likes: [{ type: String }],      // could store userId or IP
+    likesIPs: [{ type: String }],   // NEW: track IPs for like prevention
     comments: [commentSchema],
     shares: { type: Number, default: 0 },
     views: { type: Number, default: 0 },
+    viewsIPs: [{ type: String }],   // NEW: track IPs for view prevention
     poll: pollSchema,
     voters: [String],
     category: {
@@ -39,6 +41,5 @@ const postSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
-
 
 export default mongoose.models.Post || mongoose.model("Post", postSchema);

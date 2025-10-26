@@ -86,7 +86,7 @@ export default function RootLayout({ children }) {
               {children}
             </div>
             <ToastContainer />
-            <Footer />
+            <Footer postsContainerId="postsContainer"/>
         </SWRConfig>
           </ThemeProvider>
               <Analytics />

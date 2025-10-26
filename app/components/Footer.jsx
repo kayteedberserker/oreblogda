@@ -5,19 +5,61 @@ import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 
-export default function Footer() {
-    const pathname = usePathname();
-        const hideNavbarRoutes = ["/auth/login", "/auth/signup"];
-    
-      if (hideNavbarRoutes.includes(pathname)) return null;
+export default function Footer({ postsContainerId }) {
+  const pathname = usePathname();
+  const hideNavbarRoutes = ["/auth/login", "/auth/signup"];
+  if (hideNavbarRoutes.includes(pathname)) return null;
+
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const {systemTheme} = useTheme()
-    const [mounted, setMounted] = useState(false);
+  const { systemTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => setMounted(true), []);
-   if (!mounted) return null;
+  // Show back-to-top button
+  const [showBackToTop, setShowBackToTop] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+
+    const handleScroll = () => {
+      const windowScroll = window.scrollY;
+      let postsScroll = 0;
+      if (postsContainerId) {
+        const container = document.getElementById(postsContainerId);
+        if (container) postsScroll = container.scrollTop;
+      }
+      // Show button if either scroll is > 300px
+      setShowBackToTop(windowScroll > 300 || postsScroll > 300);
+    };
+
+    // Listen to window scroll
+    window.addEventListener("scroll", handleScroll);
+
+    // Listen to posts container scroll if exists
+    let container;
+    if (postsContainerId) {
+      container = document.getElementById(postsContainerId);
+      container?.addEventListener("scroll", handleScroll);
+    }
+
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      container?.removeEventListener("scroll", handleScroll);
+    };
+  }, [postsContainerId]);
+
+  if (!mounted) return null;
+
+  const scrollToTop = () => {
+    // Scroll window
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    // Scroll posts container
+    if (postsContainerId) {
+      const container = document.getElementById(postsContainerId);
+      if (container) container.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  };
 
   const handleSubscribe = async (e) => {
     e.preventDefault();
@@ -111,7 +153,12 @@ export default function Footer() {
           <a href="#" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
             Instagram
           </a>
-          <a href="https://web.facebook.com/profile.php?id=61582505145912" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
+          <a
+            href="https://web.facebook.com/profile.php?id=61582505145912"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="hover:text-blue-500"
+          >
             Facebook
           </a>
         </motion.div>
@@ -138,12 +185,14 @@ export default function Footer() {
       </div>
 
       {/* Back to top */}
-      <button
-        onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-        className="fixed bottom-6 right-6 bg-blue-600 hover:bg-blue-700 hover:cursor-pointer text-white p-3 w-10 h-10 text-2xl flex items-center justify-center  rounded-full shadow-lg"
-      >
-        ↑
-      </button>
+      {showBackToTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-6 right-6 bg-blue-600 hover:bg-blue-700 hover:cursor-pointer text-white p-3 w-10 h-10 text-2xl flex items-center justify-center rounded-full shadow-lg transition-opacity duration-300"
+        >
+          ↑
+        </button>
+      )}
     </footer>
   );
 }
