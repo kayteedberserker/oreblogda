@@ -82,8 +82,8 @@ export default function PostCard({
       body: JSON.stringify({ action: "like" }), // ✅ remove payload
     });
     const data = await res.json();
-    refreshPosts(data);
     localStorage.setItem(post._id, "true")
+    refreshPosts(data);
   } catch (err) {
     console.error(err);
     setLiked(false);
