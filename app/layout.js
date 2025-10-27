@@ -70,7 +70,7 @@ export default function RootLayout({ children }) {
         <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8021671365048667"
      crossorigin="anonymous"></script>
       </head>
-      <body className={`antialiased ${spaceGrotesk.className} h-screen`}>
+      <body className={`antialiased ${spaceGrotesk.className} min-h-screen`}>
         {/* ✅ Only client-side hook component */}
           <ThemeProvider attribute="class" defaultTheme="system" enableSystem={true}>
         <SWRConfig value={{
