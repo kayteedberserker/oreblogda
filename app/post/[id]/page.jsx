@@ -51,7 +51,7 @@ export default function PostPage() {
 
   const description = post.message?.slice(0, 150) || "Read this post on Oreblogda";
   const postUrl = `https://oreblogda.vercel.app/post/${post._id}`;
-  const postImage = post.mediaUrl || "https://oreblogda.vercel.app/ogimage.png";
+  const postImage = post?.mediaUrl || "https://oreblogda.vercel.app/og-image.png";
 
   return (
     <motion.div
@@ -68,7 +68,7 @@ export default function PostPage() {
 
       {/* Page SEO */}
       <NextSeo
-        title={post.message?.slice(0, 30) || "Post title"}
+        title={post?.title}
         description={description}
         canonical={postUrl}
         openGraph={{
@@ -90,7 +90,7 @@ export default function PostPage() {
       <ArticleJsonLd
         type="BlogPosting"
         url={postUrl}
-        title={post.message?.slice(0, 30) || "Post title"}
+        title={post?.title}
         images={[postImage]}
         datePublished={post.createdAt}
         dateModified={post.updatedAt || post.createdAt}

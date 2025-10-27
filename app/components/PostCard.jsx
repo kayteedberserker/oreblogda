@@ -44,7 +44,6 @@ export default function PostCard({
     mutate("/api/posts");
     
   };
-  console.log(post);
   
   // ✅ Handle view count once per user
   useEffect(() => {

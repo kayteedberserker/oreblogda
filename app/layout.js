@@ -33,7 +33,7 @@ export const metadata = {
     siteName: "Oreblogda",
     images: [
       {
-        url: "https://oreblogda.vercel.app/ogimage.png",
+        url: "https://oreblogda.vercel.app/og-image.png",
         width: 1200,
         height: 630,
         alt: "Oreblogda - Anime Blog",
@@ -47,7 +47,7 @@ export const metadata = {
     card: "summary_large_image",
     title: "Oreblogda – My Anime Blog",
     description: "A modern anime blog where users can post, share, and explore trending anime stories, memes, and news.",
-    images: ["https://oreblogda.vercel.app/ogimage.png"],
+    images: ["https://oreblogda.vercel.app/og-image.png"],
     creator: "@YourTwitterHandle",
   },
   
