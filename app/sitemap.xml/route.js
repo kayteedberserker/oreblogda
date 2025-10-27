@@ -1,52 +1,43 @@
-// import { connectDB } from "@/app/lib/mongodb";
-import Post from "@/app/models/PostModel";
-
-import mongoose from "mongoose";
-
-let isConnected = false;
-
-async function connectDB() {
-  if (isConnected) return;
-
-  try {
-    await mongoose.connect(process.env.MONGODB_URI);
-    isConnected = true;
-    console.log("✅ MongoDB connected");
-  } catch (error) {
-    console.error("❌ MongoDB connection error:", error);
-  }
-}
-
-
-
-
 export async function GET() {
-  await connectDB();
-  const posts = await Post.find().sort({ createdAt: -1 });
+  try {
+    await connectDB();
+    const posts = await Post.find().sort({ createdAt: -1 });
+    const baseUrl = "https://oreblogda.vercel.app";
 
-  const baseUrl = "https://oreblogda.vercel.app";
+    const urls = posts
+      .map(
+        (post) => `
+      <url>
+        <loc>${baseUrl}/post/${post._id}</loc>
+        <lastmod>${new Date(post.updatedAt).toISOString()}</lastmod>
+      </url>`
+      )
+      .join("");
 
-  const urls = posts
-    .map(
-      (post) => `
-    <url>
-      <loc>${baseUrl}/post/${post._id}</loc>
-      <lastmod>${new Date(post.updatedAt).toISOString()}</lastmod>
-    </url>
-  `
-    )
-    .join("");
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+    <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+      <url>
+        <loc>${baseUrl}</loc>
+        <lastmod>${new Date().toISOString()}</lastmod>
+      </url>
+      ${urls}
+    </urlset>`;
 
-  const xml = `<?xml version="1.0" encoding="UTF-8"?>
-  <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-    <url>
-      <loc>${baseUrl}</loc>
-      <lastmod>${new Date().toISOString()}</lastmod>
-    </url>
-    ${urls}
-  </urlset>`;
-
-  return new Response(xml, {
-    headers: { "Content-Type": "application/xml" },
-  });
+    return new Response(xml, {
+      headers: { "Content-Type": "application/xml" },
+    });
+  } catch (err) {
+    console.error("❌ Sitemap error:", err);
+    const fallback = `<?xml version="1.0" encoding="UTF-8"?>
+    <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+      <url>
+        <loc>https://oreblogda.vercel.app</loc>
+        <lastmod>${new Date().toISOString()}</lastmod>
+      </url>
+    </urlset>`;
+    return new Response(fallback, {
+      headers: { "Content-Type": "application/xml" },
+      status: 200,
+    });
+  }
 }

@@ -11,7 +11,7 @@ Sitemap: https://oreblogda.vercel.app/sitemap.xml
 `,
     {
       headers: {
-        "Content-Type": "text/plain; charset=utf-8",
+        "Content-Type": "text/plain",
       },
     }
   );
