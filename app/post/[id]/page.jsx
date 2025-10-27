@@ -47,7 +47,7 @@ export default function PostPage() {
   }, [id]);
 
   if (loading) return <p className="text-center mt-8 min-h-[70vh]">Loading...</p>;
-  if (!post) return <p className="text-center mt-8">Post not found</p>;
+  if (!post) return <p className="text-center mt-8 min-h-[50vh]">Post not found</p>;
 
   const description = post.message?.slice(0, 150) || "Read this post on Oreblogda";
   const postUrl = `https://oreblogda.vercel.app/post/${post._id}`;

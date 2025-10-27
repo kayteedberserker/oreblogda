@@ -91,12 +91,11 @@ export default function Footer({ postsContainerId }) {
 
   return (
     <footer
-      className={`py-10 absolute bottom-0 transition-colors duration-300 ${
+      className={`py-10 relative transition-colors flex flex-col duration-300 ${
         systemTheme === "dark" ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
       }`}
     >
-      <div className=" w-full h-full relative">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto px-4 grow sm:px-6 lg:px-8">
         {/* Newsletter Form */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -194,7 +193,6 @@ export default function Footer({ postsContainerId }) {
           ↑
         </button>
       )}
-      </div>
     </footer>
   );
 }
