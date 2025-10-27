@@ -31,7 +31,7 @@ export async function PATCH(req, { params }) {
   const theparam = await params
   const { id } = theparam;
   console.log(id);
-  
+
   try {
     const { action, payload } = await req.json();
     const post = await Post.findById(id);
@@ -39,7 +39,7 @@ export async function PATCH(req, { params }) {
       return NextResponse.json({ message: "Post not found" }, { status: 404 });
     }
     const ip = getClientIp(req)
-    
+
     // ===== VOTE =====
     if (action === "vote") {
       const { selectedOptions } = payload;
@@ -96,7 +96,24 @@ export async function PATCH(req, { params }) {
     // ===== VIEW =====
     if (action === "view") {
       post.viewsIPs = post.viewsIPs || [];
-      if (!post.viewsIPs.includes(ip)) {
+
+      // List of bot keywords to ignore (common crawlers)
+      const botKeywords = [
+        "facebookexternalhit", // Facebook link preview
+        "Facebot",             // Facebook crawler
+        "Googlebot",           // Google crawler
+        "Bingbot",             // Bing crawler
+        "Twitterbot",          // Twitter preview
+        "LinkedInBot",         // LinkedIn preview
+        "Slackbot",            // Slack preview
+      ];
+
+      // Check the request headers for User-Agent
+      const userAgent = req.headers.get("user-agent") || "";
+
+      const isBot = botKeywords.some(bot => userAgent.includes(bot));
+
+      if (!isBot && !post.viewsIPs.includes(ip)) {
         post.views += 1;
         post.viewsIPs.push(ip);
         await post.save();
@@ -120,21 +137,21 @@ export async function PATCH(req, { params }) {
 
 // GET: fetch single post by ID
 export async function GET(req, { params }) {
-    try {
-        await connectDB();
+  try {
+    await connectDB();
 
-        const resolvedParams = await params;  // ✅ unwrap the Promise
-        const { id } = resolvedParams;
-        if (!id) return NextResponse.json({ message: "Post ID is required" }, { status: 400 });
+    const resolvedParams = await params;  // ✅ unwrap the Promise
+    const { id } = resolvedParams;
+    if (!id) return NextResponse.json({ message: "Post ID is required" }, { status: 400 });
 
-        const post = await Post.findById(id);
-        if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
+    const post = await Post.findById(id);
+    if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
 
-        return NextResponse.json(post);
-    } catch (err) {
-        console.error(err);
-        return NextResponse.json({ message: "Server error", error: err.message }, { status: 500 });
-    }
+    return NextResponse.json(post);
+  } catch (err) {
+    console.error(err);
+    return NextResponse.json({ message: "Server error", error: err.message }, { status: 500 });
+  }
 }
 
 
