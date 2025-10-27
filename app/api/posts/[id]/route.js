@@ -30,7 +30,6 @@ export async function PATCH(req, { params }) {
   await connectDB();
   const theparam = await params
   const { id } = theparam;
-  console.log(id);
 
   try {
     const { action, payload } = await req.json();

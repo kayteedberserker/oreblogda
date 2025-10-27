@@ -24,8 +24,6 @@ export default function LoginPage() {
       });
 
       const data = await res.json();
-      console.log(data);
-      console.log(res.ok);
       
       if (res.ok && data.user) {
         localStorage.setItem("token", data.user?.token);

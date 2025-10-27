@@ -8,7 +8,6 @@ export async function DELETE(req) {
 
   try {
     const { postId } = await req.json();
-    console.log(postId);
     
     if (!postId)
       return NextResponse.json({ message: "Post ID is required" }, { status: 400 });
