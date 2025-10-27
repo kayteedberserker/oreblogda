@@ -247,7 +247,7 @@ export default function PostCard({
                 ?
               </div>
             )}
-            <span className="font-semibold text-2xl underline capitalize">
+            <span className="font-light text-2xl underline capitalize">
               {author.name || "Unknown"}
             </span>
           </Link>
@@ -255,6 +255,7 @@ export default function PostCard({
         </div>
 
         {/* ✅ Updated Message */}
+        <h2 className=" font-bold text-2xl mb-1.5">{post?.title}</h2>
         <p className="text-gray-800 text-[12px] md:text-[16px] dark:text-gray-100 mb-1">
           {isFeed ? (
             isLongMessage && !showFullMessage ? (
