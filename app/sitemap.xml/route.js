@@ -24,7 +24,7 @@ export async function GET() {
   await connectDB();
   const posts = await Post.find().sort({ createdAt: -1 });
 
-  const baseUrl = "https://yourdomain.com";
+  const baseUrl = "https://oreblogda.vercel.app";
 
   const urls = posts
     .map(

@@ -124,7 +124,7 @@ export async function POST(req) {
         });
 
         const mailOptions = {
-  from: `"MyWebsite" <${process.env.MAILEREMAIL}>`,
+  from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
   to: subscribers.map((s) => s.email).join(","), // join all emails
   subject: `📰 New Post from ${user.username}`,
   html: `

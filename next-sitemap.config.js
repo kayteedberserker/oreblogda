@@ -1,5 +1,5 @@
 module.exports = {
-  siteUrl: "https://yourdomain.com",
+  siteUrl: "https://oreblogda.vercel.app",
   generateRobotsTxt: true,
   sitemapSize: 5000,
 };
