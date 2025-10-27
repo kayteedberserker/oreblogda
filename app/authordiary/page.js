@@ -7,7 +7,8 @@ import Link from "next/link";
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
-  const [message, setMessage] = useState("");
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState(""); // main message + inline sections
   const [mediaUrl, setMediaUrl] = useState("");
   const [mediaUrlLink, setMediaUrlLink] = useState("");
   const [mediaType, setMediaType] = useState("image");
@@ -15,7 +16,7 @@ const Dashboard = () => {
   const [pollMultiple, setPollMultiple] = useState(false);
   const [pollOptions, setPollOptions] = useState(["", ""]);
   const [loading, setLoading] = useState(false);
-  const [category, setCategory] = useState("")
+  const [category, setCategory] = useState("");
   const [uploading, setUploading] = useState(false);
 
   const router = useRouter();
@@ -96,7 +97,8 @@ const Dashboard = () => {
         credentials: "include",
         body: JSON.stringify({
           authorId: user.id,
-          message,
+          title,
+          message, // message contains inline sections
           mediaUrl: mediaToSend,
           mediaType: typeToSend,
           hasPoll,
@@ -104,7 +106,7 @@ const Dashboard = () => {
           pollOptions: hasPoll
             ? pollOptions.filter((opt) => opt.trim() !== "").map((opt) => ({ text: opt }))
             : [],
-          category
+          category,
         }),
       });
 
@@ -112,6 +114,7 @@ const Dashboard = () => {
       if (!res.ok) toast.error(data.message || "Failed to create post");
       else {
         toast.success("Post created successfully!");
+        setTitle("");
         setMessage("");
         setMediaUrl("");
         setMediaUrlLink("");
@@ -134,33 +137,49 @@ const Dashboard = () => {
       <div className="absolute top-10 left-10 w-48 h-48 bg-blue-300 dark:bg-indigo-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
       <div className="absolute bottom-10 right-10 w-56 h-56 bg-pink-300 dark:bg-pink-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
 
-      <div className=" flex gap-4">
+      <div className="flex gap-4">
         <h1 className="text-2xl">Welcome, {user.username} 👋</h1>
-
-        <Link className=" text-2xl hover:text-red-500 hover:underline" href={"authordiary/profile"}>Edit Profile Details</Link>
+        <Link className="text-2xl hover:text-red-500 hover:underline" href={"authordiary/profile"}>
+          Edit Profile Details
+        </Link>
       </div>
       <hr className="my-6" />
 
       <h2>Create New Post</h2>
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Title */}
+        <input
+          type="text"
+          placeholder="Post Title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          required
+          className="w-full border p-2 rounded"
+        />
+
+        {/* Main Message + inline sections */}
         <textarea
-          placeholder="Write your post message here..."
+          placeholder="Write your main message here... Use [section]Your section[/section] to add a section"
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           required
-          rows={5}
+          rows={8}
           className="w-full border p-2 rounded"
         />
+
+        {/* Category */}
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
-          className="border p-2 rounded-md"
+          className="border p-2 rounded-md w-full"
         >
           <option value="News">News</option>
           <option value="Memes">Memes</option>
           <option value="Videos/Edits">Videos/Edits</option>
           <option value="Polls">Polls</option>
         </select>
+
+        {/* Media */}
         <div className="flex flex-col gap-2">
           <input
             type="text"
@@ -188,28 +207,17 @@ const Dashboard = () => {
           )}
         </div>
 
+        {/* Poll */}
         <div>
           <label>
-            <input
-              type="checkbox"
-              checked={hasPoll}
-              onChange={(e) => setHasPoll(e.target.checked)}
-            />{" "}
-            Add a poll
+            <input type="checkbox" checked={hasPoll} onChange={(e) => setHasPoll(e.target.checked)} /> Add a poll
           </label>
         </div>
-
         {hasPoll && (
           <div className="space-y-2">
             <label>
-              <input
-                type="checkbox"
-                checked={pollMultiple}
-                onChange={(e) => setPollMultiple(e.target.checked)}
-              />{" "}
-              Allow multiple selections
+              <input type="checkbox" checked={pollMultiple} onChange={(e) => setPollMultiple(e.target.checked)} /> Allow multiple selections
             </label>
-
             {pollOptions.map((option, i) => (
               <div key={i} className="flex gap-2 items-center">
                 <input
@@ -221,14 +229,11 @@ const Dashboard = () => {
                   required
                 />
                 {pollOptions.length > 2 && (
-                  <button type="button" onClick={() => removePollOption(i)}>
-                    ❌
-                  </button>
+                  <button type="button" onClick={() => removePollOption(i)}>❌</button>
                 )}
               </div>
             ))}
-
-            <button type="button" onClick={addPollOption}>
+            <button type="button" onClick={addPollOption} className="bg-green-500 text-white px-2 py-1 rounded">
               + Add Option
             </button>
           </div>
@@ -245,6 +250,8 @@ const Dashboard = () => {
 
       <ToastContainer position="top-right" autoClose={3000} theme="colored" />
     </div>
+ 
+
   );
 };
 

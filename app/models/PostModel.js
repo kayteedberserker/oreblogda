@@ -20,15 +20,16 @@ const postSchema = new mongoose.Schema(
   {
     authorId: { type: String, required: true },
     authorName: { type: String, default: "Anonymous" },
-    message: { type: String, required: true },
+    title: { type: String, required: true },
+    message: { type: String, required: true },  // main + inline sections
     mediaUrl: { type: String },
     mediaType: { type: String },
-    likes: [{ type: String }],      // could store userId or IP
-    likesIPs: [{ type: String }],   // NEW: track IPs for like prevention
+    likes: [{ type: String }],
+    likesIPs: [{ type: String }],
     comments: [commentSchema],
     shares: { type: Number, default: 0 },
     views: { type: Number, default: 0 },
-    viewsIPs: [{ type: String }],   // NEW: track IPs for view prevention
+    viewsIPs: [{ type: String }],
     poll: pollSchema,
     voters: [String],
     category: {

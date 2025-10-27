@@ -180,6 +180,56 @@ export default function PostCard({
     }
   }, [post.mediaUrl]);
 
+
+  // ✅ --- UPDATED MESSAGE SECTION ---
+  const parseMessageSections = (msg) => {
+    const sectionRegex = /\[section\](.*?)\[\/section\]/gs;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = sectionRegex.exec(msg)) !== null) {
+      if (match.index > lastIndex) {
+        parts.push({ type: "text", content: msg.slice(lastIndex, match.index) });
+      }
+      parts.push({ type: "section", content: match[1] });
+      lastIndex = match.index + match[0].length;
+    }
+    if (lastIndex < msg.length) {
+      parts.push({ type: "text", content: msg.slice(lastIndex) });
+    }
+    return parts;
+  };
+
+  const renderMessage = () => {
+  const maxLength = 150;
+
+  if (isFeed) {
+    // In feed, ignore all sections
+    const plainText = post.message.replace(/\[section\][\s\S]*?\[\/section\]/g, "");
+    const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
+    return <span>{truncated}</span>;
+  }
+
+  // Full post: show sections
+  const parts = parseMessageSections(post.message);
+  return parts.map((p, i) => {
+    if (p.type === "text") return <span key={i}>{p.content}</span>;
+    if (p.type === "section") {
+      return (
+        <div
+          key={i}
+          className="bg-gray-100 dark:bg-gray-700 p-2 my-2 w-fit max-w-[80%] md:max-w-[60%] mx-auto rounded-md border-l-4 border-blue-500"
+        >
+          {p.content}
+        </div>
+      );
+    }
+    return null;
+  });
+};
+
+
   return (
     <>
       <div className={`bg-white dark:bg-gray-800 shadow-md rounded-md py-4 px-1 mb-6 relative overflow-hidden ${className}`}>
@@ -204,13 +254,13 @@ export default function PostCard({
           <span className="text-sm text-gray-500">{totalViews} views</span>
         </div>
 
-        {/* Message */}
+        {/* ✅ Updated Message */}
         <p className="text-gray-800 text-[12px] md:text-[16px] dark:text-gray-100 mb-1">
           {isFeed ? (
             isLongMessage && !showFullMessage ? (
               <>
                 <Link href={`/post/${post._id}`} className="hover:underline">
-                  {post.message.slice(0, 150)}...
+                  {renderMessage()}
                 </Link>
                 <Link href={`/post/${post._id}`} className="text-blue-500 ml-1 hover:underline">
                   Read More
@@ -218,11 +268,11 @@ export default function PostCard({
               </>
             ) : (
               <Link href={`/post/${post._id}`} className="hover:underline">
-                {displayMessage}
+                {renderMessage()}
               </Link>
             )
           ) : (
-            post?.message
+            renderMessage()
           )}
         </p>
 

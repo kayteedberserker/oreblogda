@@ -53,8 +53,6 @@ export async function GET(req) {
 // ----------------------
 // POST: create a new post
 // ----------------------
-
-
 export async function POST(req) {
   try {
     await connectDB();
@@ -69,40 +67,43 @@ export async function POST(req) {
     }
 
     const {
+      title,
       message,
       mediaUrl,
       mediaType,
       hasPoll,
       pollMultiple,
       pollOptions,
-      category, // new
+      category,
     } = await req.json();
 
-    if (!message || message.trim() === "") {
-      return NextResponse.json(
-        { message: "Message is required" },
-        { status: 400 }
-      );
+    if (!title || title.trim() === "") {
+      return NextResponse.json({ message: "Title is required" }, { status: 400 });
     }
-    // Validation
+
+    if (!message || message.trim() === "") {
+      return NextResponse.json({ message: "Message is required" }, { status: 400 });
+    }
+
     if (!category || !["News", "Memes", "Videos/Edits", "Polls"].includes(category)) {
       return NextResponse.json({ message: "Invalid category" }, { status: 400 });
     }
-    // when creating the new post
+
     const newPost = await Post.create({
       authorId: user.id,
       authorName: user.username,
-      message,
+      title,
+      message, // message now contains inline sections
       mediaUrl: mediaUrl || null,
-      mediaType: mediaUrl ? mediaType : null,
+      mediaType: mediaUrl ? mediaType : mediaUrl?.includes("video") ? "video" : "image" || null,
       likes: [],
       shares: 0,
       comments: [],
       poll: hasPoll
         ? {
-          pollMultiple: pollMultiple || false,
-          options: pollOptions.map((opt) => ({ text: opt.text, votes: 0 })),
-        }
+            pollMultiple: pollMultiple || false,
+            options: pollOptions.map((opt) => ({ text: opt.text, votes: 0 })),
+          }
         : null,
       voters: [],
       category,
@@ -110,10 +111,9 @@ export async function POST(req) {
 
     await newPost.save();
 
-    // ✅ After saving post → Send newsletter email to subscribers
+    // Send newsletter email (optional)
     try {
       const subscribers = await Newsletter.find({}, "email");
-
       if (subscribers.length > 0) {
         const transporter = nodemailer.createTransport({
           service: "gmail",
@@ -124,49 +124,44 @@ export async function POST(req) {
         });
 
         const mailOptions = {
-  from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
-  to: subscribers.map((s) => s.email).join(","), // join all emails
-  subject: `📰 New Post from ${user.username}`,
-  html: `
-    <div style="font-family:Arial, sans-serif;line-height:1.6;color:#333;">
-      <h2 style="margin-bottom:10px;">New Post from ${user.username}</h2>
-      <p style="margin-bottom:15px;">
-        ${message.length > 250 ? message.slice(0, 250) + "..." : message}
-      </p>
-      ${mediaUrl
-        ? `<img src="${mediaUrl}" alt="Post Media" style="max-width:100%;border-radius:8px;margin-bottom:15px;">`
-        : ""
-      }
-      <div style="margin-bottom:20px;">
-        <a href="${process.env.SITE_URL}/post/${newPost._id}"
-           style="
-             display:inline-block;
-             padding:12px 20px;
-             background-color:#007bff;
-             color:#ffffff !important;
-             text-decoration:none;
-             border-radius:6px;
-             font-weight:bold;
-             font-size:16px;
-           "
-           target="_blank"
-           rel="noopener noreferrer">
-          Read Full Post
-        </a>
-      </div>
-      <p style="font-size:12px;color:#888;">
-        You're receiving this email because you subscribed to our newsletter.
-      </p>
-    </div>
-  `,
-};
-
+          from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
+          to: subscribers.map((s) => s.email).join(","),
+          subject: `📰 New Post from ${user.username}`,
+          html: `
+            <div style="font-family:Arial, sans-serif;line-height:1.6;color:#333;">
+              <h2 style="margin-bottom:10px;">New Post from ${user.username}</h2>
+              <p style="margin-bottom:15px;">
+                ${message.length > 250 ? message.slice(0, 250) + "..." : message}
+              </p>
+              ${mediaUrl ? `<img src="${mediaUrl}" alt="Post Media" style="max-width:100%;border-radius:8px;margin-bottom:15px;">` : ""}
+              <div style="margin-bottom:20px;">
+                <a href="${process.env.SITE_URL}/post/${newPost._id}"
+                   style="
+                     display:inline-block;
+                     padding:12px 20px;
+                     background-color:#007bff;
+                     color:#ffffff !important;
+                     text-decoration:none;
+                     border-radius:6px;
+                     font-weight:bold;
+                     font-size:16px;
+                   "
+                   target="_blank"
+                   rel="noopener noreferrer">
+                  Read Full Post
+                </a>
+              </div>
+              <p style="font-size:12px;color:#888;">
+                You're receiving this email because you subscribed to our newsletter.
+              </p>
+            </div>
+          `,
+        };
 
         await transporter.sendMail(mailOptions);
       }
     } catch (emailErr) {
       console.error("Newsletter email error:", emailErr);
-      // don’t fail the post creation just because email failed
     }
 
     return NextResponse.json(
@@ -181,3 +176,4 @@ export async function POST(req) {
     );
   }
 }
+
