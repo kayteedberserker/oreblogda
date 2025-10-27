@@ -18,7 +18,15 @@ export async function GET() {
       </url>`
       )
       .join("");
-
+      const categories = ["memes", "videos-edits", "news", "polls"]
+      const otherUrls = categories
+      .map(
+        (category) => `
+      <url>
+        <loc>${baseUrl}/categories/${category}</loc>
+      </url>`
+      )
+      .join("");
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
     <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
       <url>
@@ -26,6 +34,7 @@ export async function GET() {
         <lastmod>${new Date().toISOString()}</lastmod>
       </url>
       ${urls}
+      ${otherUrls}
     </urlset>`;
 
     return new Response(xml, {
