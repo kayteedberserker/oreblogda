@@ -158,6 +158,7 @@ const Dashboard = () => {
         />
 
         {/* Main Message + inline sections */}
+        <label htmlFor="">Write your main message here... Use [section]Your section[/section] to add a section</label>
         <textarea
           placeholder="Write your main message here... Use [section]Your section[/section] to add a section"
           value={message}
