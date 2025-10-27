@@ -218,7 +218,7 @@ export default function PostCard({
       return (
         <div
           key={i}
-          className="bg-gray-100 dark:bg-gray-700 p-2 my-2 w-fit max-w-[50%] ml-[150px] md:ml-[200px] lg:ml-[300px] rounded-md border-l-4 border-blue-500"
+          className="bg-gray-100 dark:bg-gray-700 p-2 my-2 w-fit max-w-[70%] ml-[80px] md:ml-[150px] lg:ml-[270px] rounded-md border-l-4 border-blue-500"
         >
           {p.content}
         </div>
