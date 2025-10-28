@@ -88,7 +88,7 @@ export async function POST(req) {
     if (!category || !["News", "Memes", "Videos/Edits", "Polls"].includes(category)) {
       return NextResponse.json({ message: "Invalid category" }, { status: 400 });
     }
-    const shortMessage = message.slice(0, 10)
+    const shortMessage = message.slice(0, 25)
     const slugText = `${title} ${shortMessage}`
     const slug = generateSlug(slugText)
     console.log(slug);
