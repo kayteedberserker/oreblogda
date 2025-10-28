@@ -13,7 +13,7 @@ export async function GET() {
       .map(
         (post) => `
       <url>
-        <loc>${baseUrl}/post/${post._id}</loc>
+        <loc>${baseUrl}/post/${post.slug || post._id}</loc>
         <lastmod>${new Date(post.updatedAt).toISOString()}</lastmod>
       </url>`
       )
