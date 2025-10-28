@@ -144,7 +144,7 @@ export async function POST(req) {
               </p>
               ${mediaUrl ? `<img src="${mediaUrl}" alt="Post Media" style="max-width:100%;border-radius:8px;margin-bottom:15px;">` : ""}
               <div style="margin-bottom:20px;">
-                <a href="${process.env.SITE_URL}/post/${newPost._id}"
+                <a href="${process.env.SITE_URL}/post/${newPost.slug|| newPost._id}"
                    style="
                      display:inline-block;
                      padding:12px 20px;
@@ -160,7 +160,7 @@ export async function POST(req) {
                   Read Full Post
                 </a>
               </div>
-              <p>If the button doesnt work this is the link to the post you can check it out manually<br>${process.env.SITE_URL}/post/${newPost._id}
+              <p>If the button doesnt work this is the link to the post you can check it out manually<br>${process.env.SITE_URL}/post/${newPost.slug || newPost._id}
               <p style="font-size:12px;color:#888;">
                 You're receiving this email because you subscribed to our newsletter.
               </p>
