@@ -141,12 +141,17 @@ export async function GET(req, { params }) {
 
     const resolvedParams = await params;  // ✅ unwrap the Promise
     const { id } = resolvedParams;
-    if (!id) return NextResponse.json({ message: "Post ID is required" }, { status: 400 });
+    if (!id) return NextResponse.json({ message: "Post Slug is required" }, { status: 400 });
+    if (id.includes("-")) {
+      const post = await Post.findOne({slug: id});
+      if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
+      return NextResponse.json(post);
+    } else {
+      const post = await Post.findById(id);
+      if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
+      return NextResponse.json(post);
+    }
 
-    const post = await Post.findById(id);
-    if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
-
-    return NextResponse.json(post);
   } catch (err) {
     console.error(err);
     return NextResponse.json({ message: "Server error", error: err.message }, { status: 500 });

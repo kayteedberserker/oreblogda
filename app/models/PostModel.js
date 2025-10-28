@@ -30,6 +30,7 @@ const postSchema = new mongoose.Schema(
     shares: { type: Number, default: 0 },
     views: { type: Number, default: 0 },
     viewsIPs: [{ type: String }],
+    slug: {type: String, unique: true, trim: true},
     poll: pollSchema,
     voters: [String],
     category: {

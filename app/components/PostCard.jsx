@@ -42,15 +42,15 @@ export default function PostCard({
     }
     // ✅ Trigger SWR revalidation if using SWR in feed
     mutate("/api/posts");
-    
+
   };
-  
+
   // ✅ Handle view count once per user
   useEffect(() => {
     if (!post?._id) return;
     const viewedPosts = JSON.parse(localStorage.getItem("viewedPosts") || "[]");
-    
-    
+
+
     if (!viewedPosts.includes(post._id)) {
       fetch(`/api/posts/${post._id}`, {
         method: "PATCH",
@@ -66,28 +66,28 @@ export default function PostCard({
     }
   }, [post._id]);
 
- const handleLike = async () => {
-  if (liked) return;
-  setLiked(true);
-  setLikeAnim(true);
-  setBurst(true);
-  setTimeout(() => setLikeAnim(false), 300);
-  setTimeout(() => setBurst(false), 700);
+  const handleLike = async () => {
+    if (liked) return;
+    setLiked(true);
+    setLikeAnim(true);
+    setBurst(true);
+    setTimeout(() => setLikeAnim(false), 300);
+    setTimeout(() => setBurst(false), 700);
 
-  try {
-    const res = await fetch(`/api/posts/${post._id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "like" }), // ✅ remove payload
-    });
-    const data = await res.json();
-    localStorage.setItem(post._id, "true")
-    refreshPosts(data);
-  } catch (err) {
-    console.error(err);
-    setLiked(false);
-  }
-};
+    try {
+      const res = await fetch(`/api/posts/${post._id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "like" }), // ✅ remove payload
+      });
+      const data = await res.json();
+      localStorage.setItem(post._id, "true")
+      refreshPosts(data);
+    } catch (err) {
+      console.error(err);
+      setLiked(false);
+    }
+  };
 
   const handleShare = async () => {
     try {
@@ -201,32 +201,32 @@ export default function PostCard({
   };
 
   const renderMessage = () => {
-  const maxLength = 150;
+    const maxLength = 150;
 
-  if (isFeed) {
-    // In feed, ignore all sections
-    const plainText = post.message.replace(/\[section\][\s\S]*?\[\/section\]/g, "");
-    const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
-    return <span>{truncated}</span>;
-  }
-
-  // Full post: show sections
-  const parts = parseMessageSections(post.message);
-  return parts.map((p, i) => {
-    if (p.type === "text") return <span key={i}>{p.content}</span>;
-    if (p.type === "section") {
-      return (
-        <div
-          key={i}
-          className="bg-gray-100 dark:bg-gray-700 p-2 my-2 w-fit max-w-[70%] ml-[80px] md:ml-[150px] lg:ml-[270px] rounded-md border-l-4 border-blue-500"
-        >
-          {p.content}
-        </div>
-      );
+    if (isFeed) {
+      // In feed, ignore all sections
+      const plainText = post.message.replace(/\[section\][\s\S]*?\[\/section\]/g, "");
+      const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
+      return <span>{truncated}</span>;
     }
-    return null;
-  });
-};
+
+    // Full post: show sections
+    const parts = parseMessageSections(post.message);
+    return parts.map((p, i) => {
+      if (p.type === "text") return <span key={i}>{p.content}</span>;
+      if (p.type === "section") {
+        return (
+          <div
+            key={i}
+            className="bg-gray-100 dark:bg-gray-700 p-2 my-2 w-fit max-w-[70%] ml-20 md:ml-[150px] lg:ml-[270px] rounded-md border-l-4 border-blue-500"
+          >
+            {p.content}
+          </div>
+        );
+      }
+      return null;
+    });
+  };
 
 
   return (
@@ -267,7 +267,7 @@ export default function PostCard({
                 </Link>
               </>
             ) : (
-              <Link href={`/post/${post._id}`} className="hover:underline">
+              <Link href={`/post/${post.slug || post._id}`} className="hover:underline">
                 {renderMessage()}
               </Link>
             )
@@ -322,7 +322,7 @@ export default function PostCard({
         <div className="flex items-center space-x-4 mt-2 text-gray-600 dark:text-gray-300 relative">
           <div className="relative">
             <motion.button
-			name="Add like"
+              name="Add like"
               onClick={handleLike}
               whileTap={{ scale: 1.3 }}
               className={`flex items-center space-x-1 transition-transform duration-300 ${likeAnim ? "scale-125" : "scale-100"}`}
@@ -348,7 +348,7 @@ export default function PostCard({
           </div>
 
           <motion.button
-		  name="Open comment"
+            name="Open comment"
             onClick={() => setShowCommentInput((prev) => !prev)}
             whileHover={{ scale: 1.05 }}
             className="flex items-center space-x-1"
@@ -365,7 +365,7 @@ export default function PostCard({
           </motion.button>
 
           <motion.button
-		  name="share"
+            name="share"
             onClick={handleShare}
             whileHover={{ scale: 1.05 }}
             className="flex items-center space-x-1"
@@ -404,7 +404,7 @@ export default function PostCard({
               className="w-full border rounded-md p-2 text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 resize-none"
             />
             <button
-			name="Add comment"
+              name="Add comment"
               onClick={handleAddComment}
               className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
             >
@@ -453,7 +453,7 @@ export default function PostCard({
           onClick={closeLightbox}
         >
           <button
-		  name="close image"
+            name="close image"
             onClick={closeLightbox}
             className="absolute top-4 right-4 text-white text-2xl"
           >

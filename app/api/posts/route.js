@@ -4,6 +4,7 @@ import Post from "@/app/models/PostModel";
 import { verifyToken } from "@/app/lib/auth";
 import Newsletter from "@/app/models/Newsletter";
 import nodemailer from "nodemailer";
+import generateSlug from "@/app/api/hooks/slugify";
 
 
 // ----------------------
@@ -65,7 +66,6 @@ export async function POST(req) {
     } catch {
       return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
-
     const {
       title,
       message,
@@ -88,11 +88,15 @@ export async function POST(req) {
     if (!category || !["News", "Memes", "Videos/Edits", "Polls"].includes(category)) {
       return NextResponse.json({ message: "Invalid category" }, { status: 400 });
     }
-
+    const shortMessage = message.slice(0, 10)
+    const slugText = `${title} ${shortMessage}`
+    const slug = generateSlug(slugText)
+    console.log(slug);
     const newPost = await Post.create({
       authorId: user.id,
       authorName: user.username,
       title,
+      slug: slug,
       message, // message now contains inline sections
       mediaUrl: mediaUrl || null,
       mediaType: mediaUrl ? mediaType : mediaUrl?.includes("video") ? "video" : "image" || null,
@@ -151,6 +155,7 @@ export async function POST(req) {
                   Read Full Post
                 </a>
               </div>
+              <p>If the button doesnt work this is the link to the post you can check it out manually<br>${process.env.SITE_URL}/post/${newPost._id}
               <p style="font-size:12px;color:#888;">
                 You're receiving this email because you subscribed to our newsletter.
               </p>
