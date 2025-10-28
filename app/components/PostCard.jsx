@@ -227,7 +227,14 @@ export default function PostCard({
       return null;
     });
   };
-
+  const [idLink, setidLink] = useState()
+  useEffect(() => {
+    if (post.slug) {
+      setidLink(post?.slug)
+    } else {
+      setidLink(post._id)
+    }
+  }, [idLink])
 
   return (
     <>
@@ -259,15 +266,15 @@ export default function PostCard({
           {isFeed ? (
             isLongMessage && !showFullMessage ? (
               <>
-                <Link href={`/post/${post._id}`} className="hover:underline">
+                <Link href={`/post/${idLink}`} className="hover:underline">
                   {renderMessage()}
                 </Link>
-                <Link href={`/post/${post._id}`} className="text-blue-500 ml-1 hover:underline">
+                <Link href={`/post/${idLink}`} className="text-blue-500 ml-1 hover:underline">
                   Read More
                 </Link>
               </>
             ) : (
-              <Link href={`/post/${post.slug || post._id}`} className="hover:underline">
+              <Link href={`/post/${idLink}`} className="hover:underline">
                 {renderMessage()}
               </Link>
             )

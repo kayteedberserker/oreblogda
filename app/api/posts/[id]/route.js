@@ -142,6 +142,7 @@ export async function GET(req, { params }) {
     const resolvedParams = await params;  // ✅ unwrap the Promise
     const { id } = resolvedParams;
     if (!id) return NextResponse.json({ message: "Post Slug is required" }, { status: 400 });
+    
     if (id.includes("-")) {
       const post = await Post.findOne({slug: id});
       if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
