@@ -94,31 +94,70 @@ export async function PATCH(req, { params }) {
 
     // ===== VIEW =====
     if (action === "view") {
-      post.viewsIPs = post.viewsIPs || [];
+  post.viewsIPs = post.viewsIPs || [];
 
-      // List of bot keywords to ignore (common crawlers)
-      const botKeywords = [
-        "facebookexternalhit", // Facebook link preview
-        "Facebot",             // Facebook crawler
-        "Googlebot",           // Google crawler
-        "Bingbot",             // Bing crawler
-        "Twitterbot",          // Twitter preview
-        "LinkedInBot",         // LinkedIn preview
-        "Slackbot",            // Slack preview
-      ];
+  // --- Function to detect likely bot/data center IPs ---
+  const isLikelyBotIP = (ip) => {
+    if (!ip) return false;
 
-      // Check the request headers for User-Agent
-      const userAgent = req.headers.get("user-agent") || "";
+    const botPrefixes = [
+      // Google
+      "66.102.", "66.249.", "64.233.", "72.14.", "74.125.",
+      "142.250.", "172.217.", "209.85.", "216.58.",
 
-      const isBot = botKeywords.some(bot => userAgent.includes(bot));
+      // Meta / Facebook / Instagram
+      "31.13.", "66.220.", "69.171.", "69.63.", "157.240.",
 
-      if (!isBot && !post.viewsIPs.includes(ip)) {
-        post.views += 1;
-        post.viewsIPs.push(ip);
-        await post.save();
-      }
-      return NextResponse.json(post, { status: 200 });
-    }
+      // Microsoft / Bing / Azure
+      "13.", "20.", "40.", "52.", "65.", "104.",
+
+      // Amazon AWS
+      "3.", "13.", "18.", "34.", "44.", "52.", "54.",
+
+      // Cloudflare
+      "104.16.", "104.17.", "104.18.", "104.19.", "104.20.",
+      "104.21.", "104.22.", "104.23.", "104.24.", "104.25.",
+      "104.26.", "104.27.", "172.64.", "172.65.", "172.66.",
+      "172.67.", "172.68.", "188.114.", "188.115.",
+
+      // Apple
+      "17.",
+
+      // OpenAI (ChatGPT, DALL·E)
+      "23.96.", "40.83.", "52.149.", "52.230.", "52.237.", "104.41."
+    ];
+
+    return botPrefixes.some(prefix => ip.startsWith(prefix));
+  };
+
+  // --- User-Agent bot detection ---
+  const botKeywords = [
+    "facebookexternalhit", // Facebook link preview
+    "Facebot",             // Facebook crawler
+    "Googlebot",           // Google crawler
+    "Bingbot",             // Bing crawler
+    "Twitterbot",          // Twitter preview
+    "LinkedInBot",         // LinkedIn preview
+    "Slackbot",            // Slack preview
+    "Discordbot",          // Discord embeds
+  ];
+
+  const userAgent = req.headers.get("user-agent") || "";
+  const isBotUA = botKeywords.some(bot => userAgent.includes(bot));
+
+  // --- Combine both checks ---
+  const isBot = isBotUA || isLikelyBotIP(ip);
+
+  // --- Only count if it’s not a bot and not a duplicate view ---
+  if (!isBot && !post.viewsIPs.includes(ip)) {
+    post.views += 1;
+    post.viewsIPs.push(ip);
+    await post.save();
+  }
+
+  return NextResponse.json(post, { status: 200 });
+}
+
 
     return NextResponse.json({ message: "Invalid action" }, { status: 400 });
   } catch (err) {
