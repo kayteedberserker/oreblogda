@@ -147,10 +147,10 @@ export default function Footer({ postsContainerId }) {
             systemTheme === "dark" ? "text-gray-400" : "text-gray-600"
           }`}
         >
-          <a href="#" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
+          <a href="https://x.com/oreblogda" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
             Twitter
           </a>
-          <a href="#" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
+          <a href="https://www.instagram.com/oreblogda/" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
             Instagram
           </a>
           <a
