@@ -7,6 +7,7 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { mutate } from "swr"; // ✅ Added SWR mutate support
 import Poll from "./Poll";
+import Image from "next/image";
 
 export default function PostCard({
   post,
@@ -241,13 +242,19 @@ export default function PostCard({
       <div className={`bg-white dark:bg-gray-800 shadow-md rounded-md py-4 px-1 mb-6 relative overflow-hidden ${className}`}>
         {/* Author & Views */}
         <div className="flex justify-between items-center mb-1">
-          <Link href={`/author/${post.authorId}`} className="flex items-center space-x-2 hover:underline">
+          <Link
+            href={`/author/${post.authorId}`}
+            className="flex items-center space-x-2 hover:underline"
+          >
             {author.image ? (
-              <img
-                src={author.image}
-                alt={author.name || "Author"}
-                className="w-8 h-8 rounded-full border border-gray-600 dark:border-gray-600 object-cover"
-              />
+              <div className="w-8 h-8 relative rounded-full border border-gray-600 dark:border-gray-600 overflow-hidden">
+                <Image
+                  src={author.image}
+                  alt={author.name || "Author"}
+                  fill
+                  className="object-cover"
+                />
+              </div>
             ) : (
               <div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-sm text-gray-600">
                 ?
@@ -259,6 +266,7 @@ export default function PostCard({
           </Link>
           <span className="text-sm text-gray-500">{totalViews} views</span>
         </div>
+
 
         {/* ✅ Updated Message */}
         <h2 className=" font-bold text-2xl mb-1.5">{post?.title}</h2>
@@ -284,35 +292,41 @@ export default function PostCard({
         </p>
 
         {/* Media */}
-        {!hideMedia && post.mediaUrl && (
-          post.mediaUrl.includes("tiktok.com") ? (
-            <>
-              <blockquote
-                className="tiktok-embed"
-                cite={post.mediaUrl.split("?")[0]}
-                data-video-id={post.mediaUrl.match(/video\/(\d+)/)?.[1]}
-                style={{ maxWidth: "100%", minWidth: "325px" }}
-              >
-                <section> </section>
-              </blockquote>
-              <script async src="https://www.tiktok.com/embed.js"></script>
-            </>
-          ) : post.mediaType?.startsWith("image") ? (
-            <img
-              src={post.mediaUrl}
-              alt="post media"
-              className="rounded-md mb-2 max-h-80 w-full object-cover cursor-pointer"
-              onClick={() => openLightbox(post.mediaUrl, "image")}
-            />
-          ) : (
-            <video
-              src={post.mediaUrl}
-              controls
-              className="rounded-md mb-2 max-h-80 w-full object-cover cursor-pointer"
-              onClick={() => openLightbox(post.mediaUrl, "video")}
-            />
-          )
-        )}
+{!hideMedia && post.mediaUrl && (
+  post.mediaUrl.includes("tiktok.com") ? (
+    <>
+      <blockquote
+        className="tiktok-embed"
+        cite={post.mediaUrl.split("?")[0]}
+        data-video-id={post.mediaUrl.match(/video\/(\d+)/)?.[1]}
+        style={{ maxWidth: "100%", minWidth: "325px" }}
+      >
+        <section> </section>
+      </blockquote>
+      <script async src="https://www.tiktok.com/embed.js"></script>
+    </>
+  ) : post.mediaType?.startsWith("image") ? (
+    <div className="relative rounded-md mb-2 w-full h-80 cursor-pointer">
+      <Image
+        src={post.mediaUrl}
+        alt="post media"
+        fill
+        sizes="(max-width: 768px) 90vw, (max-width: 1200px) 80vw, 60vw"
+        className="object-contain rounded-md"
+        onClick={() => openLightbox(post.mediaUrl, "image")}
+      />
+    </div>
+  ) : (
+    <video
+      src={post.mediaUrl}
+      controls
+      className="rounded-md mb-2 max-h-80 w-full object-cover cursor-pointer"
+      onClick={() => openLightbox(post.mediaUrl, "video")}
+    />
+  )
+)}
+
+
 
         {/* Poll */}
         {post.poll && post.poll.options?.length > 0 && (
@@ -454,25 +468,40 @@ export default function PostCard({
       </div>
 
       {/* Lightbox */}
-      {lightbox.open && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50"
-          onClick={closeLightbox}
-        >
-          <button
-            name="close image"
-            onClick={closeLightbox}
-            className="absolute top-4 right-4 text-white text-2xl"
-          >
-            <FaTimes />
-          </button>
-          {lightbox.type === "image" ? (
-            <img src={lightbox.src} className="max-h-full max-w-full rounded-md" />
-          ) : (
-            <video src={lightbox.src} controls autoPlay className="max-h-full max-w-full rounded-md" />
-          )}
-        </div>
-      )}
+{lightbox.open && (
+  <div
+    className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4"
+    onClick={closeLightbox}
+  >
+    <button
+      name="close"
+      onClick={closeLightbox}
+      className="absolute top-4 right-4 text-white text-2xl z-50"
+    >
+      <FaTimes />
+    </button>
+
+    {lightbox.type === "image" ? (
+      <img
+        src={lightbox.src}
+        alt="Lightbox image"
+        className="max-h-[90vh] max-w-[90vw] object-contain rounded-md"
+        onClick={(e) => e.stopPropagation()}
+      />
+    ) : (
+      <video
+        src={lightbox.src}
+        controls
+        autoPlay
+        className="max-h-[90vh] max-w-[90vw] rounded-md object-contain"
+        onClick={(e) => e.stopPropagation()}
+      />
+    )}
+  </div>
+)}
+
+
+
 
       {/* Heart Animations */}
       <style jsx>{`

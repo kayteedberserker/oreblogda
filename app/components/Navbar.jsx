@@ -35,7 +35,7 @@ const Navbar = () => {
         <div className="flex justify-between h-16 items-center">
           {/* Logo */}
           <div className="shrink-0 font-bold text-xl">
-            <Link href="/"><Image src={logoSrc} alt="My_Logo" className="w-[140px] h-[30px]" width={200} height={60}/></Link>
+            <Link href="/"><Image src={logoSrc} alt="My_Logo" loading="eager" className="w-[140px] h-[30px]" width={200} height={60}/></Link>
           </div>
 
           {/* Desktop Links */}

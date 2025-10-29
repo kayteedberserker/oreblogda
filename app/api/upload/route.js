@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import cloudinary from "@/app/lib/cloudinary";
-import streamifier from "streamifier"; // ⬅️ need to install this
+import streamifier from "streamifier";
 
 export const runtime = "nodejs"; // required for cloudinary uploads
 
@@ -10,18 +10,17 @@ export async function POST(req) {
     const data = await req.arrayBuffer();
     const buffer = Buffer.from(data);
 
-    // ✅ Wrap Cloudinary’s upload_stream in a Promise
+    // Wrap Cloudinary’s upload_stream in a Promise
     const uploadToCloudinary = () => {
       return new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
-          { folder: "posts" },
+          { folder: "posts" }, // keep folder if you want
           (error, result) => {
             if (error) reject(error);
             else resolve(result);
           }
         );
 
-        // ✅ Send file buffer as a stream
         streamifier.createReadStream(buffer).pipe(stream);
       });
     };
@@ -29,7 +28,15 @@ export async function POST(req) {
     // Upload directly (no local write)
     const result = await uploadToCloudinary();
 
-    return NextResponse.json({ url: result.secure_url });
+    // ✅ Add optimization parameters to URL
+    // f_auto -> automatic format (WebP/AVIF if supported)
+    // q_auto -> automatic quality
+    const optimizedUrl = result.secure_url.replace(
+      "/upload/",
+      "/upload/f_auto,q_auto/"
+    );
+
+    return NextResponse.json({ url: optimizedUrl });
   } catch (err) {
     console.error("Upload error:", err);
     return NextResponse.json(
