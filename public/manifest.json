@@ -1,0 +1,21 @@
+{
+  "name": "Oreblogda",
+  "short_name": "Oreblogda",
+  "description": "A fast, modern blog for tech and anime content.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#1D4ED8",
+  "icons": [
+    {
+      "src": "/icons/iconblue.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/iconwhite.ico",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
