@@ -1,14 +1,15 @@
-// next.config.mjs
-import withPWA from "next-pwa";
+// next.config.js
+const withPWA = require("next-pwa");
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
     domains: ["res.cloudinary.com"],
   },
+  turbopack: {}, // disables Turbopack for custom webpack setups
 };
 
-export default withPWA({
+module.exports = withPWA({
   dest: "public",
   register: true,
   skipWaiting: true,
