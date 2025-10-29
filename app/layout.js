@@ -12,7 +12,7 @@ import { ToastContainer } from "react-toastify";
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"] });
 
 export const metadata = {
-  title: "Oreblogda - My Anime Blog",
+  title: "Ore blogda - My Anime Blog",
   description: "A modern anime blog where users can post, share, and explore trending anime stories, memes, and news.",
   
   keywords: "anime, anime blog, anime news, anime memes, anime stories, trending anime, anime edits, anime votes",
@@ -27,7 +27,7 @@ export const metadata = {
   
   // Open Graph (for social previews)
   openGraph: {
-    title: "Oreblogda – My Anime Blog",
+    title: "Ore blogda – My Anime Blog",
     description: "A modern anime blog where users can post, share, and explore trending anime stories, memes, and news.",
     url: "https://oreblogda.vercel.app",
     siteName: "Oreblogda",
@@ -36,7 +36,7 @@ export const metadata = {
         url: "https://oreblogda.vercel.app/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Oreblogda - Anime Blog",
+        alt: "Ore blogda - Anime Blog",
       },
     ],
     type: "website",
@@ -45,7 +45,7 @@ export const metadata = {
   // Twitter card
   twitter: {
     card: "summary_large_image",
-    title: "Oreblogda – My Anime Blog",
+    title: "Ore blogda – My Anime Blog",
     description: "A modern anime blog where users can post, share, and explore trending anime stories, memes, and news.",
     images: ["https://oreblogda.vercel.app/og-image.png"],
     creator: "@YourTwitterHandle",
