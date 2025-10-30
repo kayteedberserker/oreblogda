@@ -89,10 +89,10 @@ export async function POST(req) {
       return NextResponse.json({ message: "Invalid category" }, { status: 400 });
     }
     let shortMessage
-    if (title.length < 20) {
-      shortMessage = message.slice(0, 20)
-    }else {
+    if (title.length < 15) {
       shortMessage = message.slice(0, 10)
+    }else {
+      shortMessage = "link"
     }
     const slugText = `${title} ${shortMessage}`
     const slug = generateSlug(slugText)
