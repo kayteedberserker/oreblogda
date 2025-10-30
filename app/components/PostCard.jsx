@@ -63,7 +63,9 @@ export default function PostCard({
           refreshPosts(data);
           localStorage.setItem("viewedPosts", JSON.stringify([...viewedPosts, post._id]));
         })
-        .catch(err)
+        .catch((err) => {
+          
+        })
     }
   }, [post._id]);
 
