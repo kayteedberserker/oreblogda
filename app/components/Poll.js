@@ -60,7 +60,6 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
         toast.success("Vote submitted!");
       }
     } catch (err) {
-      console.error(err);
       toast.error("Failed to vote");
     }
   };

@@ -38,7 +38,6 @@ export default function PostsViewer() {
 
       setLoading(false);
     } catch (err) {
-      console.error("Failed to fetch posts:", err);
       setLoading(false);
     }
   };

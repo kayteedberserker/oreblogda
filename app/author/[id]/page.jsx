@@ -29,7 +29,6 @@ export default function AuthorPage() {
         if (postData.posts?.length < 5) setHasMore(false);
       }
     } catch (err) {
-      console.error("Error fetching author:", err);
     }
   }, [id]);
 
@@ -44,7 +43,6 @@ export default function AuthorPage() {
         if (data.posts?.length < 5) setHasMore(false);
       }
     } catch (err) {
-      console.error(err);
     } finally {
       setLoading(false);
     }

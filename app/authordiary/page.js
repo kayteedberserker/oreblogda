@@ -69,7 +69,6 @@ const Dashboard = () => {
         toast.success("File uploaded successfully!");
       } else toast.error("Upload failed.");
     } catch (err) {
-      console.error(err);
       toast.error("Something went wrong during upload.");
     } finally {
       setUploading(false);
@@ -124,7 +123,6 @@ const Dashboard = () => {
         setPollOptions(["", ""]);
       }
     } catch (err) {
-      console.error(err);
       toast.error("Something went wrong.");
     } finally {
       setLoading(false);

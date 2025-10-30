@@ -33,7 +33,6 @@ const ProfilePage = () => {
         setUser(data.user);
         setDescription(data.user?.description || "");
       } catch (err) {
-        console.error("Error loading user:", err);
         toast.error("Failed to load user data");
       }
     };
@@ -61,7 +60,6 @@ const ProfilePage = () => {
         window.scrollBy({ top: -diff, behavior: "instant" });
       }, 0);
     } catch (err) {
-      console.error("Error loading posts:", err);
       toast.error("Failed to load posts");
     } finally {
       setLoadingPosts(false);
@@ -123,7 +121,6 @@ const ProfilePage = () => {
         toast.error(result.message || "Update failed");
       }
     } catch (err) {
-      console.error("Update error:", err);
       toast.error("Something went wrong.");
     } finally {
       setLoading(false);
@@ -150,7 +147,6 @@ const ProfilePage = () => {
         toast.error(data.message || "Delete failed");
       }
     } catch (err) {
-      console.error(err);
       toast.error("Error deleting post");
     }
   };

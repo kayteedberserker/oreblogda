@@ -37,7 +37,6 @@ export default function PostPage() {
           setPost((prev) => ({ ...prev, views: prev.views + 1 }));
         }
       } catch (err) {
-        console.error(err);
       } finally {
         setLoading(false);
       }

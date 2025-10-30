@@ -63,7 +63,7 @@ export default function PostCard({
           refreshPosts(data);
           localStorage.setItem("viewedPosts", JSON.stringify([...viewedPosts, post._id]));
         })
-        .catch((err) => console.error(err));
+        .catch(err)
     }
   }, [post._id]);
 
@@ -85,7 +85,6 @@ export default function PostCard({
       localStorage.setItem(post._id, "true")
       refreshPosts(data);
     } catch (err) {
-      console.error(err);
       setLiked(false);
     }
   };
@@ -101,7 +100,6 @@ export default function PostCard({
       navigator.clipboard.writeText(`${window.location.origin}/post/${post._id}`);
       toast.success("Link copied to clipboard!");
     } catch (err) {
-      console.error(err);
       toast.error("Failed to share");
     }
   };
@@ -130,7 +128,6 @@ export default function PostCard({
       setShowCommentInput(false);
       toast.success("Comment added!");
     } catch (err) {
-      console.error(err);
       toast.error("Failed to add comment");
     }
   };
@@ -145,7 +142,6 @@ export default function PostCard({
         const data = await res.json();
         setAuthor({ name: data.name || post.authorName, image: data.user?.profilePic?.url });
       } catch (err) {
-        console.error(err);
       }
     };
 

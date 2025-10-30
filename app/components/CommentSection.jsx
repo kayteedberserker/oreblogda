@@ -18,7 +18,6 @@ export default function CommentSection({ postId }) {
         const data = await res.json();
         setComments(data.comments || []);
       } catch (err) {
-        console.error(err);
       }
     };
     fetchComments();
