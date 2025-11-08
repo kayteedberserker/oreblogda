@@ -247,7 +247,6 @@ export default function PostCard({
             {author.image ? (
               <div className="w-8 h-8 relative rounded-full border border-gray-600 dark:border-gray-600 overflow-hidden">
                 <Image
-                layout="responsive"
                   src={author.image}
                   alt={`Author ${author.name}'s Image` || "Author"}
                   fill
@@ -311,7 +310,6 @@ export default function PostCard({
                 src={post.mediaUrl}
                 alt="post media"
                 loading="eager"
-                layout="responsive"
                 fill
                 sizes="(max-width: 768px) 90vw, (max-width: 1200px) 80vw, 60vw"
                 className="object-contain rounded-md"

@@ -124,7 +124,7 @@ export async function PATCH(req, { params }) {
       "17.",
 
       // OpenAI (ChatGPT, DALL·E)
-      "23.96.", "40.83.", "52.149.", "52.230.", "52.237.", "104.41."
+      "23.96.", "40.83.", "52.149.", "52.230.", "52.237.", "104.41.", "::1"
     ];
 
     return botPrefixes.some(prefix => ip.startsWith(prefix));

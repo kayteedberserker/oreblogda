@@ -168,7 +168,7 @@ export async function POST(req) {
           `,
         };
 
-        await transporter.sendMail(mailOptions);
+        const mailSent = await transporter.sendMail(mailOptions);
       }
     } catch (emailErr) {
       console.error("Newsletter email error:", emailErr);
