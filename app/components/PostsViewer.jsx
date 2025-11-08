@@ -93,6 +93,7 @@ export default function PostsViewer() {
           {hasMore && !loading && (
             <div className="text-center mt-6">
               <button
+                aria-label="Load more"
                 onClick={() => setPage((prev) => prev + 1)}
                 className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
               >
@@ -123,8 +124,9 @@ export default function PostsViewer() {
         <div className="md:hidden">
           {/* Toggle Button */}
           <button
+            aria-label="Open poll"
             onClick={() => setDrawerOpen((prev) => !prev)}
-            className="fixed top-1/3 right-[-20px] transform -translate-y-1/2 z-50 w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg"
+            className="fixed top-1/3 -right-5 transform -translate-y-1/2 z-50 w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg"
           >
             <FaPoll />
           </button>

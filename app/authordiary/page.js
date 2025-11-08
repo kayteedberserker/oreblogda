@@ -228,17 +228,18 @@ const Dashboard = () => {
                   required
                 />
                 {pollOptions.length > 2 && (
-                  <button type="button" onClick={() => removePollOption(i)}>❌</button>
+                  <button type="button" aria-label="cancel" onClick={() => removePollOption(i)}>❌</button>
                 )}
               </div>
             ))}
-            <button type="button" onClick={addPollOption} className="bg-green-500 text-white px-2 py-1 rounded">
+            <button type="button" onClick={addPollOption} aria-label="add" className="bg-green-500 text-white px-2 py-1 rounded">
               + Add Option
             </button>
           </div>
         )}
 
         <button
+        aria-label="Create post"
           type="submit"
           disabled={loading || uploading}
           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"

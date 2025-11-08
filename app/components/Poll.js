@@ -97,6 +97,7 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
 
       {!readOnly && !submitted && (
         <button
+          aria-label="Submit vote"
           onClick={handleVote}
           className="px-3 py-1 mt-3 bg-blue-500 text-white rounded hover:bg-blue-600"
         >

@@ -64,7 +64,7 @@ export default function PostCard({
           localStorage.setItem("viewedPosts", JSON.stringify([...viewedPosts, post._id]));
         })
         .catch((err) => {
-          
+
         })
     }
   }, [post._id]);
@@ -247,10 +247,12 @@ export default function PostCard({
             {author.image ? (
               <div className="w-8 h-8 relative rounded-full border border-gray-600 dark:border-gray-600 overflow-hidden">
                 <Image
+                layout="responsive"
                   src={author.image}
-                  alt={author.name || "Author"}
+                  alt={`Author ${author.name}'s Image` || "Author"}
                   fill
                   className="object-cover"
+                  loading="lazy"
                 />
               </div>
             ) : (
@@ -290,39 +292,41 @@ export default function PostCard({
         </p>
 
         {/* Media */}
-{!hideMedia && post.mediaUrl && (
-  post.mediaUrl.includes("tiktok.com") ? (
-    <>
-      <blockquote
-        className="tiktok-embed"
-        cite={post.mediaUrl.split("?")[0]}
-        data-video-id={post.mediaUrl.match(/video\/(\d+)/)?.[1]}
-        style={{ maxWidth: "100%", minWidth: "325px" }}
-      >
-        <section> </section>
-      </blockquote>
-      <script async src="https://www.tiktok.com/embed.js"></script>
-    </>
-  ) : post.mediaType?.startsWith("image") ? (
-    <div className="relative rounded-md mb-2 w-full h-80 cursor-pointer">
-      <Image
-        src={post.mediaUrl}
-        alt="post media"
-        fill
-        sizes="(max-width: 768px) 90vw, (max-width: 1200px) 80vw, 60vw"
-        className="object-contain rounded-md"
-        onClick={() => openLightbox(post.mediaUrl, "image")}
-      />
-    </div>
-  ) : (
-    <video
-      src={post.mediaUrl}
-      controls
-      className="rounded-md mb-2 max-h-80 w-full object-cover cursor-pointer"
-      onClick={() => openLightbox(post.mediaUrl, "video")}
-    />
-  )
-)}
+        {!hideMedia && post.mediaUrl && (
+          post.mediaUrl.includes("tiktok.com") ? (
+            <>
+              <blockquote
+                className="tiktok-embed"
+                cite={post.mediaUrl.split("?")[0]}
+                data-video-id={post.mediaUrl.match(/video\/(\d+)/)?.[1]}
+                style={{ maxWidth: "100%", minWidth: "325px" }}
+              >
+                <section> </section>
+              </blockquote>
+              <script async src="https://www.tiktok.com/embed.js"></script>
+            </>
+          ) : post.mediaType?.startsWith("image") ? (
+            <div className="relative rounded-md mb-2 w-full h-80 cursor-pointer">
+              <Image
+                src={post.mediaUrl}
+                alt="post media"
+                loading="eager"
+                layout="responsive"
+                fill
+                sizes="(max-width: 768px) 90vw, (max-width: 1200px) 80vw, 60vw"
+                className="object-contain rounded-md"
+                onClick={() => openLightbox(post.mediaUrl, "image")}
+              />
+            </div>
+          ) : (
+            <video
+              src={post.mediaUrl}
+              controls
+              className="rounded-md mb-2 max-h-80 w-full object-cover cursor-pointer"
+              onClick={() => openLightbox(post.mediaUrl, "video")}
+            />
+          )
+        )}
 
 
 
@@ -423,7 +427,7 @@ export default function PostCard({
               className="w-full border rounded-md p-2 text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 resize-none"
             />
             <button
-              name="Add comment"
+              aria-label="Add comment"
               onClick={handleAddComment}
               className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
             >
@@ -466,37 +470,37 @@ export default function PostCard({
       </div>
 
       {/* Lightbox */}
-{lightbox.open && (
-  <div
-    className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4"
-    onClick={closeLightbox}
-  >
-    <button
-      name="close"
-      onClick={closeLightbox}
-      className="absolute top-4 right-4 text-white text-2xl z-50"
-    >
-      <FaTimes />
-    </button>
+      {lightbox.open && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4"
+          onClick={closeLightbox}
+        >
+          <button
+            aria-label="close"
+            onClick={closeLightbox}
+            className="absolute top-4 right-4 text-white text-2xl z-50"
+          >
+            <FaTimes />
+          </button>
 
-    {lightbox.type === "image" ? (
-      <img
-        src={lightbox.src}
-        alt="Lightbox image"
-        className="max-h-[90vh] max-w-[90vw] object-contain rounded-md"
-        onClick={(e) => e.stopPropagation()}
-      />
-    ) : (
-      <video
-        src={lightbox.src}
-        controls
-        autoPlay
-        className="max-h-[90vh] max-w-[90vw] rounded-md object-contain"
-        onClick={(e) => e.stopPropagation()}
-      />
-    )}
-  </div>
-)}
+          {lightbox.type === "image" ? (
+            <img
+              src={lightbox.src}
+              alt="Lightbox image"
+              className="max-h-[90vh] max-w-[90vw] object-contain rounded-md"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <video
+              src={lightbox.src}
+              controls
+              autoPlay
+              className="max-h-[90vh] max-w-[90vw] rounded-md object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
+        </div>
+      )}
 
 
 

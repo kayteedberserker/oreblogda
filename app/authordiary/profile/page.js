@@ -204,6 +204,7 @@ const ProfilePage = () => {
         </div>
 
         <button
+          aria-label="Save changes"
           type="submit"
           disabled={loading}
           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 w-full"
@@ -232,6 +233,7 @@ const ProfilePage = () => {
                 </p>
               </div>
               <button
+              aria-label="delete"
                 onClick={() => handleDelete(post._id)}
                 className="md:text-red-500 text-white hover:cursor-pointer md:hover:text-red-700 border-2 p-1 md:border-0 font-semibold"
               >

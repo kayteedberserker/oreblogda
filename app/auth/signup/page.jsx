@@ -68,6 +68,7 @@ export default function SignupPage() {
           required
         />
         <button
+          aria-label="Signup"
           type="submit"
           className="bg-blue-600 hover:bg-blue-500 rounded p-2 font-semibold"
           disabled={loading}

@@ -102,6 +102,7 @@ export default function ContactPage() {
           </div>
 
           <button
+            aria-label="Send message"
             type="submit"
             disabled={status.loading}
             className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-md"

@@ -62,7 +62,8 @@ export default function LoginPage() {
           onChange={handleChange}
           required
         />
-        <button
+        <button 
+        aria-label="Login"
           type="submit"
           className="bg-blue-600 hover:bg-blue-500 rounded p-2 font-semibold"
           disabled={loading}

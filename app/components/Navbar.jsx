@@ -77,6 +77,7 @@ const Navbar = () => {
           {/* Mobile Menu Button */}
           <div className="md:hidden flex items-center">
             <button
+            aria-label="Toogle open"
               onClick={() => setIsMobileOpen(!isMobileOpen)}
               className="p-2 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             >

@@ -74,6 +74,7 @@ export default function CommentSection({ postId }) {
         rows={3}
       />
       <button
+        aria-label="Post comment"
         type="submit"
         disabled={loading}
         className="bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-md"

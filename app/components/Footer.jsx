@@ -124,6 +124,7 @@ export default function Footer({ postsContainerId }) {
               required
             />
             <button
+              aria-label="Subscribe"
               type="submit"
               disabled={loading}
               className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md font-semibold text-white"
@@ -187,6 +188,7 @@ export default function Footer({ postsContainerId }) {
       {/* Back to top */}
       {showBackToTop && (
         <button
+          aria-label="Go to top"
           onClick={scrollToTop}
           className="fixed bottom-6 right-6 bg-blue-600 hover:bg-blue-700 hover:cursor-pointer text-white p-3 w-10 h-10 text-2xl flex items-center justify-center rounded-full shadow-lg transition-opacity duration-300"
         >

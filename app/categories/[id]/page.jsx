@@ -93,6 +93,7 @@ export default function CategoryPage() {
           {hasMore && !isLoading && !isValidating && (
             <div className="text-center mt-6">
               <button
+              aria-label="Load more"
                 onClick={() => setSize((prev) => prev + 1)}
                 className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
               >
@@ -120,7 +121,7 @@ export default function CategoryPage() {
         {/* Mini drawer - small screens */}
         <div className="md:hidden">
           <button
-            name="Open drawer"
+            aria-label="Open drawer"
             onClick={() => setDrawerOpen((prev) => !prev)}
             className="fixed top-1/3 right-[-20px] transform -translate-y-1/2 z-50 w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg"
           >
