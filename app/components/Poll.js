@@ -50,10 +50,10 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
         setPosts((prev) =>
           Array.isArray(prev)
             ? prev.map((p) =>
-                p._id === postId
-                  ? { ...p, ...(data.post || data) } // merge updated post data
-                  : p
-              )
+              p._id === postId
+                ? { ...p, ...(data.post || data) } // merge updated post data
+                : p
+            )
             : prev
         );
         setSubmitted(true);
@@ -76,13 +76,17 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
           <div key={i} className="mb-3">
             <div className="flex items-center">
               {!readOnly && !submitted && (
+                <div>
+                  <label htmlFor={opt.text} className="sr-only">{opt.text}</label>
                 <input
+                  id={opt.text}
                   type={poll.pollMultiple ? "checkbox" : "radio"}
                   name={`poll-${postId}`}
                   checked={selectedOptions.includes(i)}
                   onChange={() => handleOptionChange(i)}
                   className="mr-2"
                 />
+                </div>
               )}
               <span>{opt.text}</span>
               <span className="ml-2 text-gray-500 text-sm">({opt.votes} votes)</span>
