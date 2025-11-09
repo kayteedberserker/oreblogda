@@ -43,7 +43,7 @@ export default function RecentPollsCard() {
               />
 
               <Link
-                href={`/post/${poll._id}`}
+                href={`/post/${poll.slug}`}
                 className="text-blue-500 hover:underline text-sm mt-1 block"
               >
                 View full poll
