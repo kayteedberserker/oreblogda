@@ -99,7 +99,7 @@ export default function PostCard({
         body: JSON.stringify({ action: "share" }),
       });
       refreshPosts({ ...post, shares: totalShares + 1 }); // ✅ Local refresh
-      navigator.clipboard.writeText(`${window.location.origin}/post/${post._id}`);
+      navigator.clipboard.writeText(`${window.location.origin}/post/${post.slug}`);
       toast.success("Link copied to clipboard!");
     } catch (err) {
       toast.error("Failed to share");
