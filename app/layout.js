@@ -15,7 +15,7 @@ export const metadata = {
 	title: "Ore blogda - My Anime Blog",
 	description: "A modern anime blog where users can post, share, and explore trending anime stories, memes, and news.",
 
-	keywords: "anime, anime blog, anime news, anime memes, anime stories, trending anime, anime edits, anime votes",
+	keywords: "anime, anime blog, anime news, anime memes, anime stories, trending anime, anime edits, oreblogda, anime votes",
 
 	authors: [
 		{ name: "Kaytee", url: "https://oreblogda.vercel.app" }

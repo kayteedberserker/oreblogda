@@ -71,7 +71,7 @@ export default function PostsViewer() {
       className=" md:p-6 bg-transparent rounded-2xl shadow-md"
     >
     <div className="max-w-7xl mx-auto md:px-8 py-6">
-      <h1 className="text-4xl font-bold mb-6">Posts</h1>
+      <h1 className="text-4xl font-bold mb-6">Anime Blog Posts</h1>
 
       <div className="md:flex md:gap-8">
         {/* Posts */}
