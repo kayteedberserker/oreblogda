@@ -18,7 +18,7 @@ const Navbar = () => {
   useEffect(() => setMounted(true), []);
    if (!mounted) return null;
     
-    const logoSrc = systemTheme === "dark" ? "/logowhite.png" : "/ogimage.png";
+    const logoSrc = systemTheme === "dark" ? "/logowhite.png" : "/og-image.png";
 
   const links = [
     { name: "Home", href: "/" },
