@@ -276,10 +276,10 @@ export default function PostCard({
                 <Link href={`/post/${idLink}`} className="hover:underline">
                   {renderMessage()}
                 </Link>
-                <Link href={`/post/${idLink}`} className="text-blue-500 ml-1 hover:underline">
+                <Link href={`/post/${idLink}`} className=" ml-3.5 hover:underline">
                   Read More
-                  <input type="hidden" name="" value={"Oreblogda - Anime blog"} aria-label="Oreblogda - Anime Blog" />
                 </Link>
+                  <input type="hidden" name="" value={"Oreblogda - Anime blog"} aria-label="Oreblogda - Anime Blog" />
               </>
             ) : (
               <Link href={`/post/${idLink}`} className="hover:underline">
@@ -288,10 +288,10 @@ export default function PostCard({
               </Link>
             )
           ) : (
-            <div>
+            <>
             {renderMessage()}
             <input type="hidden" name="" value={"Oreblogda - Anime blog"} aria-label="Oreblogda - Anime Blog" />
-            </div>
+            </>
           )}
         </p>
 
