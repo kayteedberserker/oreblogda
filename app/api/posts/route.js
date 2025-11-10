@@ -54,6 +54,21 @@ export async function GET(req) {
 // ----------------------
 // POST: create a new post
 // ----------------------
+
+
+async function resolveTikTokUrl(url) {
+  if (url.includes("vm.tiktok.com") || url.includes("vt.tiktok.com")) {
+    try {
+      // TikTok short links redirect to the full video URL
+      const response = await fetch(url, { method: "HEAD", redirect: "follow" });
+      return response.url; // The resolved full link
+    } catch (err) {
+      console.error("Error resolving TikTok link:", err);
+      return url; // fallback to original
+    }
+  }
+  return url; // already a normal tiktok.com/@user/video/... link
+}
 export async function POST(req) {
   try {
     await connectDB();
@@ -94,6 +109,10 @@ export async function POST(req) {
     }else {
       shortMessage = "link"
     }
+    let resolvedUrl
+    if (mediaUrl.includes("tiktok")) {
+      resolvedUrl = await resolveTikTokUrl(mediaUrl)
+    }
     const slugText = `${title} ${shortMessage}`
     const slug = generateSlug(slugText)
     console.log(slug);
@@ -103,7 +122,7 @@ export async function POST(req) {
       title,
       slug: slug,
       message, // message now contains inline sections
-      mediaUrl: mediaUrl || null,
+      mediaUrl: resolvedUrl || mediaUrl || null,
       mediaType: mediaUrl ? mediaType : mediaUrl?.includes("video") ? "video" : "image" || null,
       likes: [],
       shares: 0,

@@ -16,7 +16,7 @@ const Dashboard = () => {
   const [pollMultiple, setPollMultiple] = useState(false);
   const [pollOptions, setPollOptions] = useState(["", ""]);
   const [loading, setLoading] = useState(false);
-  const [category, setCategory] = useState("");
+  const [category, setCategory] = useState("News");
   const [uploading, setUploading] = useState(false);
 
   const router = useRouter();
@@ -132,9 +132,6 @@ const Dashboard = () => {
   return (
     <div className="min-h-[70vh] relative" style={{ padding: "2rem" }}>
       {/* Subtle anime glow */}
-      <div className="absolute top-10 left-10 w-48 h-48 bg-blue-300 dark:bg-indigo-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
-      <div className="absolute bottom-10 right-10 w-56 h-56 bg-pink-300 dark:bg-pink-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
-
       <div className="flex gap-4">
         <h1 className="text-2xl">Welcome, {user.username} 👋</h1>
         <Link className="text-2xl hover:text-red-500 hover:underline" href={"authordiary/profile"}>
@@ -146,7 +143,7 @@ const Dashboard = () => {
       <h2>Create New Post</h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Title */}
-        <input
+        <input 
           type="text"
           placeholder="Post Title"
           value={title}
@@ -180,7 +177,7 @@ const Dashboard = () => {
 
         {/* Media */}
         <div className="flex flex-col gap-2">
-          <input
+          <input 
             type="text"
             placeholder="TikTok / External URL (optional)"
             value={mediaUrlLink}
@@ -188,7 +185,7 @@ const Dashboard = () => {
             disabled={uploading}
             className="border p-2 rounded"
           />
-          <input
+          <input 
             type="file"
             accept="image/*,video/*"
             onChange={handleFileChange}
@@ -209,17 +206,17 @@ const Dashboard = () => {
         {/* Poll */}
         <div>
           <label>
-            <input type="checkbox" checked={hasPoll} onChange={(e) => setHasPoll(e.target.checked)} /> Add a poll
+            <input  type="checkbox" checked={hasPoll} onChange={(e) => setHasPoll(e.target.checked)} /> Add a poll
           </label>
         </div>
         {hasPoll && (
           <div className="space-y-2">
             <label>
-              <input type="checkbox" checked={pollMultiple} onChange={(e) => setPollMultiple(e.target.checked)} /> Allow multiple selections
+              <input  type="checkbox" checked={pollMultiple} onChange={(e) => setPollMultiple(e.target.checked)} /> Allow multiple selections
             </label>
             {pollOptions.map((option, i) => (
               <div key={i} className="flex gap-2 items-center">
-                <input
+                <input 
                   type="text"
                   value={option}
                   onChange={(e) => handlePollOptionChange(i, e.target.value)}
