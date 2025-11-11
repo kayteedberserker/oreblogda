@@ -154,6 +154,9 @@ export default function Footer({ postsContainerId }) {
           <a href="https://www.instagram.com/oreblogda/" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
             Instagram
           </a>
+          <a href="https://whatsapp.com/channel/0029VbBkiupCRs1wXFWtDG3N" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
+            Whatsapp
+          </a>
           <a
             href="https://web.facebook.com/profile.php?id=61582505145912"
             target="_blank"
