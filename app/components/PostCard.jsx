@@ -269,7 +269,7 @@ export default function PostCard({
 
         {/* ✅ Updated Message */}
         <h2 className=" font-bold text-2xl mb-1.5">{post?.title}</h2>
-        <p className="text-gray-800 text-[12px] md:text-[16px] dark:text-gray-100 mb-1">
+        <div className="text-gray-800 text-[12px] md:text-[16px] dark:text-gray-100 mb-1">
           {isFeed ? (
             isLongMessage && !showFullMessage ? (
               <>
@@ -293,7 +293,7 @@ export default function PostCard({
             <input type="hidden" name="" value={"Oreblogda - Anime blog"} aria-label="Oreblogda - Anime Blog" />
             </>
           )}
-        </p>
+        </div>
 
         {/* Media */}
         {!hideMedia && post.mediaUrl && (

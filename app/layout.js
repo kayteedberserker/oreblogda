@@ -9,6 +9,7 @@ import { SpeedInsights } from "@vercel/speed-insights/react"
 import { Analytics } from "@vercel/analytics/react"
 import { SWRConfig } from "swr";
 import { ToastContainer } from "react-toastify";
+import Adsense from "./components/Adsense";
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"] });
 
 export const metadata = {
@@ -67,8 +68,7 @@ export default function RootLayout({ children }) {
 	return (
 		<html lang="en" suppressHydrationWarning>
 			<head>
-				<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8021671365048667"
-					crossorigin="anonymous"></script>
+				<Adsense />
 			</head>
 			<body className={`antialiased ${spaceGrotesk.className} min-h-screen`}>
 				{/* ✅ Only client-side hook component */}
