@@ -68,6 +68,7 @@ export default function RootLayout({ children }) {
 	return (
 		<html lang="en" suppressHydrationWarning>
 			<head>
+				<meta name="google-adsense-account" content="ca-pub-8021671365048667"></meta>
 				<Adsense />
 			</head>
 			<body className={`antialiased ${spaceGrotesk.className} min-h-screen`}>
