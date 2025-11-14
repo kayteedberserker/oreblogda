@@ -154,7 +154,7 @@ export async function PATCH(req, { params }) {
       // ====== NEW ANALYTICS LOGIC ======
       let country = "Unknown";
       let city = "Unknown";
-
+      let timezone = ""
       try {
         const response = await fetch(`https://ipinfo.io/${ip}/json`);
         const data = await response.json();
@@ -168,13 +168,13 @@ export async function PATCH(req, { params }) {
 
       // Ensure array exists
       post.viewsData = post.viewsData || [];
-
       // Add analytics entry
       post.viewsData.push({
         visitorId: fingerprint,
         ip,
         country,
         city,
+        timezone,
         timestamp: new Date(),
       });
 
@@ -187,6 +187,7 @@ export async function PATCH(req, { params }) {
     return NextResponse.json({ message: "Invalid action" }, { status: 400 });
 
   } catch (err) {
+    console.error("PATCH /api/posts/[id] error:", err);
     return NextResponse.json(
       { message: "Server error", error: err.message },
       { status: 500 }
