@@ -4,7 +4,6 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-
 export default function Footer({ postsContainerId }) {
   const pathname = usePathname();
   const hideNavbarRoutes = ["/auth/login", "/auth/signup"];
@@ -187,7 +186,12 @@ export default function Footer({ postsContainerId }) {
           <div>&copy; {new Date().getFullYear()} Oreblogda. All rights reserved.</div>
         </motion.div>
       </div>
-
+        <a href="https://whatsapp.com/channel/0029VbBkiupCRs1wXFWtDG3N" target="_blank" rel="noopener noreferrer"
+          aria-label="Whatsapp" 
+          className="fixed bottom-18 right-6 hover:cursor-pointer w-10 h-10 text-2xl flex items-center justify-center rounded-full shadow-lg transition-opacity duration-300"
+        >
+          <img src="/whatsapp.png" alt="Go to Whatsapp" className=" h-full w-full rounded-full" />
+        </a>
       {/* Back to top */}
       {showBackToTop && (
         <button
