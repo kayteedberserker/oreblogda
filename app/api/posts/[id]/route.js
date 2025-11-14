@@ -187,7 +187,6 @@ export async function PATCH(req, { params }) {
     return NextResponse.json({ message: "Invalid action" }, { status: 400 });
 
   } catch (err) {
-    console.error("PATCH /api/posts/[id] error:", err);
     return NextResponse.json(
       { message: "Server error", error: err.message },
       { status: 500 }
