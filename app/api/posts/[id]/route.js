@@ -31,6 +31,7 @@ export async function PATCH(req, { params }) {
   await connectDB();
   const theparam = await params
   const { id } = theparam;
+  
 
   try {
     const { action, payload, fingerprint } = await req.json();
@@ -106,7 +107,10 @@ export async function PATCH(req, { params }) {
     // =====================================================
     // ======================== VIEW =======================
     // =====================================================
+
     if (action === "view") {
+      const ip = getClientIp(req);
+
       post.viewsIPs = post.viewsIPs || [];
 
       // ------- Bot Detector by IP --------
@@ -114,9 +118,9 @@ export async function PATCH(req, { params }) {
         if (!ip) return false;
         const botPrefixes = [
           "66.102.", "66.249.", "64.233.", "74.125.", "142.250.",
-          "172.217.", "209.85.", "216.58.", 
+          "172.217.", "209.85.", "216.58.",
           "31.13.", "66.220.", "69.171.", "157.240.",
-          "40.", "52.", "104.", 
+          "40.", "52.", "104.",
           "3.", "18.", "34.", "44.", "54.",
           "104.16.", "104.17.", "172.64.",
           "17."
@@ -141,15 +145,42 @@ export async function PATCH(req, { params }) {
 
       const isBot = isBotUA || isLikelyBotIP(ip);
 
-      // ------- Count view only once per fingerprint --------
+      // ====== UNIQUE HUMAN VIEW LOGIC ======
       if (!isBot && !post.viewsIPs.includes(fingerprint)) {
         post.views += 1;
-        post.viewsIPs.push(fingerprint); // store fingerprint only
-        await post.save();
+        post.viewsIPs.push(fingerprint);
       }
 
+      // ====== NEW ANALYTICS LOGIC ======
+      let country = "Unknown";
+      let city = "Unknown";
+
+      try {
+        const response = await fetch(`https://ipapi.co/${ip}/json/`);
+        const data = await response.json();
+
+        country = data.country_name || "Unknown";
+        city = data.city || "Unknown";
+      } catch (err) {
+        console.log("Geo lookup failed:", err);
+      }
+
+      // Ensure array exists
+      post.viewsData = post.viewsData || [];
+
+      // Add analytics entry
+      post.viewsData.push({
+        visitorId: fingerprint,
+        ip,
+        country,
+        timestamp: new Date(),
+      });
+
+      // Save
+      await post.save();
       return NextResponse.json(post, { status: 200 });
     }
+
 
     return NextResponse.json({ message: "Invalid action" }, { status: 400 });
 
@@ -175,9 +206,9 @@ export async function GET(req, { params }) {
     const resolvedParams = await params;  // ✅ unwrap the Promise
     const { id } = resolvedParams;
     if (!id) return NextResponse.json({ message: "Post Slug is required" }, { status: 400 });
-    
+
     if (id.includes("-")) {
-      const post = await Post.findOne({slug: id});
+      const post = await Post.findOne({ slug: id });
       if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
       return NextResponse.json(post);
     } else {

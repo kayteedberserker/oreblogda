@@ -38,6 +38,15 @@ const postSchema = new mongoose.Schema(
       enum: ["News", "Memes", "Videos/Edits", "Polls"],
       default: "News",
     },
+    viewsData: [
+      {
+        visitorId: String,
+        ip: String,
+        country: String,
+        city: String,
+        date: { type: Date, default: Date.now }
+      }
+    ],
     createdAt: { type: Date, default: Date.now },
     updatedAt: { type: Date, default: Date.now },
   },
