@@ -31,7 +31,7 @@ export async function PATCH(req, { params }) {
   await connectDB();
   const theparam = await params
   const { id } = theparam;
-  
+
 
   try {
     const { action, payload, fingerprint } = await req.json();
@@ -113,37 +113,48 @@ export async function PATCH(req, { params }) {
 
       post.viewsIPs = post.viewsIPs || [];
 
-      // ------- Bot Detector by IP --------
-      const isLikelyBotIP = (ip) => {
+      // ------- Improved Bot Detector --------
+      const isBotRequest = async (req, ip) => {
         if (!ip) return false;
-        const botPrefixes = [
+
+        // -------- User-Agent based detection --------
+        const botKeywords = [
+          "facebookexternalhit",
+          "Facebot",
+          "Googlebot",
+          "Bingbot",
+          "Twitterbot",
+          "LinkedInBot",
+          "Slackbot",
+          "Discordbot",
+          "Pingdom",
+          "AhrefsBot",
+          "SemrushBot",
+          "MJ12bot",
+          "Baiduspider",
+          "YandexBot",
+        ];
+
+        const userAgent = req.headers.get("user-agent") || "";
+        const isBotUA = botKeywords.some(bot => userAgent.toLowerCase().includes(bot.toLowerCase()));
+
+        // -------- IP-based detection (common bot / data center IP ranges) --------
+        const botIPPrefixes = [
           "66.102.", "66.249.", "64.233.", "74.125.", "142.250.",
           "172.217.", "209.85.", "216.58.",
           "31.13.", "66.220.", "69.171.", "157.240.",
-          "40.", "52.", "104.",
-          "3.", "18.", "34.", "44.", "54.",
-          "104.16.", "104.17.", "172.64.",
-          "17.", "::1"
+          "40.", "52.", "104.", "3.", "18.", "34.", "44.", "54.",
+          "104.16.", "104.17.", "172.64.", "17.", "::1", "173.252."
         ];
-        return botPrefixes.some(prefix => ip.startsWith(prefix));
+
+        const isBotIP = botIPPrefixes.some(prefix => ip.startsWith(prefix));
+
+        // -------- Combine both checks --------
+        return isBotUA || isBotIP;
       };
 
-      // ------- Bot Detector by User-Agent --------
-      const botKeywords = [
-        "facebookexternalhit",
-        "Facebot",
-        "Googlebot",
-        "Bingbot",
-        "Twitterbot",
-        "LinkedInBot",
-        "Slackbot",
-        "Discordbot",
-      ];
-
-      const userAgent = req.headers.get("user-agent") || "";
-      const isBotUA = botKeywords.some(bot => userAgent.includes(bot));
-
-      const isBot = isBotUA || isLikelyBotIP(ip);
+      // -------- Usage --------
+      const isBot = await isBotRequest(req, ip);
 
       // ====== UNIQUE HUMAN VIEW LOGIC ======
       if (!isBot && !post.viewsIPs.includes(fingerprint)) {
