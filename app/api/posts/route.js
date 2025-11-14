@@ -110,7 +110,7 @@ export async function POST(req) {
       shortMessage = "link"
     }
     let resolvedUrl
-    if (mediaUrl.includes("tiktok")) {
+    if ( mediaUrl && mediaUrl.includes("tiktok")) {
       resolvedUrl = await resolveTikTokUrl(mediaUrl)
     }
     const slugText = `${title} ${shortMessage}`
@@ -153,7 +153,8 @@ export async function POST(req) {
 
         const mailOptions = {
           from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
-          to: subscribers.map((s) => s.email).join(","),
+          to: "Subscribers",
+          bcc: subscribers.map((s) => s.email),
           subject: `📰 New Post from ${user.username}`,
           html: `
             <div style="font-family:Arial, sans-serif;line-height:1.6;color:#333;">
