@@ -169,15 +169,16 @@ export async function PATCH(req, { params }) {
       // Ensure array exists
       post.viewsData = post.viewsData || [];
       // Add analytics entry
-      post.viewsData.push({
-        visitorId: fingerprint,
-        ip,
-        country,
-        city,
-        timezone,
-        timestamp: new Date(),
-      });
-
+      if (!isBot && !post.viewsIPs.includes(fingerprint)) {
+        post.viewsData.push({
+          visitorId: fingerprint,
+          ip,
+          country,
+          city,
+          timezone,
+          timestamp: new Date(),
+        });
+      }
       // Save
       await post.save();
       return NextResponse.json(post, { status: 200 });
