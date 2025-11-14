@@ -169,7 +169,7 @@ export async function PATCH(req, { params }) {
       // Ensure array exists
       post.viewsData = post.viewsData || [];
       // Add analytics entry
-      if (!isBot && !post.viewsIPs.includes(fingerprint)) {
+      if (!isBot) {
         post.viewsData.push({
           visitorId: fingerprint,
           ip,
