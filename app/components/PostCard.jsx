@@ -101,6 +101,7 @@ export default function PostCard({
 		setBurst(true);
 		setTimeout(() => setLikeAnim(false), 300);
 		setTimeout(() => setBurst(false), 700);
+		localStorage.setItem(post._id, true)
 
 		try {
 			const res = await fetch(`/api/posts/${post._id}`, {
