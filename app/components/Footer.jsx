@@ -188,7 +188,7 @@ export default function Footer({ postsContainerId }) {
       </div>
         <a href="https://whatsapp.com/channel/0029VbBkiupCRs1wXFWtDG3N" target="_blank" rel="noopener noreferrer"
           aria-label="Whatsapp" 
-          className="fixed bottom-18 right-6 hover:cursor-pointer w-10 h-10 text-2xl flex items-center justify-center rounded-full shadow-lg transition-opacity duration-300"
+          className="fixed bottom-18 right-1 md:right-6 hover:cursor-pointer w-10 h-10 text-2xl flex items-center justify-center rounded-full shadow-lg transition-opacity duration-300"
         >
           <img src="/whatsapp.png" alt="Go to Whatsapp" className=" h-full w-full rounded-full" />
         </a>
@@ -197,7 +197,7 @@ export default function Footer({ postsContainerId }) {
         <button
           aria-label="Go to top"
           onClick={scrollToTop}
-          className="fixed bottom-6 right-6 bg-blue-600 hover:bg-blue-700 hover:cursor-pointer text-white p-3 w-10 h-10 text-2xl flex items-center justify-center rounded-full shadow-lg transition-opacity duration-300"
+          className="fixed bottom-6 right-1 md:right-6 bg-blue-600 hover:bg-blue-700 hover:cursor-pointer text-white p-3 w-10 h-10 text-2xl flex items-center justify-center rounded-full shadow-lg transition-opacity duration-300"
         >
           ↑
         </button>
