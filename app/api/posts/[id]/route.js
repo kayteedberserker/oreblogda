@@ -159,8 +159,9 @@ export async function PATCH(req, { params }) {
         const response = await fetch(`https://ipinfo.io/${ip}/json`);
         const data = await response.json();
 
-        country = data.country_name || "Unknown";
+        country = data.country || "Unknown";
         city = data.city || "Unknown";
+        timezone = data.timezone || "Unknown";
       } catch (err) {
         console.log("Geo lookup failed:", err);
       }

@@ -44,6 +44,7 @@ const postSchema = new mongoose.Schema(
         ip: String,
         country: String,
         city: String,
+        timezone: String,
         date: { type: Date, default: Date.now }
       }
     ],
