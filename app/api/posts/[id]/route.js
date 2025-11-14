@@ -123,7 +123,7 @@ export async function PATCH(req, { params }) {
           "40.", "52.", "104.",
           "3.", "18.", "34.", "44.", "54.",
           "104.16.", "104.17.", "172.64.",
-          "17."
+          "17.", "::1"
         ];
         return botPrefixes.some(prefix => ip.startsWith(prefix));
       };
@@ -156,7 +156,7 @@ export async function PATCH(req, { params }) {
       let city = "Unknown";
 
       try {
-        const response = await fetch(`https://ipapi.co/${ip}/json/`);
+        const response = await fetch(`https://ipinfo.io/${ip}/json`);
         const data = await response.json();
 
         country = data.country_name || "Unknown";
@@ -173,6 +173,7 @@ export async function PATCH(req, { params }) {
         visitorId: fingerprint,
         ip,
         country,
+        city,
         timestamp: new Date(),
       });
 
