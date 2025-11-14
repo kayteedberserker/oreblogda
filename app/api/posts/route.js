@@ -115,7 +115,6 @@ export async function POST(req) {
     }
     const slugText = `${title} ${shortMessage}`
     const slug = generateSlug(slugText)
-    console.log(slug);
     const newPost = await Post.create({
       authorId: user.id,
       authorName: user.username,

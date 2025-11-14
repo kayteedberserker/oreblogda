@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
+import FingerprintJS from "@fingerprintjs/fingerprintjs";
 
 export default function Poll({ poll, postId, setPosts, readOnly = false }) {
   const [selectedOptions, setSelectedOptions] = useState([]);
@@ -19,50 +20,56 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
       setSelectedOptions([optionIndex]);
     }
   };
-
-  const handleVote = async () => {
-    if (readOnly || selectedOptions.length === 0) return;
-
-    try {
-      const res = await fetch(`/api/posts/${postId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action: "vote",
-          payload: { selectedOptions }, // ✅ remove visitorId; backend will use IP
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        if (data.message === "Already voted") {
-          toast.info("You’ve already voted!");
-          setSubmitted(true);
-        } else {
-          toast.error(data.message || "Vote failed");
-        }
-        return;
-      }
-
-      if (data.message === "Vote added") {
-        // Update posts locally
-        setPosts((prev) =>
-          Array.isArray(prev)
-            ? prev.map((p) =>
-              p._id === postId
-                ? { ...p, ...(data.post || data) } // merge updated post data
-                : p
-            )
-            : prev
-        );
-        setSubmitted(true);
-        toast.success("Vote submitted!");
-      }
-    } catch (err) {
-      toast.error("Failed to vote");
+  let fpPromise;
+  
+    async function getFingerprint() {
+      if (!fpPromise) fpPromise = FingerprintJS.load();
+      const fp = await fpPromise;
+      const result = await fp.get();
+      return result.visitorId; // extremely strong fingerprint
     }
-  };
+  const handleVote = async () => {
+  if (readOnly || selectedOptions.length === 0) return;
+
+  try {
+    const res = await fetch(`/api/posts/${postId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "vote",
+        fingerprint: await getFingerprint(),  // ✅ add this
+        payload: { selectedOptions },
+      }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      if (data.message === "Already voted") {
+        toast.info("You’ve already voted!");
+        setSubmitted(true);
+      } else {
+        toast.error(data.message || "Vote failed");
+      }
+      return;
+    }
+
+    if (data.message === "Vote added") {
+      setPosts((prev) =>
+        Array.isArray(prev)
+          ? prev.map((p) =>
+              p._id === postId ? { ...p, ...(data.post || data) } : p
+            )
+          : prev
+      );
+      setSubmitted(true);
+      toast.success("Vote submitted!");
+    }
+  } catch {
+    toast.error("Failed to vote");
+  }
+};
+
 
   const totalVotes = poll.options.reduce((sum, opt) => sum + opt.votes, 0);
 
