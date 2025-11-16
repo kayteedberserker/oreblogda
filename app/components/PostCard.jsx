@@ -225,39 +225,76 @@ export default function PostCard({
 
 	// ✅ --- UPDATED MESSAGE SECTION ---
 	const parseMessageSections = (msg) => {
-		const sectionRegex = /\[section\](.*?)\[\/section\]/gs;
-		const parts = [];
-		let lastIndex = 0;
-		let match;
+	const regex = /\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[br\]/gs;
 
-		while ((match = sectionRegex.exec(msg)) !== null) {
-			if (match.index > lastIndex) {
-				parts.push({ type: "text", content: msg.slice(lastIndex, match.index) });
-			}
+	const parts = [];
+	let lastIndex = 0;
+	let match;
+
+	while ((match = regex.exec(msg)) !== null) {
+		// Add text before the tag
+		if (match.index > lastIndex) {
+			parts.push({ type: "text", content: msg.slice(lastIndex, match.index) });
+		}
+
+		// Determine which tag matched
+		if (match[1] !== undefined) {
 			parts.push({ type: "section", content: match[1] });
-			lastIndex = match.index + match[0].length;
+		} else if (match[2] !== undefined) {
+			parts.push({ type: "heading", content: match[2] });
+		} else if (match[3] !== undefined) {
+			parts.push({ type: "listItem", content: match[3] });
+		} else {
+			parts.push({ type: "br" }); // [br]
 		}
-		if (lastIndex < msg.length) {
-			parts.push({ type: "text", content: msg.slice(lastIndex) });
-		}
-		return parts;
-	};
+
+		lastIndex = regex.lastIndex;
+	}
+
+	// Add remaining text
+	if (lastIndex < msg.length) {
+		parts.push({ type: "text", content: msg.slice(lastIndex) });
+	}
+
+	return parts;
+};
+
+
 
 	const renderMessage = () => {
-		const maxLength = 150;
+	const maxLength = 150;
 
-		if (isFeed) {
-			// In feed, ignore all sections
-			const plainText = post.message.replace(/\[section\][\s\S]*?\[\/section\]/g, "");
-			const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
-			return <span>{truncated}</span>;
-		}
+	if (isFeed) {
+		const plainText = post.message.replace(/\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[br\]/gs, "");
+		const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
+		return <span>{truncated}</span>;
+	}
 
-		// Full post: show sections
-		const parts = parseMessageSections(post.message);
-		return parts.map((p, i) => {
-			if (p.type === "text") return <span key={i}>{p.content}</span>;
-			if (p.type === "section") {
+	const parts = parseMessageSections(post.message);
+
+	return parts.map((p, i) => {
+		switch (p.type) {
+			case "text":
+				return <span key={i}>{p.content}</span>;
+
+			case "br":
+				return <br key={i} />;
+
+			case "heading":
+				return (
+					<h2 key={i} className="text-xl text-center underline font-bold my-2 ">
+						{p.content}
+					</h2>
+				);
+
+			case "listItem":
+				return (
+					<li key={i} className="ml-24 md:ml-[170px] lg:ml-[290px] list-disc">
+						{p.content}
+					</li>
+				);
+
+			case "section":
 				return (
 					<div
 						key={i}
@@ -266,10 +303,13 @@ export default function PostCard({
 						{p.content}
 					</div>
 				);
-			}
-			return null;
-		});
-	};
+
+			default:
+				return null;
+		}
+	});
+};
+
 	const [idLink, setidLink] = useState()
 	useEffect(() => {
 		if (post.slug) {
