@@ -7,7 +7,6 @@ export default async function CategoryPage({ params }) {
   const checkedParams = await params
   
   const { id } = checkedParams; 
-  console.log("id:", id, params); // should log 'polls'
   
   const category = id
     ? id.includes("-")
