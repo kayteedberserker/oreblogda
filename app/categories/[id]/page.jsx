@@ -3,7 +3,7 @@ import ClientCategoryPage from "./ClientCategoryPage";
 const limit = 5;
 
 export default async function CategoryPage({ params }) {
-  console.log(" Paramus": + params) 
+  console.log(" Paramus:" + params) 
   const { id } = params;
 console.log(id) 
   const category = id
