@@ -24,7 +24,7 @@ export default async function PostPage({ params }) {
   const simData = await simRes.json();
 
   const similarPosts = (simData.posts || []).filter((p) => p._id !== id);
-
+console.log(similarPosts, "Are posts", post) 
   // Prepare strings for SEO
   const description = post.message?.slice(0, 150) || "Read this post on Oreblogda";
   const postUrl = `https://oreblogda.vercel.app/post/${post._id}`;
