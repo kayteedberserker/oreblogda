@@ -2,7 +2,6 @@
 import PostCard from "@/app/components/PostCard";
 import CommentSection from "@/app/components/CommentSection";
 import SimilarPosts from "@/app/components/SimilarPosts";
-import { NextSeo, ArticleJsonLd } from "next-seo";
 import { motion } from "framer-motion";
 import { useScrollAnimation } from "@/app/components/useScrollAnimation";
 import { ToastContainer } from "react-toastify";
@@ -52,35 +51,7 @@ export default async function PostPage({ params }) {
         <div className="absolute bottom-10 right-10 w-56 h-56 bg-pink-300 dark:bg-pink-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
 
         {/* SEO */}
-        <NextSeo
-          title={post?.title}
-          description={description}
-          canonical={postUrl}
-          openGraph={{
-            url: postUrl,
-            title: post.message?.slice(0, 30) || "Post title",
-            description,
-            images: [
-              {
-                url: postImage,
-                width: 800,
-                height: 600,
-                alt: post.message?.slice(0, 20),
-              },
-            ],
-          }}
-        />
-
-        <ArticleJsonLd
-          type="BlogPosting"
-          url={postUrl}
-          title={post?.title}
-          images={[postImage]}
-          datePublished={post.createdAt}
-          dateModified={post.updatedAt || post.createdAt}
-          authorName={post.authorName || "Oreblogda"}
-          description={description}
-        />
+        
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-8">
           {/* Post content */}
