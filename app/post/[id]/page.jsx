@@ -3,7 +3,9 @@ import ClientPostPage from "./ClientPostPage"; // safe: this is a client boundar
 export const dynamic = "force-dynamic"; // optional but helps
 
 export default async function PostPage({ params }) {
-  const { id } = params;
+  const checkedParams = await params
+  const { id } = checkedParams;
+  console.log(id) 
 
   // Fetch main post
   const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/posts/${id}`, {
