@@ -4,7 +4,7 @@ const limit = 5;
 
 export default async function CategoryPage({ params }) {
   // destructure directly
-  const checkedParams = params
+  const checkedParams = await params
   
   const { id } = checkedParams; 
   console.log("id:", id, params); // should log 'polls'
