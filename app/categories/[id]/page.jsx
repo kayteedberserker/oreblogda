@@ -4,8 +4,10 @@ const limit = 5;
 
 export default async function CategoryPage({ params }) {
   // destructure directly
-  const { id } = params; 
-  console.log("id:", id); // should log 'polls'
+  const checkedParams = params
+  
+  const { id } = checkedParams; 
+  console.log("id:", id, params); // should log 'polls'
   
   const category = id
     ? id.includes("-")
