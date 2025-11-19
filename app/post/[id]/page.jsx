@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 
 // Fetch post by ID (or slug)
 async function getPostById(id) {
+  console.log(id) 
   try {
     const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/posts/${id}`, {
       next: { revalidate: 10 }, // ISR caching
