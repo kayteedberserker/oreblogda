@@ -4,8 +4,7 @@ export const dynamic = "force-dynamic"; // optional but helps
 
 export default async function PostPage({ params }) {
   const checkedParams = await params
-  const { id } = checkedParams;
-  console.log(id) 
+  const { id } = checkedParams; 
 
   // Fetch main post
   const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/posts/${id}`, {
@@ -24,7 +23,6 @@ export default async function PostPage({ params }) {
   const simData = await simRes.json();
 
   const similarPosts = (simData.posts || []).filter((p) => p._id !== id);
-console.log(similarPosts, "Are posts", post) 
   // Prepare strings for SEO
   const description = post.message?.slice(0, 150) || "Read this post on Oreblogda";
   const postUrl = `https://oreblogda.vercel.app/post/${post._id}`;
