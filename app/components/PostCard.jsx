@@ -282,7 +282,7 @@ export default function PostCard({
 
 			case "heading":
 				return (
-					<h2 key={i} className="text-xl text-center underline font-bold my-2 ">
+					<h2 key={i} className="text-xl font-bold my-2 ">
 						{p.content}
 					</h2>
 				);
