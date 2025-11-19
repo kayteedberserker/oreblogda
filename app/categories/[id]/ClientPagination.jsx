@@ -85,6 +85,15 @@ export default function ClientPagination({ category, initialPosts }) {
       )}
 
       {!hasMore && uniquePosts.length > 0 && <p className="text-center text-gray-400 mt-4">No more posts to show</p>}
+      <style jsx>{`
+          .scrollbar-hide::-webkit-scrollbar { width: 0px; }
+          .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+          div[style*="overflow-y: auto"]::-webkit-scrollbar { width: 6px; }
+          div[style*="overflow-y: auto"]::-webkit-scrollbar-track { background: transparent; }
+          div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb { background-color: rgba(107, 114, 128, 0.5); border-radius: 10px; }
+          .dark div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb { background-color: rgba(156, 163, 175, 0.3); }
+        `}</style>
     </>
+    
   );
 }
