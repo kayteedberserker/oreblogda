@@ -4,7 +4,8 @@ import { notFound } from "next/navigation";
 
 // Replace with your actual fetch function or API call
 async function getPostById(id) {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_URL}/api/posts/${id}`, {
+  const { id } = params
+  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/posts/${id}`, {
     next: { revalidate: 10 },
   });
   if (!res.ok) return null;
