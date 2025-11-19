@@ -86,7 +86,7 @@ export default function ClientPostPage({
         />
 
         {/* Similar Posts */}
-        <SimilarPosts posts={similarPosts} />
+        <SimilarPosts posts={similarPosts} category={post?.category} currentPostId={post?._id}/>
 
         {/* Comments */}
         <CommentSection postId={post._id} />
