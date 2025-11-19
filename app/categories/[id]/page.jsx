@@ -22,7 +22,7 @@ export default function CategoryPage({ params, initialPosts: ssrPosts }) {
           .join("/")
       : id.charAt(0).toUpperCase() + id.slice(1).toLowerCase()
     : "";
-
+console.log(id, category) 
   // --- Client-side state ---
   const [posts, setPosts] = useState(ssrPosts || []);
   const [page, setPage] = useState(2); // first page already SSR
