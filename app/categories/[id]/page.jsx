@@ -4,7 +4,7 @@ const limit = 5;
 
 export default async function CategoryPage({ params }) {
   const { id } = params;
-
+console.log(id) 
   const category = id
     ? id.includes("-")
       ? id
@@ -13,7 +13,7 @@ export default async function CategoryPage({ params }) {
           .join("/")
       : id.charAt(0).toUpperCase() + id.slice(1).toLowerCase()
     : "";
-
+console.log(category) 
   const res = await fetch(
     `${process.env.NEXT_PUBLIC_BASE_URL}/api/posts?category=${category}&page=1&limit=${limit}`
   );
