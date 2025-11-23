@@ -84,12 +84,12 @@ export default function ClientPostPage({
           setPosts={setPost}
           hideComments={true}
         />
-
+{/* Comments */}
+        <CommentSection postId={post._id} />
         {/* Similar Posts */}
         <SimilarPosts posts={similarPosts} category={post?.category} currentPostId={post?._id}/>
 
-        {/* Comments */}
-        <CommentSection postId={post._id} />
+      
 
         <ToastContainer autoClose={1500} />
       </div>
