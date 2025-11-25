@@ -140,12 +140,15 @@ export async function PATCH(req, { params }) {
 
 				// -------- IP-based detection (common bot / data center IP ranges) --------
 				const botIPPrefixes = [
-					"66.102.", "66.249.", "64.233.", "74.125.", "142.250.",
-					"172.217.", "209.85.", "216.58.",
-					"31.13.", "66.220.", "69.171.", "157.240.",
-					"40.", "52.", "104.", "3.", "18.", "34.", "44.", "54.",
-					"104.16.", "104.17.", "172.64.", "17.", "::1", "173.252.", "216.177."
-				];
+  // Google crawlers
+  "66.102.", "66.249.", "64.233.", "74.125.", "142.250.", "172.217.", "209.85.", "216.58.",
+  
+  // Facebook crawlers
+  "31.13.", "66.220.", "69.171.", "157.240.", "173.252.", 
+  
+  // Apple / iCloud crawler (optional)
+  "17.", "::1"
+];
 
 				const isBotIP = botIPPrefixes.some(prefix => ip.startsWith(prefix));
 
@@ -171,7 +174,7 @@ export async function PATCH(req, { params }) {
 				console.log("Geo lookup failed:", err);
 			}
 			// ====== UNIQUE HUMAN VIEW LOGIC ======
-			if (!isBot && !post.viewsIPs.includes(fingerprint)) {
+			if (!isBot && !post.viewsIPs.includes(fingerprint) && fingerprint != null) {
 				post.views += 1;
 				post.viewsIPs.push(fingerprint);
 
