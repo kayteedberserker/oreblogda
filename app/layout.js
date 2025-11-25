@@ -49,7 +49,7 @@ export const metadata = {
 		title: "Oreblogda – My Anime Blog",
 		description: "A modern anime blog where users can post, share, and explore trending anime stories, memes, and news.",
 		images: ["https://oreblogda.vercel.app/og-image.png"],
-		creator: "@YourTwitterHandle",
+		creator: "@oreblogda",
 	},
 
 	alternates: {
@@ -82,13 +82,15 @@ export default function RootLayout({ children }) {
 						dedupingInterval: 2000, // cache identical requests for 2s
 					}}>
 						<Navbar />
-						<main>
+						
 							<div className="mt-15 pt-1 bg-linear-to-br from-blue-50 via-white to-pink-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950 transition-colors relative">
 								<CategoryNav />
+					             <main>
 								{children}
+					             </main>
 							</div>
 							<ToastContainer />
-						</main>
+						
 						<Footer postsContainerId="postsContainer" />
 					</SWRConfig>
 				</ThemeProvider>
