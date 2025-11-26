@@ -15,8 +15,11 @@ export default async function CategoryPage({ params }) {
     : "";
 
   const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL}/api/posts?category=${category}&page=1&limit=5`
-  );
+  `${process.env.NEXT_PUBLIC_BASE_URL}/api/posts?category=${category}&page=1&limit=5`,
+  {
+    next: { revalidate: 150 } // cache for 5 minutes
+  }
+);
   const data = await res.json();
   const initialPosts = data.posts || [];
 
