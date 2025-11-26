@@ -7,8 +7,9 @@ export default async function PostPage({ params }) {
   const { id } = checkedParams; 
 
   // Fetch main post
-  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/posts/${id}`, {
-    cache: "no-store",
+  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/posts/${id}`, 
+  {
+    next: { revalidate: 120 }, // Revalidate every 10 minutes
   });
   if (!res.ok) {
     return <p className="text-center mt-8 min-h-[50vh]">Post not found</p>;
