@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Cookies from "js-cookie";
+import useSWR from "swr";
 import PostCard from "@/app/components/PostCard";
 import CommentSection from "@/app/components/CommentSection";
 import SimilarPosts from "@/app/components/SimilarPosts";
@@ -10,6 +11,8 @@ import { ToastContainer } from "react-toastify";
 import { motion } from "framer-motion";
 import { useScrollAnimation } from "@/app/components/useScrollAnimation";
 
+const fetcher = (url) => fetch(url).then((res) => res.json());
+
 export default function ClientPostPage({
   post: initialPost,
   similarPosts,
@@ -17,25 +20,33 @@ export default function ClientPostPage({
   postUrl,
   postImage,
 }) {
-  const [post, setPost] = useState(initialPost);
   const { ref, controls, variants } = useScrollAnimation();
+
+  // SWR to keep post up-to-date
+  const { data: postData, mutate } = useSWR(
+    `/api/posts/${initialPost._id}`,
+    fetcher,
+    { fallbackData: initialPost, revalidateOnFocus: false }
+  );
 
   // Increment views once per day
   useEffect(() => {
-    const viewed = Cookies.get(`viewed-${post._id}`);
+    if (!postData?._id) return;
 
+    const viewed = Cookies.get(`viewed-${postData._id}`);
     if (!viewed) {
-      fetch(`/api/posts/${post._id}`, {
+      fetch(`/api/posts/${postData._id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "view" }),
+      }).then(() => {
+        // Optimistically update the view count
+        mutate({ ...postData, views: postData.views + 1 }, false);
       });
 
-      Cookies.set(`viewed-${post._id}`, "true", { expires: 1 });
-
-      setPost((p) => ({ ...p, views: p.views + 1 }));
+      Cookies.set(`viewed-${postData._id}`, "true", { expires: 1 });
     }
-  }, [post._id]);
+  }, [postData, mutate]);
 
   return (
     <motion.div
@@ -47,19 +58,19 @@ export default function ClientPostPage({
     >
       {/* SEO */}
       <NextSeo
-        title={post.title}
+        title={postData.title}
         description={description}
         canonical={postUrl}
         openGraph={{
           url: postUrl,
-          title: post.title,
+          title: postData.title,
           description,
           images: [
             {
               url: postImage,
               width: 800,
               height: 600,
-              alt: post.title,
+              alt: postData.title,
             },
           ],
         }}
@@ -68,28 +79,32 @@ export default function ClientPostPage({
       <ArticleJsonLd
         type="BlogPosting"
         url={postUrl}
-        title={post.title}
+        title={postData.title}
         images={[postImage]}
-        datePublished={post.createdAt}
-        dateModified={post.updatedAt || post.createdAt}
-        authorName={post.authorName || "Oreblogda"}
+        datePublished={postData.createdAt}
+        dateModified={postData.updatedAt || postData.createdAt}
+        authorName={postData.authorName || "Oreblogda"}
         description={description}
       />
 
       <div className="max-w-7xl mx-auto py-4">
         <PostCard
-          post={post}
+          post={postData}
           isFeed={false}
-          posts={[post]}
-          setPosts={setPost}
+          posts={[postData]}
+          setPosts={mutate} // SWR mutate updates post immediately
           hideComments={true}
         />
-{/* Comments */}
-        <CommentSection postId={post._id} />
-        {/* Similar Posts */}
-        <SimilarPosts posts={similarPosts} category={post?.category} currentPostId={post?._id}/>
 
-      
+        {/* Comments */}
+        <CommentSection postId={postData._id} mutatePost={mutate} />
+
+        {/* Similar Posts */}
+        <SimilarPosts
+          posts={similarPosts}
+          category={postData?.category}
+          currentPostId={postData?._id}
+        />
 
         <ToastContainer autoClose={1500} />
       </div>
