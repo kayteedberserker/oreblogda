@@ -6,7 +6,7 @@ const fetcher = (url) => fetch(url).then((res) => res.json());
 
 export default function SimilarPosts({ category, currentPostId }) {
   const { data, error, isLoading } = useSWR(
-    category ? `/api/posts?category=${category}&limit=10` : null,
+    category ? `/api/posts?category=${category}&limit=6` : null,
     fetcher,
     { refreshInterval: 10000 } // revalidate every 10s
   );
