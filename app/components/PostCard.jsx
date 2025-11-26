@@ -33,7 +33,7 @@ export default function PostCard({
 	const [showFullMessage, setShowFullMessage] = useState(false);
 	const [lightbox, setLightbox] = useState({ open: false, src: null, type: null });
 
-	const totalLikes = post?.likes?.length || 0;
+	const [totalLikes, setTotalLikes] = useState (post?.likes?.length || 0) 
 	const totalComments = post?.comments?.length || 0;
 	const totalShares = post?.shares || 0;
 	const totalViews = post?.views || 0;
@@ -107,6 +107,7 @@ export default function PostCard({
 		setTimeout(() => setLikeAnim(false), 300);
 		setTimeout(() => setBurst(false), 700);
 		localStorage.setItem(post._id, true)
+		setTotalLikes(totalLike + 1) 
 
 		try {
 			const res = await fetch(`/api/posts/${post._id}`, {
