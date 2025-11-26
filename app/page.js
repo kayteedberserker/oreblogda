@@ -10,7 +10,7 @@ export default async function HomePage() {
   const res = await fetch(
   `${process.env.NEXT_PUBLIC_BASE_URL}/api/posts?page=1&limit=${limit}`,
   {
-    next: { revalidate: 300 }, // Revalidate every 5 minutes
+    next: { revalidate: 600 }, // Revalidate every 10 minutes
   }
 );
 
