@@ -4,13 +4,15 @@ import { ToastContainer } from "react-toastify";
 import Navbar from "@/app/components/Navbar";
 
 export default async function HomePage() {
-  const limit = 5;
+  const limit = 10;
 
   // Fetch posts on the server BEFORE rendering
   const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL}/api/posts?page=1&limit=${limit}`,
-    { cache: "no-store" }
-  );
+  `${process.env.NEXT_PUBLIC_BASE_URL}/api/posts?page=1&limit=${limit}`,
+  {
+    next: { revalidate: 300 }, // Revalidate every 5 minutes
+  }
+);
 
   const initialData = await res.json();
 
