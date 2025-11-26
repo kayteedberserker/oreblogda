@@ -19,9 +19,11 @@ export default function PostCard({
 	hideMedia,
 	className,
 }) {
+	const [liked, setLiked] = useState(false) 
 	
 	useEffect(() => {
-		const [liked, setLiked] = useState(localStorage.getItem(post._id) || false);
+    const stored = localStorage.getItem(post._id);
+    if (stored) setLiked(stored === true); // convert string to boolean
   }, [post._id]);
 	const [likeAnim, setLikeAnim] = useState(false);
 	const [burst, setBurst] = useState(false);
