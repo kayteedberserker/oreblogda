@@ -23,7 +23,7 @@ export default function PostCard({
 	
 	useEffect(() => {
     const stored = localStorage.getItem(post._id);
-    if (stored) setLiked(stored === true); // convert string to boolean
+    if (stored) setLiked(!!stored); // convert string to boolean
   }, [post._id]);
 	const [likeAnim, setLikeAnim] = useState(false);
 	const [burst, setBurst] = useState(false);
@@ -442,7 +442,7 @@ export default function PostCard({
 							whileTap={{ scale: 1.3 }}
 							className={`flex items-center space-x-1 transition-transform duration-300 ${likeAnim ? "scale-125" : "scale-100"}`}
 						>
-							{liked == "true" ? <FaHeart className="text-red-500" /> : <FaRegHeart />}
+							{liked ? <FaHeart className="text-red-500" /> : <FaRegHeart />}
 							<motion.span
 								key={totalLikes}
 								initial={{ scale: 0.8 }}
