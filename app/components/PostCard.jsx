@@ -33,7 +33,7 @@ export default function PostCard({
 	const [showFullMessage, setShowFullMessage] = useState(false);
 	const [lightbox, setLightbox] = useState({ open: false, src: null, type: null });
 
-	const [totalLikes, setTotalLikes] = useState (post?.likes?.length || 0) 
+	const [totalLikes, setTotalLikes] = useState(post?.likes?.length || 0) 
 	const totalComments = post?.comments?.length || 0;
 	const totalShares = post?.shares || 0;
 	const totalViews = post?.views || 0;
@@ -99,39 +99,46 @@ export default function PostCard({
 
 
 
-	const handleLike = async () => {
-		if (liked) return;
-		setLiked(true);
-		setLikeAnim(true);
-		setBurst(true);
-		setTimeout(() => setLikeAnim(false), 300);
-		setTimeout(() => setBurst(false), 700);
-		localStorage.setItem(post._id, true)
-		setTotalLikes(totalLike + 1) 
+const handleLike = async () => {
+  if (liked) return;
 
-		try {
-			const res = await fetch(`/api/posts/${post._id}`, {
-				method: "PATCH",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					action: "like",
-					fingerprint: await getFingerprint(),
-				}),
-			});
+  // Optimistic UI update
+  setLiked(true);
+  setLikeAnim(true);
+  setBurst(true);
+  setTotalLikes(prev => prev + 1); // <-- functional update for immediate UI change
+  localStorage.setItem(post._id, true);
 
-			const data = await res.json()
+  setTimeout(() => setLikeAnim(false), 300);
+  setTimeout(() => setBurst(false), 700);
 
-			if (data?.message.includes("You have liked this post")) {
-				toast.warn("You have liked this post")
-				localStorage.setItem(post._id, true)
-				return
-			}
-			refreshPosts(data);
-		} catch(err) {
-			toast.error(err.message)
-			setLiked(false);
-		}
-	};
+  try {
+    const res = await fetch(`/api/posts/${post._id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        action: "like",
+        fingerprint: await getFingerprint(),
+      }),
+    });
+
+    const data = await res.json();
+
+    if (data?.message.includes("You have liked this post")) {
+      toast.warn("You have liked this post");
+      localStorage.setItem(post._id, true);
+      setTotalLikes(prev => prev - 1); // revert change
+      setLiked(false);
+      return;
+    }
+
+    refreshPosts(data); // if you want to refresh the post from backend
+  } catch (err) {
+    toast.error(err.message);
+    setTotalLikes(prev => prev - 1); // revert change
+    setLiked(false);
+  }
+};
 
 
 	const handleShare = async () => {
