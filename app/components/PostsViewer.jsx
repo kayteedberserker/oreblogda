@@ -1,6 +1,5 @@
 "use client";
-
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import useSWRInfinite from "swr/infinite";
 import PostCard from "./PostCard";
 import RecentPollsCard from "./RecentPollsCard";
@@ -8,102 +7,84 @@ import { FaPoll } from "react-icons/fa";
 import { useScrollAnimation } from "./useScrollAnimation";
 import { motion } from "framer-motion";
 
-const fetcher = (url) => fetch(url).then((res) => res.json());
+const limit = 5;
+const fetcher = (url) => fetch(url, { cache: "no-store" }).then((res) => res.json());
 
 export default function PostsViewer({ initialPosts }) {
   const { ref, controls, variants } = useScrollAnimation();
-  const limit = 5;
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  // SWR Infinite Key function
+  // --- SWR Infinite ---
   const getKey = (pageIndex, previousPageData) => {
-    // Stop if previous page returned no posts
-    if (previousPageData && previousPageData.posts.length === 0) return null;
+    if (previousPageData && previousPageData.posts?.length < limit) return null;
     return `/api/posts?page=${pageIndex + 1}&limit=${limit}`;
   };
 
-  const {
-    data,
-    size,
-    setSize,
-    isValidating,
-  } = useSWRInfinite(getKey, fetcher, {
-    fallbackData: [{ posts: initialPosts || [] }],
-    revalidateAll: false,
+  const { data, size, setSize, isValidating, isLoading } = useSWRInfinite(getKey, fetcher, {
+    initialData: [{ posts: initialPosts || [] }],
   });
 
-  // Flatten pages into a single array
-  const posts = data ? data.flatMap((page) => page.posts || []) : [];
+  const posts = data ? data.flatMap((p) => p.posts || []) : [];
+  const uniquePosts = Array.from(new Map(posts.map((p) => [p._id, p])).values());
+  const hasMore = data && data[data.length - 1]?.posts?.length === limit;
 
-  // Check if more pages exist
-  const hasMore = data ? data[data.length - 1].posts.length === limit : true;
-
-  // Infinite scroll handler
-  const handleScroll = () => {
-    if (
-      window.innerHeight + window.scrollY >= document.body.offsetHeight - 200 &&
-      hasMore &&
-      !isValidating
-    ) {
-      setSize(size + 1);
-    }
-  };
-
-  // Add scroll listener
-  useState(() => {
+  // Infinite scroll
+  useEffect(() => {
+    const handleScroll = () => {
+      if (
+        window.innerHeight + window.scrollY >= document.body.offsetHeight - 200 &&
+        hasMore &&
+        !isLoading &&
+        !isValidating
+      ) {
+        setSize((prev) => prev + 1);
+      }
+    };
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
-  });
-
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  }, [hasMore, isLoading, isValidating, setSize]);
 
   return (
-    <motion.div
-      ref={ref}
-      initial="hidden"
-      animate={controls}
-      variants={variants}
-      className="md:p-6 bg-transparent rounded-2xl shadow-md"
-    >
+    <motion.div ref={ref} initial="hidden" animate={controls} variants={variants} className="md:p-6 bg-transparent rounded-2xl shadow-md">
       <div className="max-w-7xl mx-auto md:px-8 py-6">
         <h1 className="text-4xl font-bold mb-6">Anime Blog Posts</h1>
 
         <div className="md:flex md:gap-8">
-          <div
-            id="postsContainer"
-            className="md:flex-2 max-h-[80vh] overflow-y-auto pr-2 scrollbar-hide"
-          >
-            {posts.map((post) => (
+          {/* Posts */}
+          <div id="postsContainer" className="md:flex-2 max-h-[80vh] overflow-y-auto pr-2 scrollbar-hide">
+            {uniquePosts.map((post) => (
               <div key={post._id} className="break-inside-avoid mb-6">
-                <PostCard post={post} posts={posts} setPosts={() => {}} isFeed />
+                <PostCard post={post} posts={uniquePosts} setPosts={() => {}} isFeed />
               </div>
             ))}
 
-            {isValidating && (
-              <p className="text-center text-gray-500 mt-4 animate-pulse">
-                Loading more...
-              </p>
+            {(isLoading || isValidating) && <p className="text-center text-gray-500 mt-4 animate-pulse">Loading more...</p>}
+
+            {hasMore && !isLoading && !isValidating && (
+              <div className="text-center mt-6">
+                <button
+                  aria-label="Load more"
+                  onClick={() => setSize((prev) => prev + 1)}
+                  className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                >
+                  Load more
+                </button>
+              </div>
             )}
 
-            {!hasMore && posts.length > 0 && (
-              <p className="text-center text-gray-400 mt-4">
-                No more posts to show
-              </p>
-            )}
-
-            {!isValidating && posts.length === 0 && (
-              <p className="text-center text-gray-500 mt-4">No posts available yet</p>
-            )}
+            {!hasMore && uniquePosts.length > 0 && <p className="text-center text-gray-400 mt-4">No more posts to show</p>}
+            {!isLoading && uniquePosts.length === 0 && <p className="text-center text-gray-500 mt-4">No posts available yet</p>}
           </div>
 
-          {/* Sidebar for large screens */}
+          {/* Sidebar */}
           <div className="hidden md:block md:w-1/3">
             <RecentPollsCard />
           </div>
 
-          {/* Mini drawer for small screens */}
+          {/* Mini drawer */}
           <div className="md:hidden">
             <button
-              aria-label="Open poll"
+              aria-label="Open drawer"
               onClick={() => setDrawerOpen((prev) => !prev)}
               className="fixed top-1/3 -right-5 transform -translate-y-1/2 z-50 w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg"
             >
@@ -132,4 +113,4 @@ export default function PostsViewer({ initialPosts }) {
       </div>
     </motion.div>
   );
-}
+                                              }
