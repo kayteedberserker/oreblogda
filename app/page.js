@@ -4,7 +4,7 @@ import { ToastContainer } from "react-toastify";
 import Navbar from "@/app/components/Navbar";
 
 export default async function HomePage() {
-  const limit = 10;
+  const limit = 5;
 
   // Fetch posts on the server BEFORE rendering
   const res = await fetch(
