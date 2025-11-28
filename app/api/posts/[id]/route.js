@@ -147,7 +147,7 @@ export async function PATCH(req, { params }) {
   "31.13.", "66.220.", "69.171.", "157.240.", "173.252.", 
   
   // Apple / iCloud crawler (optional)
-  "17.", "::1", "198.7.", "137.184.", " 50.18.", "54.", " 23.", "13.57."
+  "17.", "::1", "198.7.", "137.184.", " 50.18.", "54.", " 23.27", "13.57."
 ];
 
 				const isBotIP = botIPPrefixes.some(prefix => ip.startsWith(prefix));
