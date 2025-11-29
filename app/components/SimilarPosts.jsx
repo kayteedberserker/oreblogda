@@ -1,6 +1,7 @@
 "use client";
 import useSWR from "swr";
 import PostCard from "./PostCard";
+import SimilarPostAd from "./SimilarPostAd"
 
 const fetcher = (url) => fetch(url).then((res) => res.json());
 
@@ -24,19 +25,25 @@ export default function SimilarPosts({ category, currentPostId }) {
         Similar Posts
       </h3>
       <div className="flex overflow-x-auto space-x-4 py-2 scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600">
-        {similarPosts.map((post) => (
-          <div key={post._id} className="flex-none w-64 sm:w-72 md:w-80 lg:w-80">
-            <PostCard
-              post={post}
-              posts={similarPosts}
-              setPosts={() => {}}
-              isFeed={true}
-              className="max-h-[440px] min-h-[430px] flex flex-col justify-between"
-              hideMedia={post.category === "Polls"}
-            />
-          </div>
-        ))}
-      </div>
+  {similarPosts.map((post, index) => (
+    <div key={post._id} className="flex-none w-64 sm:w-72 md:w-80 lg:w-80">
+      <PostCard
+        post={post}
+        posts={similarPosts}
+        setPosts={() => {}}
+        isFeed={true}
+        className="max-h-[440px] min-h-[430px] flex flex-col justify-between"
+        hideMedia={post.category === "Polls"}
+      />
+      {/* Insert the ad after the 2nd post (index === 1) */}
+      {index === 1 && (
+        <div className="flex-none w-64 sm:w-72 md:w-80 lg:w-80">
+          <SimilarPostAd />
+        </div>
+      )}
+    </div>
+  ))}
+</div>
 
       <style jsx>{`
         .scrollbar-thin::-webkit-scrollbar {
