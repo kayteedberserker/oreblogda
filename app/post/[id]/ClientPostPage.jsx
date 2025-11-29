@@ -96,23 +96,23 @@ export default function ClientPostPage({
           setPosts={mutate} // SWR mutate updates post immediately
           hideComments={true}
        />
-    <div className="my-1">
+        {/*<div className="my-1">
       <FooterAd />
     </div>
-        {/* Comments */}
+        {/* Comments 
         <CommentSection postId={postData._id} mutatePost={mutate} />
     <div className="my-1">
       <FooterAd />
-    </div>
+    </div>*/}
         {/* Similar Posts */}
         <SimilarPosts
           posts={similarPosts}
           category={postData?.category}
           currentPostId={postData?._id}
         />
-    <div className="my-1">
+        {/* <div className="my-1">
       <FooterAd />
-    </div>
+    </div>*/}
         <ToastContainer autoClose={1500} />
       </div>
     </motion.div>
