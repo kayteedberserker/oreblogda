@@ -9,7 +9,6 @@ export default function FooterAd() {
   }, []);
 
   return (
-    <div className="max-h-[100px] overflow-hidden">
       <ins
         className="adsbygoogle"
         style={{ display: "block" }}
@@ -18,6 +17,6 @@ export default function FooterAd() {
         data-ad-format="auto"
         data-full-width-responsive="true"
       ></ins>
-    </div>
+      
   );
 }
