@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
+import FooterAd from "./FooterAd"
 export default function Footer({ postsContainerId }) {
   const pathname = usePathname();
   const hideNavbarRoutes = ["/auth/login", "/auth/signup"];
@@ -17,6 +18,35 @@ export default function Footer({ postsContainerId }) {
 
   // Show back-to-top button
   const [showBackToTop, setShowBackToTop] = useState(false);
+
+  // Static pages where you don't want ads
+  const noAdsPages = [
+    "/auth/login",
+    "/auth/signup",
+    "/not-found",
+    "/authordiary",
+    "/contact",
+    "/about",
+    "/terms",
+    "/privacy",
+    "/authordiary/profile"
+  ];
+
+  // Pages that should block ads by prefix (e.g. /author/*)
+  const noAdsPrefixes = [
+    "/author/", // blocks /author/anything
+  ];
+
+  // Check if pathname exactly matches one of the static pages
+  const isExactBlocked = noAdsPages.includes(pathname);
+
+  // Check if pathname starts with a blocked prefix
+  const isPrefixBlocked = noAdsPrefixes.some(prefix =>
+    pathname.startsWith(prefix)
+  );
+
+  // Final decision
+  const showAds = !(isExactBlocked || isPrefixBlocked);
 
   useEffect(() => {
     setMounted(true);
@@ -94,6 +124,14 @@ export default function Footer({ postsContainerId }) {
         systemTheme === "dark" ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
       }`}
     >
+      {showAds && (
+      <div className="my-2">
+					       <FooterAd />
+					    </div>
+					    <div className="my-2">
+					       <FooterAd />
+					    </div>
+      )}
       <div className="max-w-7xl mx-auto px-4 grow sm:px-6 lg:px-8">
         {/* Newsletter Form */}
         <motion.div
