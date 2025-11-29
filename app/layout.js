@@ -2,6 +2,7 @@ import Navbar from "@/app/components/Navbar";
 import { Space_Grotesk } from "next/font/google";
 import "./globals.css";
 import Footer from "@/app/components/Footer";
+import FooterAd from "@/app/components/FooterAd";
 import { fetcher } from "./lib/fetcher";
 import CategoryNav from "@/app/components/CategoryNav";
 import { ThemeProvider } from "next-themes";
@@ -90,7 +91,12 @@ export default function RootLayout({ children }) {
 					             </main>
 							</div>
 							<ToastContainer />
-						
+						<div className="my-2>
+					       <FooterAd />
+					    </div>
+					    <div className="my-2>
+					       <FooterAd />
+					    </div>
 						<Footer postsContainerId="postsContainer" />
 					</SWRConfig>
 				</ThemeProvider>
