@@ -1,0 +1,23 @@
+"use client";
+import { useEffect } from "react";
+
+export default function FooterAd() {
+  useEffect(() => {
+    try {
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+    } catch (err) {}
+  }, []);
+
+  return (
+    <div className="my-6">
+      <ins
+        className="adsbygoogle"
+        style={{ display: "block" }}
+        data-ad-client="ca-pub-8021671365048667"
+        data-ad-slot="6738246854"
+        data-ad-format="auto"
+        data-full-width-responsive="true"
+      ></ins>
+    </div>
+  );
+}
