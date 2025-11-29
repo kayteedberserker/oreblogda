@@ -42,7 +42,7 @@ export default function SimilarPosts({ category, currentPostId }) {
     // Insert ad after every 2 posts
     if ((index + 1) % 2 === 0) {
       items.push(
-        <div key={`ad-${index}`} className="flex-none w-64 sm:w-72 md:w-80 lg:w-80">
+        <div key={`ad-${index}`} className="flex-none w-fit">
           <SimilarPostAd />
         </div>
       );
