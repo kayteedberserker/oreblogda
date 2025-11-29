@@ -5,7 +5,8 @@ import PostCard from "./PostCard";
 import RecentPollsCard from "./RecentPollsCard";
 import { FaPoll } from "react-icons/fa";
 import { useScrollAnimation } from "./useScrollAnimation";
-import { motion } from "framer-motion";
+import { motion } from "framer-motion"
+import FeedAd from "./FeedAd"
 
 const limit = 5;
 const fetcher = (url) => fetch(url, { cache: "no-store" }).then((res) => res.json());
@@ -51,31 +52,58 @@ export default function PostsViewer({ initialPosts }) {
 
         <div className="md:flex md:gap-8">
           {/* Posts */}
-          <div id="postsContainer" className="md:flex-2 max-h-[80vh] overflow-y-auto pr-2 scrollbar-hide">
-            {uniquePosts.map((post) => (
-              <div key={post._id} className="break-inside-avoid mb-6">
-                <PostCard post={post} posts={uniquePosts} setPosts={() => {}} isFeed />
-              </div>
-            ))}
+<div
+  id="postsContainer"
+  className="md:flex-2 max-h-[80vh] overflow-y-auto pr-2 scrollbar-hide"
+>
+  {uniquePosts.map((post, index) => (
+    <div key={post._id} className="break-inside-avoid mb-6">
+      <PostCard
+        post={post}
+        posts={uniquePosts}
+        setPosts={() => {}}
+        isFeed
+      />
 
-            {(isLoading || isValidating) && <p className="text-center text-gray-500 mt-4 animate-pulse">Loading more...</p>}
+      {/* Insert ad after every 2 posts (index = 1, 3, 5...) */}
+      {index % 2 === 1 && (
+        <div className="my-6">
+          <FeedAd />
+        </div>
+      )}
+    </div>
+  ))}
 
-            {hasMore && !isLoading && !isValidating && (
-              <div className="text-center mt-6">
-                <button
-                  aria-label="Load more"
-                  onClick={() => setSize((prev) => prev + 1)}
-                  className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                >
-                  Load more
-                </button>
-              </div>
-            )}
+  {(isLoading || isValidating) && (
+    <p className="text-center text-gray-500 mt-4 animate-pulse">
+      Loading more...
+    </p>
+  )}
 
-            {!hasMore && uniquePosts.length > 0 && <p className="text-center text-gray-400 mt-4">No more posts to show</p>}
-            {!isLoading && uniquePosts.length === 0 && <p className="text-center text-gray-500 mt-4">No posts available yet</p>}
-          </div>
+  {hasMore && !isLoading && !isValidating && (
+    <div className="text-center mt-6">
+      <button
+        aria-label="Load more"
+        onClick={() => setSize((prev) => prev + 1)}
+        className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+      >
+        Load more
+      </button>
+    </div>
+  )}
 
+  {!hasMore && uniquePosts.length > 0 && (
+    <p className="text-center text-gray-400 mt-4">
+      No more posts to show
+    </p>
+  )}
+
+  {!isLoading && uniquePosts.length === 0 && (
+    <p className="text-center text-gray-500 mt-4">
+      No posts available yet
+    </p>
+  )}
+</div>
           {/* Sidebar */}
           <div className="hidden md:block md:w-1/3">
             <RecentPollsCard />
