@@ -9,7 +9,7 @@ export default function FooterAd() {
   }, []);
 
   return (
-    <div className="my-6">
+    <div className="max-h-[100px] overflow-hidden">
       <ins
         className="adsbygoogle"
         style={{ display: "block" }}
