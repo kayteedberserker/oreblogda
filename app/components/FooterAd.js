@@ -9,14 +9,10 @@ export default function FooterAd() {
   }, []);
 
   return (
-      <ins
-        className="adsbygoogle"
-        style={{ display: "block" }}
-        data-ad-client="ca-pub-8021671365048667"
-        data-ad-slot="6738246854"
-        data-ad-format="auto"
-        data-full-width-responsive="true"
-      ></ins>
-      
+ 
+      <ins class="adsbygoogle"
+     style="display:inline-block;width:400px;height:50px"
+     data-ad-client="ca-pub-8021671365048667"
+     data-ad-slot="6738246854"></ins>
   );
 }
