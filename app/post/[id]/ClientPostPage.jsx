@@ -98,12 +98,12 @@ export default function ClientPostPage({
        />
         {/*<div className="my-1">
       <FooterAd />
-    </div>
-        {/* Comments 
-        <CommentSection postId={postData._id} mutatePost={mutate} />
-    <div className="my-1">
-      <FooterAd />
     </div>*/}
+        {/* Comments */}
+        <CommentSection postId={postData._id} mutatePost={mutate} />
+        {/*<div className="my-1">
+            <FooterAd />
+         </div>*/}
         {/* Similar Posts */}
         <SimilarPosts
           posts={similarPosts}
