@@ -124,15 +124,17 @@ export default function Footer({ postsContainerId }) {
         systemTheme === "dark" ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
       }`}
     >
-      {showAds && (
-      <div className="my-2">
-					       <FooterAd />
-					    </div>
-					    <div className="my-2">
-					       <FooterAd />
-					    </div>
-      )}
-      <div className="max-w-7xl mx-auto px-4 grow sm:px-6 lg:px-8">
+		{showAds && (
+  <div>
+    <div className="my-2">
+      <FooterAd />
+    </div>
+    <div className="my-2">
+      <FooterAd />
+    </div>
+  </div>
+)}
+     <div className="max-w-7xl mx-auto px-4 grow sm:px-6 lg:px-8">
         {/* Newsletter Form */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
