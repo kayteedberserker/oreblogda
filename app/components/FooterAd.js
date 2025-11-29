@@ -11,7 +11,7 @@ export default function FooterAd() {
   return (
  
       <ins class="adsbygoogle"
-     style="display:inline-block;width:400px;height:50px"
+     style={{display:"inline-block", width: "400px", height:"50px"}}
      data-ad-client="ca-pub-8021671365048667"
      data-ad-slot="6738246854"></ins>
   );
