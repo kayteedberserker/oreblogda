@@ -91,12 +91,6 @@ export default function RootLayout({ children }) {
 					             </main>
 							</div>
 							<ToastContainer />
-						<div className="my-2>
-					       <FooterAd />
-					    </div>
-					    <div className="my-2>
-					       <FooterAd />
-					    </div>
 						<Footer postsContainerId="postsContainer" />
 					</SWRConfig>
 				</ThemeProvider>
