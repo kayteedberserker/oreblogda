@@ -7,24 +7,26 @@ import SimilarPostAd from "./SimilarPostAd";
 const fetcher = (url) => fetch(url).then((res) => res.json());
 
 export default function SimilarPosts({ category, currentPostId }) {
+  // Fetch ALL posts in that category
   const { data, error, isLoading } = useSWR(
-    category ? `/api/posts?category=${category}&limit=6` : null,
+    category ? `/api/posts?category=${category}` : null,
     fetcher,
-    { refreshInterval: 10000 } // still revalidates, but shuffle won't change
+    { refreshInterval: 10000 }
   );
 
   const [shuffledPosts, setShuffledPosts] = useState([]);
 
   useEffect(() => {
     if (data) {
-      // Get array safely
-      const list = (Array.isArray(data) ? data : data.posts || []).filter(
-        (p) => p._id !== currentPostId
-      );
+      // Normalize the data array
+      const list = (Array.isArray(data) ? data : data.posts || [])
+        .filter((p) => p._id !== currentPostId);
 
-      // Shuffle ONCE
-      const random = [...list].sort(() => Math.random() - 0.5);
-      setShuffledPosts(random);
+      // Shuffle the entire list
+      const shuffled = [...list].sort(() => Math.random() - 0.5);
+
+      // Pick 6 random items
+      setShuffledPosts(shuffled.slice(0, 6));
     }
   }, [data, currentPostId]);
 
@@ -87,4 +89,4 @@ export default function SimilarPosts({ category, currentPostId }) {
       `}</style>
     </div>
   );
-      }
+}
