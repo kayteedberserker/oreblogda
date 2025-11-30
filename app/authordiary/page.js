@@ -191,7 +191,7 @@ const Dashboard = () => {
             accept="image/*,video/*"
             onChange={handleFileChange}
             disabled={uploading}
-            className="bg-white text-black w-fit"
+            className="bg-white text-black w-[100%]"
           />
           {uploading && <p>Uploading...</p>}
           {mediaUrl && (
