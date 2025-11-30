@@ -48,7 +48,7 @@ export default function PostsViewer({ initialPosts }) {
   return (
     <motion.div ref={ref} initial="hidden" animate={controls} variants={variants} className="md:p-6 bg-transparent rounded-2xl shadow-md">
       <div className="max-w-7xl mx-auto md:px-8 py-6">
-        <h1 className="text-4xl font-bold mb-6">Anime Blog Posts</h1>
+        
 
         <div className="md:flex md:gap-8">
           {/* Posts */}
@@ -56,6 +56,7 @@ export default function PostsViewer({ initialPosts }) {
   id="postsContainer"
   className="md:flex-2 max-h-[80vh] overflow-y-auto pr-2 scrollbar-hide"
 >
+  <h1 className="text-4xl font-bold mb-6">Anime Blog Posts</h1>
   {uniquePosts.map((post, index) => (
     <div key={post._id} className="break-inside-avoid mb-6">
       <PostCard
