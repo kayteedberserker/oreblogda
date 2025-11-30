@@ -77,34 +77,43 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
     <div className="mt-4 p-3 border rounded-md bg-gray-50 dark:bg-gray-700">
       <h4 className="font-semibold mb-3">Poll</h4>
 
-      {poll.options.map((opt, i) => {
-        const percentage = totalVotes ? ((opt.votes / totalVotes) * 100).toFixed(1) : 0;
-        return (
-          <div key={i} className="mb-3">
-            <div className="flex items-center">
-              {!readOnly && !submitted && (
-                <div>
-                  <label htmlFor={opt.text} className="sr-only">{opt.text}</label>
-                <input
-                  id={opt.text}
-                  type={poll.pollMultiple ? "checkbox" : "radio"}
-                  name={`poll-${postId}`}
-                  checked={selectedOptions.includes(i)}
-                  onChange={() => handleOptionChange(i)}
-                  className="mr-2"
-                />
-                </div>
-              )}
-              <span>{opt.text}</span>
-              <span className="ml-2 text-gray-500 text-sm">({opt.votes} votes)</span>
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+  {poll.options.map((opt, i) => {
+    const percentage = totalVotes ? ((opt.votes / totalVotes) * 100).toFixed(1) : 0;
+    return (
+      <div key={i} className="mb-3">
+        <div className="flex items-center">
+          {!readOnly && !submitted && (
+            <div>
+              <label htmlFor={opt.text} className="sr-only">{opt.text}</label>
+              <input
+                id={opt.text}
+                type={poll.pollMultiple ? "checkbox" : "radio"}
+                name={`poll-${postId}`}
+                checked={selectedOptions.includes(i)}
+                onChange={() => handleOptionChange(i)}
+                className="mr-2"
+              />
             </div>
-            <div className="w-full bg-gray-300 dark:bg-gray-600 h-2 rounded mt-1">
-              <div className="bg-blue-500 h-2 rounded" style={{ width: `${percentage}%` }}></div>
-            </div>
-            <span className="text-xs text-gray-600 dark:text-gray-400">{percentage}% of votes</span>
-          </div>
-        );
-      })}
+          )}
+          <span>{opt.text}</span>
+          <span className="ml-2 text-gray-500 text-sm">({opt.votes} votes)</span>
+        </div>
+
+        <div className="w-full bg-gray-300 dark:bg-gray-600 h-2 rounded mt-1">
+          <div
+            className="bg-blue-500 h-2 rounded"
+            style={{ width: `${percentage}%` }}
+          ></div>
+        </div>
+
+        <span className="text-xs text-gray-600 dark:text-gray-400">
+          {percentage}% of votes
+        </span>
+      </div>
+    );
+  })}
+</div>
 
       {!readOnly && !submitted && (
         <button
