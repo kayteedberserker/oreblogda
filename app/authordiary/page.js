@@ -173,6 +173,7 @@ const Dashboard = () => {
           <option value="Memes">Memes</option>
           <option value="Videos/Edits">Videos/Edits</option>
           <option value="Polls">Polls</option>
+          <option value="Review">Review</option>
         </select>
 
         {/* Media */}
