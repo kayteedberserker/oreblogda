@@ -1,4 +1,4 @@
-"use client";
+ "use client";
 
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
@@ -96,8 +96,8 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
               />
             </div>
           )}
-          <span>{opt.text}</span>
-          <span className="ml-2 text-gray-500 text-sm">({opt.votes} votes)</span>
+          <span className="text-sm">{opt.text}</span>
+          <span className="ml-2 text-gray-500 text-sm">({opt.votes})</span>
         </div>
 
         <div className="w-full bg-gray-300 dark:bg-gray-600 h-2 rounded mt-1">
