@@ -58,7 +58,7 @@ export const metadata = {
 	},
 
 	icons: {
-		icon: "/favicon.ico",
+		icon: "https://oreblogda.vercel.app/iconblue.png",
 	},
 };
 
