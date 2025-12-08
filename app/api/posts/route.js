@@ -100,7 +100,7 @@ export async function POST(req) {
       return NextResponse.json({ message: "Message is required" }, { status: 400 });
     }
 
-    if (!category || !["News", "Memes", "Videos/Edits", "Polls", "Review"].includes(category)) {
+    if (!category || !["News", "Memes", "Videos/Edits", "Polls", "Review", "Gaming"].includes(category)) {
       return NextResponse.json({ message: "Invalid category" }, { status: 400 });
     }
     let shortMessage
