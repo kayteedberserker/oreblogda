@@ -19,12 +19,12 @@ export default function PostCard({
 	hideMedia,
 	className,
 }) {
-	const [liked, setLiked] = useState(false) 
-	
+	const [liked, setLiked] = useState(false)
+
 	useEffect(() => {
-    const stored = localStorage.getItem(post._id);
-    if (stored) setLiked(!!stored); // convert string to boolean
-  }, [post._id]);
+		const stored = localStorage.getItem(post._id);
+		if (stored) setLiked(!!stored); // convert string to boolean
+	}, [post._id]);
 	const [likeAnim, setLikeAnim] = useState(false);
 	const [burst, setBurst] = useState(false);
 	const [commentName, setCommentName] = useState("");
@@ -33,7 +33,7 @@ export default function PostCard({
 	const [showFullMessage, setShowFullMessage] = useState(false);
 	const [lightbox, setLightbox] = useState({ open: false, src: null, type: null });
 
-	const [totalLikes, setTotalLikes] = useState(post?.likes?.length || 0) 
+	const [totalLikes, setTotalLikes] = useState(post?.likes?.length || 0)
 	const totalComments = post?.comments?.length || 0;
 	const totalShares = post?.shares || 0;
 	const totalViews = post?.views || 0;
@@ -99,46 +99,46 @@ export default function PostCard({
 
 
 
-const handleLike = async () => {
-  if (liked) return;
+	const handleLike = async () => {
+		if (liked) return;
 
-  // Optimistic UI update
-  setLiked(true);
-  setLikeAnim(true);
-  setBurst(true);
-  setTotalLikes(prev => prev + 1); // <-- functional update for immediate UI change
-  localStorage.setItem(post._id, true);
+		// Optimistic UI update
+		setLiked(true);
+		setLikeAnim(true);
+		setBurst(true);
+		setTotalLikes(prev => prev + 1); // <-- functional update for immediate UI change
+		localStorage.setItem(post._id, true);
 
-  setTimeout(() => setLikeAnim(false), 300);
-  setTimeout(() => setBurst(false), 700);
+		setTimeout(() => setLikeAnim(false), 300);
+		setTimeout(() => setBurst(false), 700);
 
-  try {
-    const res = await fetch(`/api/posts/${post._id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: "like",
-        fingerprint: await getFingerprint(),
-      }),
-    });
+		try {
+			const res = await fetch(`/api/posts/${post._id}`, {
+				method: "PATCH",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					action: "like",
+					fingerprint: await getFingerprint(),
+				}),
+			});
 
-    const data = await res.json();
+			const data = await res.json();
 
-    if (data?.message.includes("You have liked this post")) {
-      toast.warn("You have liked this post");
-      localStorage.setItem(post._id, true);
-      setTotalLikes(prev => prev - 1); // revert change
-      setLiked(false);
-      return;
-    }
+			if (data?.message.includes("You have liked this post")) {
+				toast.warn("You have liked this post");
+				localStorage.setItem(post._id, true);
+				setTotalLikes(prev => prev - 1); // revert change
+				setLiked(false);
+				return;
+			}
 
-    refreshPosts(data); // if you want to refresh the post from backend
-  } catch (err) {
-    toast.error(err.message);
-    setTotalLikes(prev => prev - 1); // revert change
-    setLiked(false);
-  }
-};
+			refreshPosts(data); // if you want to refresh the post from backend
+		} catch (err) {
+			toast.error(err.message);
+			setTotalLikes(prev => prev - 1); // revert change
+			setLiked(false);
+		}
+	};
 
 
 	const handleShare = async () => {
@@ -155,7 +155,7 @@ const handleLike = async () => {
 			refreshPosts({ ...post, shares: totalShares + 1 });
 			navigator.clipboard.writeText(`${window.location.origin}/post/${post.slug}`);
 			toast.success("Link copied!");
-		} catch(err){
+		} catch (err) {
 			toast.error("Failed to share");
 		}
 	};
@@ -185,7 +185,7 @@ const handleLike = async () => {
 			setCommentName("");
 			setShowCommentInput(false);
 			toast.success("Comment added!");
-		} catch(err) {
+		} catch (err) {
 			toast.error("Failed to comment");
 		}
 	};
@@ -238,90 +238,90 @@ const handleLike = async () => {
 
 	// ✅ --- UPDATED MESSAGE SECTION ---
 	const parseMessageSections = (msg) => {
-	const regex = /\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[br\]/gs;
+		const regex = /\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[br\]/gs;
 
-	const parts = [];
-	let lastIndex = 0;
-	let match;
+		const parts = [];
+		let lastIndex = 0;
+		let match;
 
-	while ((match = regex.exec(msg)) !== null) {
-		// Add text before the tag
-		if (match.index > lastIndex) {
-			parts.push({ type: "text", content: msg.slice(lastIndex, match.index) });
+		while ((match = regex.exec(msg)) !== null) {
+			// Add text before the tag
+			if (match.index > lastIndex) {
+				parts.push({ type: "text", content: msg.slice(lastIndex, match.index) });
+			}
+
+			// Determine which tag matched
+			if (match[1] !== undefined) {
+				parts.push({ type: "section", content: match[1] });
+			} else if (match[2] !== undefined) {
+				parts.push({ type: "heading", content: match[2] });
+			} else if (match[3] !== undefined) {
+				parts.push({ type: "listItem", content: match[3] });
+			} else {
+				parts.push({ type: "br" }); // [br]
+			}
+
+			lastIndex = regex.lastIndex;
 		}
 
-		// Determine which tag matched
-		if (match[1] !== undefined) {
-			parts.push({ type: "section", content: match[1] });
-		} else if (match[2] !== undefined) {
-			parts.push({ type: "heading", content: match[2] });
-		} else if (match[3] !== undefined) {
-			parts.push({ type: "listItem", content: match[3] });
-		} else {
-			parts.push({ type: "br" }); // [br]
+		// Add remaining text
+		if (lastIndex < msg.length) {
+			parts.push({ type: "text", content: msg.slice(lastIndex) });
 		}
 
-		lastIndex = regex.lastIndex;
-	}
-
-	// Add remaining text
-	if (lastIndex < msg.length) {
-		parts.push({ type: "text", content: msg.slice(lastIndex) });
-	}
-
-	return parts;
-};
+		return parts;
+	};
 
 
 
 	const renderMessage = () => {
-	const maxLength = 150;
+		const maxLength = 150;
 
-	if (isFeed) {
-		const plainText = post.message.replace(/\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[br\]/gs, "");
-		const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
-		return <span>{truncated}</span>;
-	}
-
-	const parts = parseMessageSections(post.message);
-
-	return parts.map((p, i) => {
-		switch (p.type) {
-			case "text":
-				return <span key={i}>{p.content}</span>;
-
-			case "br":
-				return <br key={i} />;
-
-			case "heading":
-				return (
-					<h2 key={i} className="text-xl font-bold my-2 ">
-						{p.content}
-					</h2>
-				);
-
-			case "listItem":
-				return (
-					<li key={i} className="ml-24 md:ml-[170px] lg:ml-[290px] list-disc">
-						{p.content}
-					</li>
-				);
-
-			case "section":
-				return (
-					<div
-						key={i}
-						className="bg-gray-100 dark:bg-gray-700 p-2 my-2 w-fit max-w-[70%] ml-20 md:ml-[150px] lg:ml-[270px] rounded-md border-l-4 border-blue-500"
-					>
-						{p.content}
-					</div>
-				);
-
-			default:
-				return null;
+		if (isFeed) {
+			const plainText = post.message.replace(/\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[br\]/gs, "");
+			const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
+			return <span>{truncated}</span>;
 		}
-	});
-};
+
+		const parts = parseMessageSections(post.message);
+
+		return parts.map((p, i) => {
+			switch (p.type) {
+				case "text":
+					return <span key={i}>{p.content}</span>;
+
+				case "br":
+					return <br key={i} />;
+
+				case "heading":
+					return (
+						<h2 key={i} className="text-xl font-bold my-2 ">
+							{p.content}
+						</h2>
+					);
+
+				case "listItem":
+					return (
+						<li key={i} className="ml-24 md:ml-[170px] lg:ml-[290px] list-disc">
+							{p.content}
+						</li>
+					);
+
+				case "section":
+					return (
+						<div
+							key={i}
+							className="bg-gray-100 dark:bg-gray-700 p-2 my-2 w-fit max-w-[70%] ml-20 md:ml-[150px] lg:ml-[270px] rounded-md border-l-4 border-blue-500"
+						>
+							{p.content}
+						</div>
+					);
+
+				default:
+					return null;
+			}
+		});
+	};
 
 	const [idLink, setidLink] = useState()
 	useEffect(() => {
@@ -407,14 +407,14 @@ const handleLike = async () => {
 							<script async src="https://www.tiktok.com/embed.js"></script>
 						</>
 					) : post.mediaType?.startsWith("image") ? (
-						<div className="relative rounded-md mb-2 w-full h-80 cursor-pointer">
+						<div className="relative rounded-md mb-2 w-full h-100 cursor-pointer">
 							<Image
 								src={post.mediaUrl}
 								alt="post media"
 								loading="eager"
 								fill
 								sizes="(max-width: 768px) 90vw, (max-width: 1200px) 80vw, 60vw"
-								className="object-contain rounded-md"
+								className="bg-center bg-cover rounded-[10]"
 								onClick={() => openLightbox(post.mediaUrl, "image")}
 							/>
 						</div>
