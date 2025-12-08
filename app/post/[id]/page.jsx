@@ -7,7 +7,7 @@ export default async function PostPage({ params }) {
   const { id } = checkedParams; 
 
   // Fetch main post
-  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL}/api/posts/${id}`, 
+  const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/posts/${id}`, 
   {
     next: { revalidate: 30 }, // Revalidate every 10 minutes
   });
@@ -18,7 +18,7 @@ export default async function PostPage({ params }) {
 
   // Fetch similar posts
   const simRes = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL}/api/posts?category=${post.category}&limit=6`,
+    `${process.env.NEXT_PUBLIC_SITE_URL}/api/posts?category=${post.category}&limit=6`,
     {
     next: { revalidate: 120 }, // Revalidate every 10 minutes
     }

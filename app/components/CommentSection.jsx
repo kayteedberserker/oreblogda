@@ -48,7 +48,7 @@ export default function CommentSection({ postId }) {
   };
 
   return (
-    <div className="bg-white dark:bg-gray-900 p-5 rounded-lg shadow-md static md:sticky top-20 max-h-[70vh] flex flex-col">
+    <div className="bg-white dark:bg-gray-900 p-5 rounded-lg shadow-md static md:sticky top-20 max-h-[75vh] flex flex-col">
       <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-gray-100">
         Comments
       </h2>

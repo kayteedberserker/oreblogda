@@ -1,14 +1,13 @@
 // app/page.jsx
 import PostsViewer from "@/app/components/PostsViewer";
 import { ToastContainer } from "react-toastify";
-import Navbar from "@/app/components/Navbar";
 
 export default async function HomePage() {
   const limit = 10;
 
   // Fetch posts on the server BEFORE rendering
   const res = await fetch(
-  `${process.env.NEXT_PUBLIC_BASE_URL}/api/posts?page=1&limit=${limit}`,
+  `${process.env.NEXT_PUBLIC_SITE_URL}/api/posts?page=1&limit=${limit}`,
   {
     next: { revalidate: 600 }, // Revalidate every 10 minutes
   }

@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import Cookies from "js-cookie";
 import useSWR from "swr";
 import PostCard from "@/app/components/PostCard";
-import FooterAd from "@/app/components/FooterAd";
 import CommentSection from "@/app/components/CommentSection";
 import SimilarPosts from "@/app/components/SimilarPosts";
 import { NextSeo, ArticleJsonLd } from "next-seo";
@@ -89,30 +88,28 @@ export default function ClientPostPage({
       />
 
       <div className="max-w-7xl mx-auto py-4">
-        <PostCard
-          post={postData}
-          isFeed={false}
-          posts={[postData]}
-          setPosts={mutate} // SWR mutate updates post immediately
-          hideComments={true}
-       />
-        {/*<div className="my-1">
-      <FooterAd />
-    </div>*/}
-        {/* Comments */}
-        <CommentSection postId={postData._id} mutatePost={mutate} />
-        {/*<div className="my-1">
-            <FooterAd />
-         </div>*/}
+        <div className="flex flex-col lg:flex-row lg:space-x-4">
+          <div className="flex-2">
+            <PostCard
+              post={postData}
+              isFeed={false}
+              posts={[postData]}
+              setPosts={mutate}
+              hideComments={true}
+            />
+          </div>
+
+          <div className="flex-1 mt-4 lg:mt-0">
+            <CommentSection postId={postData._id} mutatePost={mutate} />
+          </div>
+        </div>
+
         {/* Similar Posts */}
         <SimilarPosts
           posts={similarPosts}
           category={postData?.category}
           currentPostId={postData?._id}
         />
-        {/* <div className="my-1">
-      <FooterAd />
-    </div>*/}
         <ToastContainer autoClose={1500} />
       </div>
     </motion.div>

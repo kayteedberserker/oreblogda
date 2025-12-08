@@ -2,13 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
-import FooterAd from "./FooterAd"
 export default function Footer({ postsContainerId }) {
-  const pathname = usePathname();
-  const hideNavbarRoutes = ["/auth/login", "/auth/signup"];
-  if (hideNavbarRoutes.includes(pathname)) return null;
 
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
@@ -19,35 +14,7 @@ export default function Footer({ postsContainerId }) {
   // Show back-to-top button
   const [showBackToTop, setShowBackToTop] = useState(false);
 
-  // Static pages where you don't want ads
-  const noAdsPages = [
-    "/auth/login",
-    "/auth/signup",
-    "/not-found",
-    "/authordiary",
-    "/contact",
-    "/about",
-    "/terms",
-    "/privacy",
-    "/authordiary/profile"
-  ];
-
-  // Pages that should block ads by prefix (e.g. /author/*)
-  const noAdsPrefixes = [
-    "/author/", // blocks /author/anything
-  ];
-
-  // Check if pathname exactly matches one of the static pages
-  const isExactBlocked = noAdsPages.includes(pathname);
-
-  // Check if pathname starts with a blocked prefix
-  const isPrefixBlocked = noAdsPrefixes.some(prefix =>
-    pathname.startsWith(prefix)
-  );
-
-  // Final decision
-  const showAds = !(isExactBlocked || isPrefixBlocked);
-
+  
   useEffect(() => {
     setMounted(true);
 
@@ -120,23 +87,11 @@ export default function Footer({ postsContainerId }) {
 
   return (
     <footer
-      className={`py-10 relative transition-colors flex flex-col duration-300 ${
-        systemTheme === "dark" ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
-      }`}
+      className={`py-10 relative transition-colors flex flex-col duration-300 ${systemTheme === "dark" ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
+        }`}
     >
-		{/*
-{showAds && (
-  <div>
-    <div className="my-2">
-      <FooterAd />
-    </div>
-    <div className="my-2">
-      <FooterAd />
-    </div>
-  </div>
-)}
-*/}
-     <div className="max-w-7xl mx-auto px-4 grow sm:px-6 lg:px-8">
+
+      <div className="max-w-7xl mx-auto px-4 grow sm:px-6 lg:px-8">
         {/* Newsletter Form */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -157,11 +112,10 @@ export default function Footer({ postsContainerId }) {
               placeholder="Your email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={`p-2 border shadow rounded-md w-full sm:w-auto flex-1 transition-colors duration-300 ${
-                systemTheme === "dark"
+              className={`p-2 border shadow rounded-md w-full sm:w-auto flex-1 transition-colors duration-300 ${systemTheme === "dark"
                   ? "bg-gray-800 text-gray-100 border-gray-700"
                   : "bg-white text-gray-900 border-gray-300"
-              }`}
+                }`}
               required
             />
             <button
@@ -185,9 +139,8 @@ export default function Footer({ postsContainerId }) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.2, duration: 0.5 }}
-          className={`flex justify-center gap-3 mb-6 transition-colors duration-300 ${
-            systemTheme === "dark" ? "text-gray-400" : "text-gray-600"
-          }`}
+          className={`flex justify-center gap-3 mb-6 transition-colors duration-300 ${systemTheme === "dark" ? "text-gray-400" : "text-gray-600"
+            }`}
         >
           <a href="https://x.com/oreblogda" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
             Twitter
@@ -213,9 +166,8 @@ export default function Footer({ postsContainerId }) {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.4, duration: 0.5 }}
-          className={`flex flex-col sm:flex-row justify-between items-center text-sm transition-colors duration-300 ${
-            systemTheme === "dark" ? "text-gray-500" : "text-gray-700"
-          }`}
+          className={`flex flex-col sm:flex-row justify-between items-center text-sm transition-colors duration-300 ${systemTheme === "dark" ? "text-gray-500" : "text-gray-700"
+            }`}
         >
           <div className="mb-2 sm:mb-0">
             <a href="/terms" className="hover:text-blue-500 mr-4">
@@ -228,12 +180,12 @@ export default function Footer({ postsContainerId }) {
           <div>&copy; {new Date().getFullYear()} Oreblogda. All rights reserved.</div>
         </motion.div>
       </div>
-        <a href="https://whatsapp.com/channel/0029VbBkiupCRs1wXFWtDG3N" target="_blank" rel="noopener noreferrer"
-          aria-label="Whatsapp" 
-          className="fixed bottom-18 right-1 md:right-6 hover:cursor-pointer w-10 h-10 text-2xl flex items-center justify-center rounded-full shadow-lg transition-opacity duration-300"
-        >
-          <img src="/whatsapp.png" alt="Go to Whatsapp" className=" h-full w-full rounded-full" />
-        </a>
+      <a href="https://whatsapp.com/channel/0029VbBkiupCRs1wXFWtDG3N" target="_blank" rel="noopener noreferrer"
+        aria-label="Whatsapp"
+        className="fixed bottom-18 right-1 md:right-6 hover:cursor-pointer w-10 h-10 text-2xl flex items-center justify-center rounded-full shadow-lg transition-opacity duration-300"
+      >
+        <img src="/whatsapp.png" alt="Go to Whatsapp" className=" h-full w-full rounded-full" />
+      </a>
       {/* Back to top */}
       {showBackToTop && (
         <button

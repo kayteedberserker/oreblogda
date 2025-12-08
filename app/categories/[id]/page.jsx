@@ -15,7 +15,7 @@ export default async function CategoryPage({ params }) {
     : "";
 
   const res = await fetch(
-  `${process.env.NEXT_PUBLIC_BASE_URL}/api/posts?category=${category}&page=1&limit=10`,
+  `${process.env.NEXT_PUBLIC_SITE_URL}/api/posts?category=${category}&page=1&limit=10`,
   {
     next: { revalidate: 600 } // cache for 10 minutes
   }
