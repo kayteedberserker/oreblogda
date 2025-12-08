@@ -5,8 +5,10 @@ export async function GET() {
     `User-agent: *
 Allow: /
 Allow: /categories/news
-Allow: /categories/memes
+Allow: /categories/memes 
 Allow: /categories/videos-edits
+Allow: /categories/gaming
+Allow: /categories/review
 Allow: /categories/polls
 Disallow: /authordiary
 Disallow: /authordiary/profile

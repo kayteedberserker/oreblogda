@@ -50,7 +50,6 @@ export default function ClientCategoryPage({ category, initialPosts }) {
   return (
     <motion.div ref={ref} initial="hidden" animate={controls} variants={variants} className="bg-transparent rounded-2xl shadow-md">
       <div className="max-w-7xl mx-auto px-2 md:px-8 py-6 relative min-h-[75vh]">
-        <h1 className="text-2xl font-bold mb-6 capitalize">{category}</h1>
 
         {/* Background effects */}
         <div className="absolute top-10 left-10 w-48 h-48 bg-blue-300 dark:bg-indigo-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
@@ -58,43 +57,44 @@ export default function ClientCategoryPage({ category, initialPosts }) {
 
         <div className="md:flex md:gap-8">
           <div
-  id="postsContainer"
-  className="md:flex-2 max-h-[80vh] overflow-y-auto pr-2 scrollbar-hide"
->
-  {uniquePosts.map((post, index) => (
-    <div key={post._id} className="break-inside-avoid mb-6">
-      <PostCard post={post} posts={uniquePosts} setPosts={() => {}} isFeed />
+            id="postsContainer"
+            className="md:flex-2 max-h-[80vh] overflow-y-auto pr-2 scrollbar-hide"
+          >
+        <h1 className="text-2xl font-bold mb-6 capitalize">{category}</h1>
+            {uniquePosts.map((post, index) => (
+              <div key={post._id} className="break-inside-avoid mb-6">
+                <PostCard post={post} posts={uniquePosts} setPosts={() => { }} isFeed />
 
-      {/* Insert ad after every 2 posts */}
-      {(index + 1) % 2 === 0 && <FeedAd />}
-    </div>
-  ))}
+                {/* Insert ad after every 2 posts */}
+                {(index + 1) % 2 === 0 && <FeedAd />}
+              </div>
+            ))}
 
-  {(isLoading || isValidating) && (
-    <p className="text-center text-gray-500 mt-4">Loading more...</p>
-  )}
+            {(isLoading || isValidating) && (
+              <p className="text-center text-gray-500 mt-4">Loading more...</p>
+            )}
 
-  {hasMore && !isLoading && !isValidating && (
-    <div className="text-center mt-6">
-      <button
-        aria-label="Load more"
-        onClick={() => setSize((prev) => prev + 1)}
-        className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-      >
-        Load more
-      </button>
-    </div>
-  )}
+            {hasMore && !isLoading && !isValidating && (
+              <div className="text-center mt-6">
+                <button
+                  aria-label="Load more"
+                  onClick={() => setSize((prev) => prev + 1)}
+                  className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                >
+                  Load more
+                </button>
+              </div>
+            )}
 
-  {!hasMore && uniquePosts.length > 0 && (
-    <p className="text-center text-gray-400 mt-4">No more posts to show</p>
-  )}
-  {!isLoading && uniquePosts.length === 0 && (
-    <p className="text-center text-gray-500 mt-4">
-      No posts found in this category
-    </p>
-  )}
-</div>
+            {!hasMore && uniquePosts.length > 0 && (
+              <p className="text-center text-gray-400 mt-4">No more posts to show</p>
+            )}
+            {!isLoading && uniquePosts.length === 0 && (
+              <p className="text-center text-gray-500 mt-4">
+                No posts found in this category
+              </p>
+            )}
+          </div>
 
           {/* Sidebar */}
           <div className="hidden md:block md:w-1/3">
@@ -112,9 +112,8 @@ export default function ClientCategoryPage({ category, initialPosts }) {
             </button>
 
             <div
-              className={`fixed top-1/4 right-0 z-40 w-64 bg-white dark:bg-gray-800 p-4 shadow-lg rounded-l-lg transition-transform duration-300 ${
-                drawerOpen ? "translate-x-0" : "translate-x-full"
-              }`}
+              className={`fixed top-1/4 right-0 z-40 w-64 bg-white dark:bg-gray-800 p-4 shadow-lg rounded-l-lg transition-transform duration-300 ${drawerOpen ? "translate-x-0" : "translate-x-full"
+                }`}
             >
               <RecentPollsCard />
             </div>
@@ -147,4 +146,4 @@ export default function ClientCategoryPage({ category, initialPosts }) {
       </div>
     </motion.div>
   );
-          }
+}

@@ -77,7 +77,7 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
     <div className="mt-4 p-3 border rounded-md bg-gray-50 dark:bg-gray-700">
       <h4 className="font-semibold mb-3">Poll</h4>
 
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
   {poll.options.map((opt, i) => {
     const percentage = totalVotes ? ((opt.votes / totalVotes) * 100).toFixed(1) : 0;
     return (

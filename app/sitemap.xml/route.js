@@ -18,7 +18,7 @@ export async function GET() {
       </url>`
       )
       .join("");
-      const categories = ["memes", "videos-edits", "news", "polls"]
+      const categories = ["memes", "videos-edits", "news", "polls", "review", "gaming"]
       const otherUrls = categories
       .map(
         (category) => `

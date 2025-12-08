@@ -35,7 +35,7 @@ const postSchema = new mongoose.Schema(
     voters: [String],
     category: {
       type: String,
-      enum: ["News", "Memes", "Videos/Edits", "Polls", "Review"],
+      enum: ["News", "Memes", "Videos/Edits", "Polls", "Review", "Gaming"],
       default: "News",
     },
     viewsData: [
