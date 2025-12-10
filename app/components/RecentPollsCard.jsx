@@ -4,7 +4,7 @@ import Link from "next/link";
 import Poll from "./Poll";
 import dynamic from "next/dynamic";
 
-const FooterAds = dynamic(() => import("@/components/FooterAds"), {
+const FooterAds = dynamic(() => import("./FooterAds"), {
   ssr: false,
 });
 const fetcher = (url) => fetch(url).then((res) => res.json());
