@@ -88,7 +88,7 @@ export default function Footer({ postsContainerId }) {
 
   return (
     <footer
-      className={`py-10 relative transition-colors flex flex-col duration-300 ${systemTheme === "dark" ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
+      className={`py-10 relative transition-colors flex bottom-0 flex-col duration-300 ${systemTheme === "dark" ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
         }`}
     >
 
