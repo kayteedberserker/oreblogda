@@ -48,9 +48,10 @@ export default function RecentPollsCard() {
               >
                 View full poll
               </Link>
+              <FooterAds />
             </li>
           
-          <FooterAds />
+          
           ))}
         </ul>
       ) : (
