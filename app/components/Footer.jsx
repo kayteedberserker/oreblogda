@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
 import dynamic from "next/dynamic";
 
-const FooterAds = dynamic(() => import("@/components/FooterAds"), {
+const FooterAds = dynamic(() => import("./FooterAds"), {
   ssr: false,
 });
 export default function Footer({ postsContainerId }) {
