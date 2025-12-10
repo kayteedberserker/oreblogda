@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { usePathname } from "next/navigation";
 
 export default function SimilarPostAd() {
   const adRef = useRef(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     if (!adRef.current) return;
@@ -12,12 +14,13 @@ export default function SimilarPostAd() {
     if (adRef.current.dataset.loaded === "true") return;
 
     try {
-      (window.adsbygoogle = window.adsbygoogle || []).push({});
+      window.adsbygoogle = window.adsbygoogle || [];
+      window.adsbygoogle.push({});
       adRef.current.dataset.loaded = "true";
     } catch (err) {
       console.log("AdSense error:", err);
     }
-  }, []);
+  }, [pathname]); // reload ad on route change
 
   return (
     <div className="flex justify-center py-2">
