@@ -122,9 +122,8 @@ export default function PostsViewer({ initialPosts }) {
             >
               <FaPoll />
             </button>
-
             <div
-              className={`fixed top-1/4 right-0 z-40 w-64 bg-white dark:bg-gray-800 p-4 shadow-lg rounded-l-lg transition-transform duration-300 ${drawerOpen ? "translate-x-0" : "translate-x-full"
+              className={`fixed top-1/4 right-0 z-40 w-fit max-w-full bg-white dark:bg-gray-800 p-4 shadow-lg rounded-l-lg transition-transform duration-300 ${drawerOpen ? "translate-x-0" : "translate-x-full"
                 }`}
             >
               <RecentPollsCard />
