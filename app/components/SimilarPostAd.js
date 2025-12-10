@@ -14,11 +14,11 @@ export default function SimilarPostAd() {
   }, []);
 
   return (
-    <ins
-      className="adsbygoogle"
-      style={{ display: "inline-block", width: "210px", height: "430px" }}
-      data-ad-client="ca-pub-8021671365048667"
-      data-ad-slot="5936193275"
-    ></ins>
+<ins class="adsbygoogle"
+     style={{display: "block"}}
+     data-ad-client="ca-pub-8021671365048667"
+     data-ad-slot="6738246854"
+     data-ad-format="auto"
+     data-full-width-responsive="true"></ins>
   );
 }
