@@ -1,28 +1,36 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 
 export default function SimilarPostAd() {
+  const adRef = useRef(null);
+
   useEffect(() => {
+    if (!adRef.current) return;
+
+    // prevent double load
+    if (adRef.current.dataset.loaded === "true") return;
+
     try {
-      if (window.adsbygoogle) {
-        window.adsbygoogle = window.adsbygoogle || [];
-        window.adsbygoogle.push({});
-      }
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+      adRef.current.dataset.loaded = "true";
     } catch (err) {
-      console.error("Adsense error:", err);
+      console.log("AdSense error:", err);
     }
   }, []);
 
   return (
-    <div style={{ maxHeight: "500px" }}>
+    <div className="flex justify-center py-2">
       <ins
+        ref={adRef}
         className="adsbygoogle"
-        style={{ display: "block" }}
+        style={{
+          display: "inline-block",
+          width: "300px",
+          height: "400px",
+        }}
         data-ad-client="ca-pub-8021671365048667"
         data-ad-slot="6738246854"
-        data-ad-format="auto"
-        data-full-width-responsive="true"
       ></ins>
     </div>
   );
