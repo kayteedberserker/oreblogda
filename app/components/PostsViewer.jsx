@@ -52,7 +52,6 @@ export default function PostsViewer({ initialPosts }) {
   }, [hasMore, isLoading, isValidating, setSize]);
 
   return (
-    <motion.div ref={ref} initial="hidden" animate={controls} variants={variants} className="md:p-6 bg-transparent rounded-2xl shadow-md">
       <div className="max-w-7xl mx-auto md:px-8 py-6">
 
 
@@ -145,6 +144,5 @@ export default function PostsViewer({ initialPosts }) {
           }
         `}</style>
       </div>
-    </motion.div>
   );
 }
