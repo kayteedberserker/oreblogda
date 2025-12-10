@@ -13,16 +13,11 @@ export default function FooterAds() {
   }, []);
 
   return (
-    
-        <div className="max-h-[200px]">
-    <ins
-      className="adsbygoogle"
-      style={{ display: "block" }}
-      data-ad-client="ca-pub-8021671365048667"
-      data-ad-slot="9897041432"
-      data-ad-format="auto"
-      data-full-width-responsive="true"
-    />
+    <div className=" flex mb-2.5 justify-center w-full">
+        <ins class="adsbygoogle"
+     style={{display: "inline-block", width: "300px", height: "200px"}}
+     data-ad-client="ca-pub-8021671365048667"
+     data-ad-slot="9897041432"></ins>
     </div>
   );
 }
