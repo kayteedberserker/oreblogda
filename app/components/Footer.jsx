@@ -3,7 +3,11 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
-import FooterAds from "./FooterAds";
+import dynamic from "next/dynamic";
+
+const FooterAds = dynamic(() => import("@/components/FooterAds"), {
+  ssr: false,
+});
 export default function Footer({ postsContainerId }) {
 
   const [email, setEmail] = useState("");
