@@ -2,7 +2,11 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import PostCard from "./PostCard";
-import SimilarPostAd from "./SimilarPostAd";
+import dynamic from "next/dynamic";
+
+const SimilarPostAd = dynamic(() => import("@/components/SimilarPostAd"), {
+  ssr: false,
+});
 
 const fetcher = (url) => fetch(url).then((res) => res.json());
 
