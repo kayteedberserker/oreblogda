@@ -55,7 +55,7 @@ export default function PostsViewer({ initialPosts }) {
           {/* Posts */}
           <div
             id="postsContainer"
-            className="md:flex-2 max-h-[140vh] overflow-y-auto pr-2 scrollbar-hide"
+            className="md:flex-2 max-h-[100vh] overflow-y-auto pr-2 scrollbar-hide"
           >
             <h1 className="text-4xl font-bold mb-6">Anime Blog Posts</h1>
             {uniquePosts.map((post, index) => (
@@ -109,7 +109,6 @@ export default function PostsViewer({ initialPosts }) {
           {/* Sidebar */}
           <div className="hidden md:flex flex-col gap-[15px] md:w-1/3">
             <RecentPollsCard />
-            <FooterAds />
             <FooterAds />
           </div>
 

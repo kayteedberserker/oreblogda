@@ -7,6 +7,7 @@ import RecentPollsCard from "@/app/components/RecentPollsCard";
 import { FaPoll } from "react-icons/fa";
 import { useScrollAnimation } from "@/app/components/useScrollAnimation";
 import { motion } from "framer-motion";
+import FooterAds from "@/app/components/FooterAds";
 
 const limit = 5;
 const fetcher = (url) => fetch(url, { cache: "no-store" }).then((res) => res.json());
@@ -58,9 +59,9 @@ export default function ClientCategoryPage({ category, initialPosts }) {
         <div className="md:flex md:gap-8">
           <div
             id="postsContainer"
-            className="md:flex-2 max-h-[80vh] overflow-y-auto pr-2 scrollbar-hide"
+            className="md:flex-2 max-h-[100vh] overflow-y-auto pr-2 scrollbar-hide"
           >
-        <h1 className="text-2xl font-bold mb-6 capitalize">{category}</h1>
+            <h1 className="text-2xl font-bold mb-6 capitalize">{category}</h1>
             {uniquePosts.map((post, index) => (
               <div key={post._id} className="break-inside-avoid mb-6">
                 <PostCard post={post} posts={uniquePosts} setPosts={() => { }} isFeed />
@@ -97,8 +98,9 @@ export default function ClientCategoryPage({ category, initialPosts }) {
           </div>
 
           {/* Sidebar */}
-          <div className="hidden md:block md:w-1/3">
+          <div className="hidden md:flex flex-col gap-[15px] md:w-1/3">
             <RecentPollsCard />
+            <FooterAds />
           </div>
 
           {/* Mini drawer */}
