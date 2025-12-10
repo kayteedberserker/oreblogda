@@ -10,17 +10,16 @@ export default function SimilarPostAd() {
   useEffect(() => {
     if (!adRef.current) return;
 
-    // prevent double load
-    if (adRef.current.dataset.loaded === "true") return;
+    // Reset the ad slot so AdSense can reload it cleanly
+    adRef.current.innerHTML = "";
 
     try {
       window.adsbygoogle = window.adsbygoogle || [];
       window.adsbygoogle.push({});
-      adRef.current.dataset.loaded = "true";
     } catch (err) {
       console.log("AdSense error:", err);
     }
-  }, [pathname]); // reload ad on route change
+  }, [pathname]); // run on first load + every route change
 
   return (
     <div className="flex justify-center py-2">
