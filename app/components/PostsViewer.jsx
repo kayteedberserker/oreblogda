@@ -6,8 +6,13 @@ import RecentPollsCard from "./RecentPollsCard";
 import { FaPoll } from "react-icons/fa";
 import { useScrollAnimation } from "./useScrollAnimation";
 import { motion } from "framer-motion"
-import FeedAd from "./FeedAd"
-import FooterAds from "./FooterAds";
+import dynamic from "next/dynamic";
+const FeedAd = dynamic(() => import("./FeedAd"), {
+  ssr: false,
+});
+const FooterAds = dynamic(() => import("./FooterAds"), {
+  ssr: false,
+});
 
 const limit = 5;
 const fetcher = (url) => fetch(url, { cache: "no-store" }).then((res) => res.json());
