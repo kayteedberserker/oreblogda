@@ -1,13 +1,20 @@
+"use client";
+
 import { useEffect } from "react";
+import { usePathname } from "next/navigation";
 
 export default function FeedAd() {
+  const pathname = usePathname();
+
   useEffect(() => {
     try {
-      (window.adsbygoogle = window.adsbygoogle || []).push({});
+      // Ensure adsbygoogle array exists
+      window.adsbygoogle = window.adsbygoogle || [];
+      window.adsbygoogle.push({});
     } catch (e) {
-      // ignore AdSense errors to avoid crashes
+      console.error("Adsense error:", e);
     }
-  }, []);
+  }, [pathname]); // re-run whenever pathname changes
 
   return (
     <ins
