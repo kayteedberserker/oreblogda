@@ -22,14 +22,16 @@ export default function FeedAd() {
   }, [pathname]); // load again when navigating
 
   return (
-    <ins
-      ref={adRef}
-      className="adsbygoogle"
-      style={{ display: "block" }}
-      data-ad-format="fluid"
-      data-ad-layout-key="-fl+5w+4e-db+86"
-      data-ad-client="ca-pub-8021671365048667"
-      data-ad-slot="9691605458"
-    ></ins>
+    <div style={{ minWidth: "300px", minHeight:"100px" }}>
+      <ins
+        ref={adRef}
+        className="adsbygoogle"
+        style={{ display: "block" }}
+        data-ad-format="fluid"
+        data-ad-layout-key="-fl+5w+4e-db+86"
+        data-ad-client="ca-pub-8021671365048667"
+        data-ad-slot="9691605458"
+      ></ins>
+    </div>
   );
 }
