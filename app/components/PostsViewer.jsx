@@ -110,6 +110,7 @@ export default function PostsViewer({ initialPosts }) {
           <div className="hidden md:block md:w-1/3">
             <RecentPollsCard />
             <FooterAds />
+            <FooterAds />
           </div>
 
           {/* Mini drawer */}
@@ -127,7 +128,6 @@ export default function PostsViewer({ initialPosts }) {
                 }`}
             >
               <RecentPollsCard />
-              <FooterAds />
             </div>
           </div>
         </div>
