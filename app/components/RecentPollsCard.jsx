@@ -2,7 +2,7 @@
 import useSWR from "swr";
 import Link from "next/link";
 import Poll from "./Poll";
-
+import FooterAds from "./FooterAds";
 const fetcher = (url) => fetch(url).then((res) => res.json());
 
 export default function RecentPollsCard() {
@@ -49,6 +49,8 @@ export default function RecentPollsCard() {
                 View full poll
               </Link>
             </li>
+          
+          <FooterAds />
           ))}
         </ul>
       ) : (
