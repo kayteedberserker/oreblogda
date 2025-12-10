@@ -1,23 +1,29 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 
 export default function FeedAd() {
   const pathname = usePathname();
+  const adRef = useRef(null);
 
   useEffect(() => {
+    if (!adRef.current) return;
+
+    // Reset so the ad can reload on pagechange
+    adRef.current.dataset.loaded = "false";
+
     try {
-      // Ensure adsbygoogle array exists
-      window.adsbygoogle = window.adsbygoogle || [];
-      window.adsbygoogle.push({});
+      (window.adsbygoogle = window.adsbygoogle || []).push({});
+      adRef.current.dataset.loaded = "true";
     } catch (e) {
       console.error("Adsense error:", e);
     }
-  }, [pathname]); // re-run whenever pathname changes
+  }, [pathname]); // load again when navigating
 
   return (
     <ins
+      ref={adRef}
       className="adsbygoogle"
       style={{ display: "block" }}
       data-ad-format="fluid"
