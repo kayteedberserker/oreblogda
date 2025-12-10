@@ -2,7 +2,11 @@
 import useSWR from "swr";
 import Link from "next/link";
 import Poll from "./Poll";
-import FooterAds from "./FooterAds";
+import dynamic from "next/dynamic";
+
+const FooterAds = dynamic(() => import("@/components/FooterAds"), {
+  ssr: false,
+});
 const fetcher = (url) => fetch(url).then((res) => res.json());
 
 export default function RecentPollsCard() {
