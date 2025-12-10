@@ -4,7 +4,7 @@ import useSWR from "swr";
 import PostCard from "./PostCard";
 import dynamic from "next/dynamic";
 
-const SimilarPostAd = dynamic(() => import("@/components/SimilarPostAd"), {
+const SimilarPostAd = dynamic(() => import("./SimilarPostAd"), {
   ssr: false,
 });
 
