@@ -460,7 +460,7 @@ export default function PostCard({
 				{/* ✅ Updated Message */}
 				
 				<h2
-  className={`font-bold ${isFeed ? "text-1xl mb-1" : "text-2xl mb-1.5"}`}
+  className={`font-bold ${isFeed ? "text-[1.5rem] mb-1" : "text-2xl mb-1.5"}`}
 >
   {post?.title}
 </h2>
