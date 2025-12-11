@@ -500,17 +500,18 @@ export default function PostCard({
 							<script async src="https://www.tiktok.com/embed.js"></script>
 						</>
 					) : post.mediaType?.startsWith("image") ? (
-						<div className="relative rounded-md mb-2 w-full h-fit min-h-40 cursor-pointer">
-							<Image
-								src={post.mediaUrl}
-								alt="post media"
-								loading="eager"
-								fill
-								sizes="(max-width: 768px) 90vw, (max-width: 1200px) 80vw, 60vw"
-								className="bg-center bg-cover rounded-[10]"
-								onClick={() => openLightbox(post.mediaUrl, "image")}
-							/>
-						</div>
+						<div className="relative rounded-md mb-2 w-full h-auto min-h-40 cursor-pointer">
+  <Image
+    src={post.mediaUrl}
+    alt="post media"
+    loading="eager"
+    width={800}     // can be anything, Next.js will scale down
+    height={600}    // keeps natural ratio
+    sizes="(max-width: 768px) 90vw, (max-width: 1200px) 80vw, 60vw"
+    className="w-full h-auto rounded-[10px] object-cover"
+    onClick={() => openLightbox(post.mediaUrl, "image")}
+  />
+</div>
 					) : (
 						<video
 							src={post.mediaUrl}
