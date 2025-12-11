@@ -53,9 +53,9 @@ export default function SimilarPosts({ category, currentPostId }) {
                 post={post}
                 posts={similarPosts}
                 setPosts={() => {}}
-                imgHeight={"max-h-[200px]"}
+                imgHeight={"max-h-[180px]"}
                 isFeed={true}
-                className="max-h-[440px] min-h-[430px] flex flex-col justify-between"
+                className="max-h-[450px] min-h-[430px] flex flex-col justify-between"
                 hideMedia={post.category === "Polls"}
               />
             </div>,
