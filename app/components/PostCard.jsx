@@ -8,6 +8,11 @@ import { motion, AnimatePresence } from "framer-motion";
 import { mutate } from "swr"; // ✅ Added SWR mutate support
 import Poll from "./Poll";
 import Image from "next/image";
+import dynamic from "next/dynamic";
+
+const ArticleAd = dynamic(() => import("./ArticleAd"), {
+  ssr: false,
+});
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
 
 export default function PostCard({
@@ -388,6 +393,8 @@ export default function PostCard({
 						<>
 							{renderMessage()}
 							<input type="hidden" name="" value={"Oreblogda - Anime blog"} aria-label="Oreblogda - Anime Blog" />
+                             <ArticleAd />
+
 						</>
 					)}
 				</div>
