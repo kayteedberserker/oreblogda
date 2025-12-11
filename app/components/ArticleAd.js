@@ -17,9 +17,7 @@ export default function ArticleAd() {
       window.adsbygoogle = window.adsbygoogle || [];
       window.adsbygoogle.push({});
       adRef.current.dataset.loaded = "true";
-    } catch (e) {
-      console.error("AdSense error:", e);
-    }
+    } catch (e) {}
   }, [pathname]);
 
   return (

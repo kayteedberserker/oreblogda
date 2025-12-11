@@ -12,9 +12,7 @@ export default function FooterAds() {
     try {
       window.adsbygoogle = window.adsbygoogle || [];
       window.adsbygoogle.push({});
-    } catch (e) {
-      console.error("AdSense error:", e);
-    }
+    } catch (e) {}
   }, [pathname]);
 
   return (

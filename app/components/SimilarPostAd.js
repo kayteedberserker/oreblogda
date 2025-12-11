@@ -16,9 +16,7 @@ export default function SimilarPostAd() {
     try {
       window.adsbygoogle = window.adsbygoogle || [];
       window.adsbygoogle.push({});
-    } catch (err) {
-      console.log("AdSense error:", err);
-    }
+    } catch (err) {}
   }, [pathname]); // run on first load + every route change
 
   return (

@@ -16,9 +16,7 @@ export default function FeedAd() {
     try {
       (window.adsbygoogle = window.adsbygoogle || []).push({});
       adRef.current.dataset.loaded = "true";
-    } catch (e) {
-      console.error("Adsense error:", e);
-    }
+    } catch (e) {}
   }, [pathname]); // load again when navigating
 
   return (
