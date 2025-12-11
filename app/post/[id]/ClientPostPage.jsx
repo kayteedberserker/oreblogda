@@ -49,13 +49,7 @@ export default function ClientPostPage({
   }, [postData, mutate]);
 
   return (
-    <motion.div
-      ref={ref}
-      initial="hidden"
-      animate={controls}
-      variants={variants}
-      className="p-2 md:p-6 rounded-2xl"
-    >
+    <div className="p-2 md:p-6 rounded-2xl">
       {/* SEO */}
       <NextSeo
         title={postData.title}
@@ -112,6 +106,6 @@ export default function ClientPostPage({
         />
         <ToastContainer autoClose={1500} />
       </div>
-    </motion.div>
+    </div>
   );
 }

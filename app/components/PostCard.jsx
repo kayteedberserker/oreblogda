@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import React from "react";
+
 import { FaHeart, FaRegHeart, FaShareAlt, FaComment, FaTimes } from "react-icons/fa";
 import { toast } from "react-toastify";
 import Link from "next/link";
@@ -11,7 +13,7 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 
 const ArticleAd = dynamic(() => import("./ArticleAd"), {
-  ssr: false,
+	ssr: false,
 });
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
 
@@ -337,6 +339,91 @@ export default function PostCard({
 		}
 	}, [idLink])
 
+
+	// Helper function to insert ads after every N words
+	// Insert ads into a message that might be a string or JSX
+	function renderMessageWithAds(blocks, minWordsPerAd = 80) {
+		if (!Array.isArray(blocks)) return blocks;
+
+		let wordCount = 0;
+		const output = [];
+		let adInserted = false;
+
+		const countWords = (text) =>
+			typeof text === "string" ? text.trim().split(/\s+/).length : 0;
+
+		blocks.forEach((block, i) => {
+			// 1. Push block normally
+			output.push(
+				<React.Fragment key={`b-${i}`}>{block}</React.Fragment>
+			);
+
+			// --------------------------
+			// 2. Count words inside block
+			// --------------------------
+
+			let blockWords = 0;
+
+			// CASE: Simple text node
+			if (typeof block === "string") {
+				blockWords = countWords(block);
+			}
+
+			// CASE: React element (section, h, li, br etc.)
+			else if (React.isValidElement(block)) {
+				const t = block.props.children;
+
+				if (typeof t === "string") {
+					blockWords = countWords(t);
+				} else if (Array.isArray(t)) {
+					blockWords = t
+						.map((c) => (typeof c === "string" ? countWords(c) : 0))
+						.reduce((a, b) => a + b, 0);
+				}
+			}
+
+			wordCount += blockWords;
+
+			// -----------------------------------------------------------------
+			// 3. DO NOT INSERT ADS INSIDE LISTS
+			// -----------------------------------------------------------------
+			const tag = block?.type?.toString() || "";
+			const isListItem = block.type === "li" || tag.includes("li");
+
+			if (isListItem) return;
+
+			// -----------------------------------------------------------------
+			// 4. Insert ad AFTER the block *only if* enough words accumulated
+			// -----------------------------------------------------------------
+			if (wordCount >= minWordsPerAd) {
+				output.push(
+					<div key={`ad-${i}`} className="my-4">
+						<ArticleAd />
+					</div>
+				);
+				wordCount = 0;
+				adInserted = true;
+			}
+		});
+
+		// -----------------------------------------------------------
+		// 5. Always show at least ONE ad if article is too short
+		// -----------------------------------------------------------
+		if (!adInserted && blocks.length > 2) {
+			output.splice(
+				1,
+				0,
+				<div key="fallback-ad" className="my-4">
+					<ArticleAd />
+				</div>
+			);
+		}
+
+		return output;
+	}
+
+
+
 	return (
 		<>
 			<div className={`bg-white dark:bg-gray-800 shadow-md rounded-md py-4 px-1 mb-6 relative overflow-hidden ${className}`}>
@@ -378,26 +465,25 @@ export default function PostCard({
 								<Link href={`/post/${idLink}`} className="hover:underline">
 									{renderMessage()}
 								</Link>
-								<Link href={`/post/${idLink}`} className=" ml-3.5 hover:underline">
+								<Link href={`/post/${idLink}`} className="ml-3.5 hover:underline">
 									Read More
 								</Link>
-								<input type="hidden" name="" value={"Oreblogda - Anime blog"} aria-label="Oreblogda - Anime Blog" />
+								<input type="hidden" value="Oreblogda - Anime blog" aria-label="Oreblogda - Anime Blog" />
 							</>
 						) : (
 							<Link href={`/post/${idLink}`} className="hover:underline">
 								{renderMessage()}
-								<input type="hidden" name="" value={"Oreblogda - Anime blog"} aria-label="Oreblogda - Anime Blog" />
+								<input type="hidden" value="Oreblogda - Anime blog" aria-label="Oreblogda - Anime Blog" />
 							</Link>
 						)
 					) : (
 						<>
-							{renderMessage()}
-							<input type="hidden" name="" value={"Oreblogda - Anime blog"} aria-label="Oreblogda - Anime Blog" />
-                             <ArticleAd />
-
+							{renderMessageWithAds(renderMessage(), 80)}
+							<input type="hidden" value="Oreblogda - Anime blog" aria-label="Oreblogda - Anime Blog" />
 						</>
 					)}
 				</div>
+
 
 				{/* Media */}
 				{!hideMedia && post.mediaUrl && (
