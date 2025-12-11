@@ -500,7 +500,7 @@ export default function PostCard({
 							<script async src="https://www.tiktok.com/embed.js"></script>
 						</>
 					) : post.mediaType?.startsWith("image") ? (
-						<div className="relative rounded-md mb-2 w-full h-auto min-h-40 cursor-pointer">
+						<div className="relative rounded-md mb-2 w-full h-auto cursor-pointer">
   <Image
     src={post.mediaUrl}
     alt="post media"
