@@ -458,7 +458,12 @@ export default function PostCard({
 
 
 				{/* ✅ Updated Message */}
-				<h2 className=" font-bold text-2xl mb-1.5">{post?.title}</h2>
+				
+				<h2
+  className={`font-bold ${isFeed ? "text-1xl mb-1" : "text-2xl mb-1.5"}`}
+>
+  {post?.title}
+</h2>
 				<div className="text-gray-800 text-[12px] md:text-[16px] dark:text-gray-100 mb-1">
 					{isFeed ? (
 						isLongMessage && !showFullMessage ? (
