@@ -25,6 +25,7 @@ export default function PostCard({
 	hideComments = false,
 	hideMedia,
 	className,
+	imgHeight
 }) {
 	const [liked, setLiked] = useState(false)
 
@@ -508,7 +509,7 @@ export default function PostCard({
     width={800}     // can be anything, Next.js will scale down
     height={600}    // keeps natural ratio
     sizes="(max-width: 768px) 90vw, (max-width: 1200px) 80vw, 60vw"
-    className="w-full h-auto rounded-[10px] object-cover"
+   className={`w-full h-auto rounded-[10px] object-cover ${imgHeight}`}
     onClick={() => openLightbox(post.mediaUrl, "image")}
   />
 </div>
