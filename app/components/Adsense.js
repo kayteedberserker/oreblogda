@@ -21,7 +21,7 @@ export default function Adsense() {
 
   // Pages that should block ads by prefix (e.g. /author/*)
   const noAdsPrefixes = [
-    "/author/", // blocks /author/anything
+    "/authordiary/", // blocks /author/anything
   ];
 
   // Check if pathname exactly matches one of the static pages

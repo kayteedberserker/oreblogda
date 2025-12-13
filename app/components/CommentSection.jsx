@@ -96,6 +96,7 @@ export default function CommentSection({ postId }) {
                 {new Date(c.date).toLocaleString()}
               </p>
             </div>
+            
           ))
         ) : (
           <p className="text-gray-500 dark:text-gray-400 text-sm">
