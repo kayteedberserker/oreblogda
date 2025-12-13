@@ -15,49 +15,39 @@ export default function AuthorPage() {
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  const LIMIT = 6;
-
   // Fetch author + first posts
   const fetchAuthorData = useCallback(async () => {
     try {
       const [userRes, postRes] = await Promise.all([
         fetch(`/api/users/${id}`),
-        fetch(`/api/posts?author=${id}&page=1&limit=${LIMIT}`),
+        fetch(`/api/posts?author=${id}&page=1&limit=6`),
       ]);
 
       const userData = await userRes.json();
       const postData = await postRes.json();
 
       if (userRes.ok) setAuthor(userData.user);
-
       if (postRes.ok) {
         setPosts(postData.posts);
-        if (postData.posts.length < LIMIT) setHasMore(false);
+        if (postData.posts.length < 6) setHasMore(false);
       }
-    } catch (err) {
-      console.error(err);
-    }
+    } catch {}
   }, [id]);
 
   // Fetch more posts
   const fetchMorePosts = useCallback(async () => {
     if (!hasMore || loading) return;
-
     setLoading(true);
 
     try {
-      const res = await fetch(
-        `/api/posts?author=${id}&page=${page}&limit=${LIMIT}`
-      );
+      const res = await fetch(`/api/posts?author=${id}&page=${page}&limit=6`);
       const data = await res.json();
 
       if (res.ok) {
-        setPosts(prev => [...prev, ...data.posts]);
-        if (data.posts.length < LIMIT) setHasMore(false);
+        setPosts((prev) => [...prev, ...data.posts]);
+        if (data.posts.length < 6) setHasMore(false);
       }
-    } catch (err) {
-      console.error(err);
-    } finally {
+    } catch {} finally {
       setLoading(false);
     }
   }, [id, page, hasMore, loading]);
@@ -66,6 +56,10 @@ export default function AuthorPage() {
     fetchAuthorData();
   }, [id]);
 
+  const handleLoadMore = () => {
+    if (hasMore && !loading) setPage((p) => p + 1);
+  };
+
   useEffect(() => {
     if (page > 1) fetchMorePosts();
   }, [page]);
@@ -73,85 +67,75 @@ export default function AuthorPage() {
   return (
     <div className="max-w-6xl mx-auto mt-6 px-4 min-h-[70vh]">
 
-      {/* ================= AUTHOR BIO ================= */}
+      {/* Author Bio */}
       {author && (
         <>
-          <div className="mb-8 flex items-center gap-4">
+          <div className="mb-6 flex items-center gap-4">
             <img
               src={author.profilePic?.url || "/default-avatar.png"}
               alt={author.username}
               className="w-20 h-20 rounded-full object-cover border"
             />
-
             <div>
-              <h1 className="text-2xl font-bold">
-                {author.username}
-              </h1>
-              <p className="text-gray-600 mt-1">
-                {author.description ||
-                  "This author hasn’t added a description yet."}
+              <h1 className="text-2xl font-bold">{author.username}</h1>
+              <p className="text-gray-600">
+                {author.description || "This author hasn’t added a description yet."}
               </p>
             </div>
           </div>
 
           {/* Ad under author bio */}
-          <div className="mb-10">
+          <div className="mb-8">
             <SimilarPostAd />
           </div>
         </>
       )}
 
-      {/* ================= POSTS + ADS ================= */}
-      {posts.map((post, index) => (
-        <div key={post._id} className="mb-12">
-
-          {/* DESKTOP */}
-          <div className="hidden lg:grid grid-cols-[300px_1fr_300px] gap-8">
-
-            {/* LEFT AD */}
-            {(index + 1) % 6 === 0 ? (
-              <div className="sticky top-24 self-start">
-                <AuthorPageAd />
-              </div>
-            ) : (
-              <div />
-            )}
-
-            {/* POST */}
-            <PostCard post={post} isFeed />
-
-            {/* RIGHT AD */}
-            {(index + 1) % 6 === 0 ? (
-              <div className="sticky top-24 self-start">
-                <AuthorPageAd />
-              </div>
-            ) : (
-              <div />
-            )}
-          </div>
-
-          {/* MOBILE */}
-          <div className="lg:hidden">
-            <PostCard post={post} isFeed />
-          </div>
+      {/* Posts + Side Ads */}
+      <div className="relative lg:flex lg:gap-6">
+        {/* Left Side Ad */}
+        <div className="hidden lg:block lg:w-[350px] sticky top-24 self-start h-[calc(100vh-6rem)]">
+          {posts.length > 0 && <AuthorPageAd />}
         </div>
-      ))}
 
-      {/* ================= LOAD MORE ================= */}
-      {hasMore && (
-        <div className="flex justify-center my-12">
-          <button
-            onClick={() => setPage(p => p + 1)}
-            disabled={loading}
-            className="px-6 py-2 rounded-md font-medium
-                       bg-blue-600 text-white
-                       hover:bg-blue-700
-                       disabled:opacity-60"
-          >
-            {loading ? "Loading..." : "Load more posts"}
-          </button>
+        {/* Post Feed */}
+        <div className="flex-1">
+          {posts.map((post, index) => (
+            <div key={post._id} className="mb-12">
+              <PostCard post={post} isFeed />
+
+              {/* Feed Ad after every 2 posts */}
+              {(index + 1) % 2 === 0 && (
+                <div className="my-6">
+                  <SimilarPostAd />
+                </div>
+              )}
+            </div>
+          ))}
+
+          {/* Load More Button */}
+          {hasMore && (
+            <div className="flex justify-center my-8">
+              <button
+                onClick={handleLoadMore}
+                disabled={loading}
+                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
+              >
+                {loading ? "Loading..." : "Load More"}
+              </button>
+            </div>
+          )}
+
+          {!hasMore && posts.length > 0 && (
+            <p className="text-center text-gray-500 mt-6">No more posts.</p>
+          )}
         </div>
-      )}
+
+        {/* Right Side Ad */}
+        <div className="hidden lg:block lg:w-[350px] sticky top-24 self-start h-[calc(100vh-6rem)]">
+          {posts.length > 0 && <AuthorPageAd />}
+        </div>
+      </div>
     </div>
   );
 }
