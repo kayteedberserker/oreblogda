@@ -65,7 +65,7 @@ export default function AuthorPage() {
   }, [page]);
 
   return (
-    <div className="max-w-6xl mx-auto mt-6 px-4 min-h-[70vh]">
+    <div className="max-w-7xl mx-auto mt-6 min-h-[70vh]">
 
       {/* Author Bio */}
       {author && (
@@ -94,7 +94,8 @@ export default function AuthorPage() {
       {/* Posts + Side Ads */}
       <div className="relative lg:flex lg:gap-6">
         {/* Left Side Ad */}
-        <div className="hidden lg:block lg:w-[200px] sticky top-24 self-start h-[calc(100vh-6rem)]">
+        <div className="hidden lg:block lg:w-[250px] sticky top-24 self-start h-[calc(100vh-6rem)]">
+          {posts.length > 0 && <AuthorPageAd />}
           {posts.length > 0 && <AuthorPageAd />}
         </div>
 
@@ -132,7 +133,8 @@ export default function AuthorPage() {
         </div>
 
         {/* Right Side Ad */}
-        <div className="hidden lg:block lg:w-[200px] sticky top-24 self-start h-[calc(100vh-6rem)]">
+        <div className="hidden lg:block lg:w-[250px] sticky top-24 self-start h-[calc(100vh-5rem)]">
+          {posts.length > 0 && <AuthorPageAd />}
           {posts.length > 0 && <AuthorPageAd />}
         </div>
       </div>
