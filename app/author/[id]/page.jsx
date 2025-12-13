@@ -74,7 +74,7 @@ export default function AuthorPage() {
             <img
               src={author.profilePic?.url || "/default-avatar.png"}
               alt={author.username}
-              className="w-20 h-20 rounded-full object-cover border"
+              className="w-60 h-60 rounded-full object-cover border"
             />
             <div>
               <h1 className="text-2xl font-bold">{author.username}</h1>
@@ -94,7 +94,7 @@ export default function AuthorPage() {
       {/* Posts + Side Ads */}
       <div className="relative lg:flex lg:gap-6">
         {/* Left Side Ad */}
-        <div className="hidden lg:block lg:w-[350px] sticky top-24 self-start h-[calc(100vh-6rem)]">
+        <div className="hidden lg:block lg:w-[120px] sticky top-24 self-start h-[calc(100vh-6rem)]">
           {posts.length > 0 && <AuthorPageAd />}
         </div>
 
@@ -132,7 +132,7 @@ export default function AuthorPage() {
         </div>
 
         {/* Right Side Ad */}
-        <div className="hidden lg:block lg:w-[350px] sticky top-24 self-start h-[calc(100vh-6rem)]">
+        <div className="hidden lg:block lg:w-[120px] sticky top-24 self-start h-[calc(100vh-6rem)]">
           {posts.length > 0 && <AuthorPageAd />}
         </div>
       </div>
