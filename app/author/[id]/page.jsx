@@ -98,7 +98,7 @@ export default function AuthorPage() {
           <div className="max-h=[40vh]">
             {posts.length > 0 && <AuthorPageAd />}
           </div>
-          <div className="max-h=[40vh]">
+          <div className="max-h-[40vh]">
             {posts.length > 0 && <AuthorPageAd />}
           </div>
         </div>
