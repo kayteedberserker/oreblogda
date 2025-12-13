@@ -3,8 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import PostCard from "@/app/components/PostCard";
-import SimilarPostAd from "@/app/components/SimilarPostAd";
 import AuthorPageAd from "@/app/components/AuthorPageAd";
+import FeedAd from "@/app/components/FeedAd";
 
 export default function AuthorPage() {
   const { id } = useParams();
@@ -86,7 +86,7 @@ export default function AuthorPage() {
 
           {/* Ad under author bio */}
           <div className="mb-8">
-            <SimilarPostAd />
+            <FeedAd />
           </div>
         </>
       )}
