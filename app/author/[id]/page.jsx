@@ -75,7 +75,7 @@ export default function AuthorPage() {
   }, [page]);
 
   return (
-    <div className="max-w-5xl mx-auto mt-6 p-6 min-h-[70vh]">
+    <div className="max-w-3xl mx-auto mt-6 p-6 min-h-[70vh]">
       {author && (
   <div className="mb-6 text-left">
     <div className="flex items-center gap-4">
