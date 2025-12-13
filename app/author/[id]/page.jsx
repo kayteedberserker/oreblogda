@@ -95,8 +95,12 @@ export default function AuthorPage() {
       <div className="relative lg:flex lg:gap-6">
         {/* Left Side Ad */}
         <div className="hidden lg:block lg:w-[250px] sticky top-24 self-start h-[calc(100vh-6rem)]">
-          {posts.length > 0 && <AuthorPageAd />}
-          {posts.length > 0 && <AuthorPageAd />}
+          <div className="max-h=[40vh]">
+            {posts.length > 0 && <AuthorPageAd />}
+          </div>
+          <div className="max-h=[40vh]">
+            {posts.length > 0 && <AuthorPageAd />}
+          </div>
         </div>
 
         {/* Post Feed */}
@@ -134,8 +138,12 @@ export default function AuthorPage() {
 
         {/* Right Side Ad */}
         <div className="hidden lg:block lg:w-[250px] sticky top-24 self-start h-[calc(100vh-5rem)]">
-          {posts.length > 0 && <AuthorPageAd />}
-          {posts.length > 0 && <AuthorPageAd />}
+          <div className="max-h=[40vh]">
+            {posts.length > 0 && <AuthorPageAd />}
+          </div>
+          <div className="max-h=[40vh]">
+            {posts.length > 0 && <AuthorPageAd />}
+          </div>
         </div>
       </div>
     </div>
