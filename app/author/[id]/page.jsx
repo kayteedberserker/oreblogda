@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import PostCard from "@/app/components/PostCard";
+import SimilarPostAd from "@/app/components/SimilarPostAd";
 import AuthorPageAd from "@/app/components/AuthorPageAd";
 import FeedAd from "@/app/components/FeedAd";
 
