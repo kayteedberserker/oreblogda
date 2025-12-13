@@ -5,7 +5,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import PostCard from "@/app/components/PostCard";
 import SimilarPostAd from "@/app/components/SimilarPostAd";
-import AuthorPageAd from "@/app/components/AuthorPageAd
+import AuthorPageAd from "@/app/components/AuthorPageAd"
 
 export default function AuthorPage() {
   const { id } = useParams();
