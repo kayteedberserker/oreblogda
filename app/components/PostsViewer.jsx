@@ -5,9 +5,8 @@ import PostCard from "./PostCard";
 import RecentPollsCard from "./RecentPollsCard";
 import { FaPoll } from "react-icons/fa";
 import { useScrollAnimation } from "./useScrollAnimation";
-import { motion } from "framer-motion"
 import dynamic from "next/dynamic";
-const FeedAd = dynamic(() => import("./FeedAd"), {
+const ArticleAd = dynamic(() => import("./ArticleAd"), {
   ssr: false,
 });
 const FooterAds = dynamic(() => import("./FooterAds"), {
@@ -74,7 +73,7 @@ export default function PostsViewer({ initialPosts }) {
                 {/* Insert ad after every 2 posts (index = 1, 3, 5...) */}
                 {index % 2 === 1 && (
                   <div className="my-6">
-                    <FeedAd />
+                    <ArticleAd />
                   </div>
                 )}
               </div>

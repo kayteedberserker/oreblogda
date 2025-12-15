@@ -8,7 +8,6 @@ import CommentSection from "@/app/components/CommentSection";
 import SimilarPosts from "@/app/components/SimilarPosts";
 import { NextSeo, ArticleJsonLd } from "next-seo";
 import { ToastContainer } from "react-toastify";
-import { motion } from "framer-motion";
 import { useScrollAnimation } from "@/app/components/useScrollAnimation";
 
 const fetcher = (url) => fetch(url).then((res) => res.json());

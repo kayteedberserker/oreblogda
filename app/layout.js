@@ -14,9 +14,9 @@ const spaceGrotesk = Space_Grotesk({ subsets: ["latin"] });
 
 export const metadata = {
 	title: "Oreblogda - My Anime Blog",
-	description: "A modern anime blog where users can post, share, and explore trending anime stories, memes, and news.",
+	description: "A modern anime blog where users can post, share, and explore trending anime stories, memes, and news on both anime and games.",
 
-	keywords: "anime, anime blog, anime news, anime memes, anime stories, trending anime, anime edits, oreblogda, anime votes",
+	keywords: "anime, anime blog, anime news, anime memes, anime stories, trending anime, anime edits, gaming, gaming news, game updates, games, mobile games, freefire, callofduty, pubg, efootball, minecraft, amoung us, dream league soccer, oreblogda, anime votes",
 
 	authors: [
 		{ name: "Kaytee", url: "https://oreblogda.vercel.app" }
@@ -29,7 +29,7 @@ export const metadata = {
 	// Open Graph (for social previews)
 	openGraph: {
 		title: "Oreblogda – My Anime Blog",
-		description: "A modern anime blog where users can post, share, and explore trending anime stories, memes, and news.",
+		description: "A modern anime blog where users can post, share, and explore trending anime stories, memes, and news on anime and games.",
 		url: "https://oreblogda.vercel.app",
 		siteName: "Oreblogda",
 		images: [

@@ -2,12 +2,12 @@
 import { useState, useEffect } from "react";
 import useSWRInfinite from "swr/infinite";
 import PostCard from "@/app/components/PostCard";
-import FeedAd from "@/app/components/FeedAd"
 import RecentPollsCard from "@/app/components/RecentPollsCard";
 import { FaPoll } from "react-icons/fa";
 import { useScrollAnimation } from "@/app/components/useScrollAnimation";
 import { motion } from "framer-motion";
 import FooterAds from "@/app/components/FooterAds";
+import ArticleAd from "@/app/components/ArticleAd";
 
 const limit = 5;
 const fetcher = (url) => fetch(url, { cache: "no-store" }).then((res) => res.json());
@@ -67,7 +67,7 @@ export default function ClientCategoryPage({ category, initialPosts }) {
                 <PostCard post={post} posts={uniquePosts} setPosts={() => { }} isFeed />
 
                 {/* Insert ad after every 2 posts */}
-                {(index + 1) % 2 === 0 && <FeedAd />}
+                {(index + 1) % 2 === 0 && <ArticleAd />}
               </div>
             ))}
 
