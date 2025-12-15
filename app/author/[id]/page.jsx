@@ -3,9 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import PostCard from "@/app/components/PostCard";
-import SimilarPostAd from "@/app/components/SimilarPostAd";
 import AuthorPageAd from "@/app/components/AuthorPageAd";
-import FeedAd from "@/app/components/FeedAd";
+import ArticleAd from "@/app/components/ArticleAd";
 
 export default function AuthorPage() {
   const { id } = useParams();
@@ -87,7 +86,7 @@ export default function AuthorPage() {
 
           {/* Ad under author bio */}
           <div className="mb-8">
-            <FeedAd />
+            <ArticleAd />
           </div>
         </>
       )}
@@ -113,7 +112,7 @@ export default function AuthorPage() {
               {/* Feed Ad after every 2 posts */}
               {(index + 1) % 2 === 0 && (
                 <div className="my-6">
-                  <SimilarPostAd />
+                  <ArticleAd />
                 </div>
               )}
             </div>
