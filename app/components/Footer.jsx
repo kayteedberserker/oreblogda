@@ -97,7 +97,7 @@ export default function Footer({ postsContainerId }) {
     >
 
       <div className="max-w-7xl mx-auto px-4 grow sm:px-6 lg:px-8">
-      <FooterAds />
+      {/* <FooterAds /> */}
         {/* Newsletter Form */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -139,7 +139,7 @@ export default function Footer({ postsContainerId }) {
             </p>
           )}
         </motion.div>
-          <FooterAds />
+          {/* <FooterAds /> */}
         {/* Socials */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

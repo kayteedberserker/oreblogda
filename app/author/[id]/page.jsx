@@ -85,23 +85,23 @@ export default function AuthorPage() {
           </div>
 
           {/* Ad under author bio */}
-          <div className="mb-8">
+          {/* <div className="mb-8">
             <ArticleAd />
-          </div>
+          </div> */}
         </>
       )}
 
       {/* Posts + Side Ads */}
       <div className="relative lg:flex lg:gap-6">
         {/* Left Side Ad */}
-        <div className="hidden lg:block lg:w-[250px] sticky top-24 self-start h-[calc(100vh-6rem)]">
+        {/* <div className="hidden lg:block lg:w-[250px] sticky top-24 self-start h-[calc(100vh-6rem)]">
           <div className="max-h=[40vh]">
             {posts.length > 0 && <AuthorPageAd />}
           </div>
           <div className="max-h-[40vh]">
             {posts.length > 0 && <AuthorPageAd />}
           </div>
-        </div>
+        </div> */}
 
         {/* Post Feed */}
         <div className="flex-1">
@@ -110,11 +110,11 @@ export default function AuthorPage() {
               <PostCard post={post} isFeed />
 
               {/* Feed Ad after every 2 posts */}
-              {(index + 1) % 2 === 0 && (
+              {/* {(index + 1) % 2 === 0 && (
                 <div className="my-6">
                   <ArticleAd />
                 </div>
-              )}
+              )} */}
             </div>
           ))}
 
@@ -137,14 +137,14 @@ export default function AuthorPage() {
         </div>
 
         {/* Right Side Ad */}
-        <div className="hidden lg:block lg:w-[250px] sticky top-24 self-start h-[calc(100vh-5rem)]">
+        {/* <div className="hidden lg:block lg:w-[250px] sticky top-24 self-start h-[calc(100vh-5rem)]">
           <div className="max-h=[40vh]">
             {posts.length > 0 && <AuthorPageAd />}
           </div>
           <div className="max-h=[40vh]">
             {posts.length > 0 && <AuthorPageAd />}
           </div>
-        </div>
+        </div> */}
       </div>
     </div>
   );

@@ -67,7 +67,7 @@ export default function ClientCategoryPage({ category, initialPosts }) {
                 <PostCard post={post} posts={uniquePosts} setPosts={() => { }} isFeed />
 
                 {/* Insert ad after every 2 posts */}
-                {(index + 1) % 2 === 0 && <ArticleAd />}
+                {/* {(index + 1) % 2 === 0 && <ArticleAd />} */}
               </div>
             ))}
 
@@ -100,7 +100,7 @@ export default function ClientCategoryPage({ category, initialPosts }) {
           {/* Sidebar */}
           <div className="hidden md:flex flex-col gap-[15px] md:w-1/3">
             <RecentPollsCard />
-            <FooterAds />
+            {/* <FooterAds /> */}
           </div>
 
           {/* Mini drawer */}

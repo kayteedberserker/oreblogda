@@ -65,7 +65,7 @@ export default function SimilarPosts({ category, currentPostId }) {
           if ((index + 1) % 2 === 0) {
             items.push(
               <div key={`ad-${index}`} className="flex-none w-fit">
-                <SimilarPostAd />
+                {/* <SimilarPostAd /> */}
               </div>
             );
           }

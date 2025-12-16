@@ -71,11 +71,11 @@ export default function PostsViewer({ initialPosts }) {
                 />
 
                 {/* Insert ad after every 2 posts (index = 1, 3, 5...) */}
-                {index % 2 === 1 && (
+                {/* {index % 2 === 1 && (
                   <div className="my-6">
                     <ArticleAd />
                   </div>
-                )}
+                )} */}
               </div>
             ))}
 
@@ -112,7 +112,7 @@ export default function PostsViewer({ initialPosts }) {
           {/* Sidebar */}
           <div className="hidden md:flex flex-col gap-[15px] md:w-1/3">
             <RecentPollsCard />
-            <FooterAds />
+            {/* <FooterAds /> */}
           </div>
 
           {/* Mini drawer */}

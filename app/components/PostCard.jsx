@@ -396,29 +396,29 @@ export default function PostCard({
 			// -----------------------------------------------------------------
 			// 4. Insert ad AFTER the block *only if* enough words accumulated
 			// -----------------------------------------------------------------
-			if (wordCount >= minWordsPerAd) {
-				output.push(
-					<div key={`ad-${i}`} className="my-4">
-						<ArticleAd />
-					</div>
-				);
-				wordCount = 0;
-				adInserted = true;
-			}
+			// if (wordCount >= minWordsPerAd) {
+			// 	output.push(
+			// 		<div key={`ad-${i}`} className="my-4">
+			// 			<ArticleAd />
+			// 		</div>
+			// 	);
+			// 	wordCount = 0;
+			// 	adInserted = true;
+			// }
 		});
 
 		// -----------------------------------------------------------
 		// 5. Always show at least ONE ad if article is too short
 		// -----------------------------------------------------------
-		if (!adInserted && blocks.length > 2) {
-			output.splice(
-				1,
-				0,
-				<div key="fallback-ad" className="my-4">
-					<ArticleAd />
-				</div>
-			);
-		}
+		// if (!adInserted && blocks.length > 2) {
+		// 	output.splice(
+		// 		1,
+		// 		0,
+		// 		<div key="fallback-ad" className="my-4">
+		// 			<ArticleAd />
+		// 		</div>
+		// 	);
+		// }
 
 		return output;
 	}

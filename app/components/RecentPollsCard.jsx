@@ -52,7 +52,7 @@ export default function RecentPollsCard() {
               >
                 View full poll
               </Link>
-              <FooterAds />
+              {/* <FooterAds /> */}
             </li>
           
           
