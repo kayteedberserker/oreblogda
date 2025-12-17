@@ -6,25 +6,26 @@ import Newsletter from "@/app/models/Newsletter";
 import nodemailer from "nodemailer";
 import generateSlug from "@/app/api/hooks/slugify";
 
-
-// Helper function to add CORS headers
-function withCors(responseInit = {}) {
-  const headers = new Headers(responseInit.headers || {});
-  headers.set("Access-Control-Allow-Origin", "*"); // or your RN dev URL
-  headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS,PATCH");
-  headers.set("Access-Control-Allow-Headers", "Content-Type,Authorization");
-  return { ...responseInit, headers };
+// ----------------------
+// Helper to add CORS headers
+// ----------------------
+function addCorsHeaders(response) {
+  response.headers.set("Access-Control-Allow-Origin", "*"); // replace * with your dev URL if needed
+  response.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS,PATCH");
+  response.headers.set("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  return response;
 }
 
 // ----------------------
 // Handle preflight OPTIONS request
 // ----------------------
 export async function OPTIONS() {
-  return new Response(null, withCors());
+  const res = new Response(null, { status: 204 });
+  return addCorsHeaders(res);
 }
 
 // ----------------------
-// GET: fetch all posts (with pagination)
+// GET: fetch all posts
 // ----------------------
 export async function GET(req) {
   await connectDB();
@@ -46,110 +47,93 @@ export async function GET(req) {
       .skip(skip)
       .limit(limit)
       .lean();
-    
+
     const serializedPosts = posts.map((p) => ({
       ...p,
-      _id: p._id.toString(), // ✅ Convert ObjectId to string
+      _id: p._id.toString(),
     }));
 
     const total = await Post.countDocuments(query);
-    return new Response(
+
+    const res = new Response(
       JSON.stringify({ posts: serializedPosts, total, page, limit }),
       { status: 200 }
     );
+    return addCorsHeaders(res);
   } catch (err) {
     console.error(err);
-    return new Response(JSON.stringify({ message: "Failed to fetch posts" }), { status: 500 });
+    const res = new Response(JSON.stringify({ message: "Failed to fetch posts" }), { status: 500 });
+    return addCorsHeaders(res);
   }
 }
 
-
-
-
+// ----------------------
+// TikTok resolver
+// ----------------------
+async function resolveTikTokUrl(url) {
+  if (url.includes("vm.tiktok.com") || url.includes("vt.tiktok.com")) {
+    try {
+      const response = await fetch(url, { method: "HEAD", redirect: "follow" });
+      return response.url;
+    } catch (err) {
+      console.error("Error resolving TikTok link:", err);
+      return url;
+    }
+  }
+  return url;
+}
 
 // ----------------------
 // POST: create a new post
 // ----------------------
-
-
-async function resolveTikTokUrl(url) {
-  if (url.includes("vm.tiktok.com") || url.includes("vt.tiktok.com")) {
-    try {
-      // TikTok short links redirect to the full video URL
-      const response = await fetch(url, { method: "HEAD", redirect: "follow" });
-      return response.url; // The resolved full link
-    } catch (err) {
-      console.error("Error resolving TikTok link:", err);
-      return url; // fallback to original
-    }
-  }
-  return url; // already a normal tiktok.com/@user/video/... link
-}
 export async function POST(req) {
-  try {
-    await connectDB();
+  await connectDB();
 
+  try {
     const token = req.cookies.get("token")?.value;
     let user;
 
     try {
       user = verifyToken(token);
     } catch {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-    }
-    const {
-      title,
-      message,
-      mediaUrl,
-      mediaType,
-      hasPoll,
-      pollMultiple,
-      pollOptions,
-      category,
-    } = await req.json();
-
-    if (!title || title.trim() === "") {
-      return NextResponse.json({ message: "Title is required" }, { status: 400 });
+      const res = NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      return addCorsHeaders(res);
     }
 
-    if (!message || message.trim() === "") {
-      return NextResponse.json({ message: "Message is required" }, { status: 400 });
+    const { title, message, mediaUrl, mediaType, hasPoll, pollMultiple, pollOptions, category } = await req.json();
+
+    if (!title || !title.trim()) {
+      const res = NextResponse.json({ message: "Title is required" }, { status: 400 });
+      return addCorsHeaders(res);
+    }
+    if (!message || !message.trim()) {
+      const res = NextResponse.json({ message: "Message is required" }, { status: 400 });
+      return addCorsHeaders(res);
+    }
+    if (!category || !["News","Memes","Videos/Edits","Polls","Review","Gaming"].includes(category)) {
+      const res = NextResponse.json({ message: "Invalid category" }, { status: 400 });
+      return addCorsHeaders(res);
     }
 
-    if (!category || !["News", "Memes", "Videos/Edits", "Polls", "Review", "Gaming"].includes(category)) {
-      return NextResponse.json({ message: "Invalid category" }, { status: 400 });
-    }
-    let shortMessage
-    if (title.length < 15) {
-      shortMessage = message.slice(0, 10)
-    }else {
-      shortMessage = "link"
-    }
-    let resolvedUrl
-    if ( mediaUrl && mediaUrl.includes("tiktok")) {
-      resolvedUrl = await resolveTikTokUrl(mediaUrl)
-    }
-    const slugText = `${title} ${shortMessage}`
-    const slug = generateSlug(slugText)
+    let shortMessage = title.length < 15 ? message.slice(0,10) : "link";
+    let resolvedUrl = mediaUrl && mediaUrl.includes("tiktok") ? await resolveTikTokUrl(mediaUrl) : mediaUrl;
+
+    const slug = generateSlug(`${title} ${shortMessage}`);
+
     const newPost = await Post.create({
       authorId: user.id,
       authorName: user.username,
       title,
-      slug: slug,
-      message, // message now contains inline sections
-      mediaUrl: resolvedUrl || mediaUrl || null,
+      slug,
+      message,
+      mediaUrl: resolvedUrl || null,
       mediaType: mediaUrl ? mediaType : mediaUrl?.includes("video") ? "video" : "image" || null,
       likes: [],
       shares: 0,
       comments: [],
-      poll: hasPoll
-        ? {
-            pollMultiple: pollMultiple || false,
-            options: pollOptions.map((opt) => ({ text: opt.text, votes: 0 })),
-          }
-        : null,
+      poll: hasPoll ? { pollMultiple: pollMultiple || false, options: pollOptions.map(opt => ({ text: opt.text, votes: 0 })) } : null,
       voters: [],
-      category,
+      category
     });
 
     await newPost.save();
@@ -160,65 +144,36 @@ export async function POST(req) {
       if (subscribers.length > 0) {
         const transporter = nodemailer.createTransport({
           service: "gmail",
-          auth: {
-            user: process.env.MAILEREMAIL,
-            pass: process.env.MAILERPASS,
-          },
+          auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
         });
 
         const mailOptions = {
           from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
           to: "Subscribers",
-          bcc: subscribers.map((s) => s.email),
+          bcc: subscribers.map(s => s.email),
           subject: `📰 New Post from ${user.username}`,
-          html: `
-            <div style="font-family:Arial, sans-serif;line-height:1.6;color:#333;">
-              <h2 style="margin-bottom:10px;">New Post from ${user.username}</h2>
-              <p style="margin-bottom:15px;">
-                ${message.length > 250 ? message.slice(0, 250) + "..." : message}
-              </p>
-              ${mediaUrl ? `<img src="${mediaUrl}" alt="Post Media" style="max-width:100%;border-radius:8px;margin-bottom:15px;">` : ""}
-              <div style="margin-bottom:20px;">
-                <a href="${process.env.SITE_URL}/post/${newPost.slug|| newPost._id}"
-                   style="
-                     display:inline-block;
-                     padding:12px 20px;
-                     background-color:#007bff;
-                     color:#ffffff !important;
-                     text-decoration:none;
-                     border-radius:6px;
-                     font-weight:bold;
-                     font-size:16px;
-                   "
-                   target="_blank"
-                   rel="noopener noreferrer">
-                  Read Full Post
-                </a>
-              </div>
-              <p>If the button doesnt work this is the link to the post you can check it out manually<br>${process.env.SITE_URL}/post/${newPost.slug || newPost._id}
-              <p style="font-size:12px;color:#888;">
-                You're receiving this email because you subscribed to our newsletter.
-              </p>
-            </div>
-          `,
+          html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
+                  <h2 style="margin-bottom:10px;">New Post from ${user.username}</h2>
+                  <p>${message.length>250?message.slice(0,250)+"...":message}</p>
+                  ${mediaUrl? `<img src="${mediaUrl}" alt="Post Media" style="max-width:100%;border-radius:8px;margin-bottom:15px;">` : ""}
+                  <div style="margin-bottom:20px;">
+                    <a href="${process.env.SITE_URL}/post/${newPost.slug || newPost._id}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 20px;background-color:#007bff;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;">Read Full Post</a>
+                  </div>
+                </div>`
         };
 
-        const mailSent = await transporter.sendMail(mailOptions);
+        await transporter.sendMail(mailOptions);
       }
     } catch (emailErr) {
       console.error("Newsletter email error:", emailErr);
     }
 
-    return NextResponse.json(
-      { message: "Post created successfully", post: newPost },
-      { status: 201 }
-    );
+    const res = NextResponse.json({ message: "Post created successfully", post: newPost }, { status: 201 });
+    return addCorsHeaders(res);
+
   } catch (err) {
     console.error("POST /api/posts error:", err);
-    return NextResponse.json(
-      { message: "Server error", error: err.message },
-      { status: 500 }
-    );
+    const res = NextResponse.json({ message: "Server error", error: err.message }, { status: 500 });
+    return addCorsHeaders(res);
   }
 }
-
