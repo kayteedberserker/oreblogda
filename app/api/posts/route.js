@@ -7,6 +7,22 @@ import nodemailer from "nodemailer";
 import generateSlug from "@/app/api/hooks/slugify";
 
 
+// Helper function to add CORS headers
+function withCors(responseInit = {}) {
+  const headers = new Headers(responseInit.headers || {});
+  headers.set("Access-Control-Allow-Origin", "*"); // or your RN dev URL
+  headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS,PATCH");
+  headers.set("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  return { ...responseInit, headers };
+}
+
+// ----------------------
+// Handle preflight OPTIONS request
+// ----------------------
+export async function OPTIONS() {
+  return new Response(null, withCors());
+}
+
 // ----------------------
 // GET: fetch all posts (with pagination)
 // ----------------------
