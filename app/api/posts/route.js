@@ -6,13 +6,12 @@ import Newsletter from "@/app/models/Newsletter";
 import nodemailer from "nodemailer";
 import MobileUser from "@/app/models/MobileUserModel";
 import generateSlug from "@/app/api/hooks/slugify";
-import
 
 // ----------------------
 // Helper to add CORS headers
 // ----------------------
 function addCorsHeaders(response) {
-  response.headers.set("Access-Control-Allow-Origin", "*"); // replace * with your dev URL if needed
+  response.headers.set("Access-Control-Allow-Origin", "*"); 
   response.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS,PATCH");
   response.headers.set("Access-Control-Allow-Headers", "Content-Type,Authorization");
   return response;
@@ -22,7 +21,7 @@ function addCorsHeaders(response) {
 // Handle preflight OPTIONS request
 // ----------------------
 export async function OPTIONS() {
-  const res = new Response(null, { status: 204 });
+  const res = new NextResponse(null, { status: 204 });
   return addCorsHeaders(res);
 }
 
@@ -57,14 +56,14 @@ export async function GET(req) {
 
     const total = await Post.countDocuments(query);
 
-    const res = new Response(
-      JSON.stringify({ posts: serializedPosts, total, page, limit }),
+    const res = NextResponse.json(
+      { posts: serializedPosts, total, page, limit },
       { status: 200 }
     );
     return addCorsHeaders(res);
   } catch (err) {
     console.error(err);
-    const res = new Response(JSON.stringify({ message: "Failed to fetch posts" }), { status: 500 });
+    const res = NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 });
     return addCorsHeaders(res);
   }
 }
@@ -113,19 +112,26 @@ export async function POST(req) {
       const foundMobileUser = await MobileUser.findOne({ deviceId: fingerprint });
       if (foundMobileUser) {
         user = {
-          id: foundMobileUser._id,
+          id: foundMobileUser._id.toString(), // Convert ObjectId to string
           username: foundMobileUser.username
         };
       }
     }
 
     if (!user) {
-      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      const res = NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+      return addCorsHeaders(res);
     }
 
     // --- STEP 2: VALIDATION ---
     if (!title?.trim() || !message?.trim()) {
-      return NextResponse.json({ message: "Title and Message required" }, { status: 400 });
+      const res = NextResponse.json({ message: "Title and Message required" }, { status: 400 });
+      return addCorsHeaders(res);
+    }
+
+    if (!category || !["News","Memes","Videos/Edits","Polls","Review","Gaming"].includes(category)) {
+      const res = NextResponse.json({ message: "Invalid category" }, { status: 400 });
+      return addCorsHeaders(res);
     }
 
     // --- STEP 3: PROCESSING ---
@@ -152,7 +158,7 @@ export async function POST(req) {
       category
     });
 
-    // Send newsletter email (optional)
+    // --- STEP 4: NEWSLETTER ---
     try {
       const subscribers = await Newsletter.find({}, "email");
       if (subscribers.length > 0) {
@@ -168,14 +174,13 @@ export async function POST(req) {
           subject: `📰 New Post from ${user.username}`,
           html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
                   <h2 style="margin-bottom:10px;">New Post from ${user.username}</h2>
-                  <p>${message.length>250?message.slice(0,250)+"...":message}</p>
-                  ${mediaUrl? `<img src="${mediaUrl}" alt="Post Media" style="max-width:100%;border-radius:8px;margin-bottom:15px;">` : ""}
+                  <p>${message.length > 250 ? message.slice(0, 250) + "..." : message}</p>
+                  ${mediaUrl ? `<img src="${mediaUrl}" alt="Post Media" style="max-width:100%;border-radius:8px;margin-bottom:15px;">` : ""}
                   <div style="margin-bottom:20px;">
                     <a href="${process.env.SITE_URL}/post/${newPost.slug || newPost._id}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 20px;background-color:#007bff;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;">Read Full Post</a>
                   </div>
                 </div>`
         };
-
         await transporter.sendMail(mailOptions);
       }
     } catch (emailErr) {
