@@ -458,12 +458,12 @@ export default function PostCard({
 
 
 				{/* ✅ Updated Message */}
-				
+
 				<h2
-  className={`font-bold ${isFeed ? "text-[1.3rem] leading-[1.22rem] mb-1" : "text-2xl mb-1.5"}`}
->
-  {post?.title}
-</h2>
+					className={`font-bold ${isFeed ? "text-[1.3rem] leading-[1.22rem] mb-1" : "text-2xl mb-1.5"}`}
+				>
+					{post?.title}
+				</h2>
 				<div className="text-gray-800 text-[12px] md:text-[16px] dark:text-gray-100 mb-1">
 					{isFeed ? (
 						isLongMessage && !showFullMessage ? (
@@ -507,17 +507,17 @@ export default function PostCard({
 						</>
 					) : post.mediaType?.startsWith("image") ? (
 						<div className="relative rounded-md mb-2 w-full h-auto cursor-pointer">
-  <Image
-    src={post.mediaUrl}
-    alt="post media"
-    loading="eager"
-    width={800}     // can be anything, Next.js will scale down
-    height={600}    // keeps natural ratio
-    sizes="(max-width: 768px) 90vw, (max-width: 1200px) 80vw, 60vw"
-   className={`w-full h-auto rounded-[10px] object-cover ${imgHeight}`}
-    onClick={() => openLightbox(post.mediaUrl, "image")}
-  />
-</div>
+							<Image
+								src={post.mediaUrl}
+								alt="post media"
+								loading="eager"
+								width={800}     // can be anything, Next.js will scale down
+								height={600}    // keeps natural ratio
+								sizes="(max-width: 768px) 90vw, (max-width: 1200px) 80vw, 60vw"
+								className={`w-full h-auto rounded-[10px] object-cover ${imgHeight}`}
+								onClick={() => openLightbox(post.mediaUrl, "image")}
+							/>
+						</div>
 					) : (
 						<video
 							src={post.mediaUrl}

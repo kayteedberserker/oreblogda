@@ -4,7 +4,9 @@ import Post from "@/app/models/PostModel";
 import { verifyToken } from "@/app/lib/auth";
 import Newsletter from "@/app/models/Newsletter";
 import nodemailer from "nodemailer";
+import MobileUser from "@/app/models/MobileUserModel";
 import generateSlug from "@/app/api/hooks/slugify";
+import
 
 // ----------------------
 // Helper to add CORS headers
@@ -91,33 +93,44 @@ export async function POST(req) {
 
   try {
     const token = req.cookies.get("token")?.value;
-    let user;
+    const body = await req.json();
+    const { 
+      title, message, mediaUrl, mediaType, hasPoll, 
+      pollMultiple, pollOptions, category, fingerprint 
+    } = body;
 
-    try {
-      user = verifyToken(token);
-    } catch {
-      const res = NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-      return addCorsHeaders(res);
+    let user = null;
+
+    // --- STEP 1: AUTHENTICATION ---
+    if (token) {
+      try {
+        user = verifyToken(token);
+      } catch (err) { /* Token invalid */ }
     }
 
-    const { title, message, mediaUrl, mediaType, hasPoll, pollMultiple, pollOptions, category } = await req.json();
-
-    if (!title || !title.trim()) {
-      const res = NextResponse.json({ message: "Title is required" }, { status: 400 });
-      return addCorsHeaders(res);
-    }
-    if (!message || !message.trim()) {
-      const res = NextResponse.json({ message: "Message is required" }, { status: 400 });
-      return addCorsHeaders(res);
-    }
-    if (!category || !["News","Memes","Videos/Edits","Polls","Review","Gaming"].includes(category)) {
-      const res = NextResponse.json({ message: "Invalid category" }, { status: 400 });
-      return addCorsHeaders(res);
+    // If no token, check if this is a mobile request via fingerprint
+    if (!user && fingerprint) {
+      const foundMobileUser = await MobileUser.findOne({ deviceId: fingerprint });
+      if (foundMobileUser) {
+        user = {
+          id: foundMobileUser._id,
+          username: foundMobileUser.username
+        };
+      }
     }
 
-    let shortMessage = title.length < 15 ? message.slice(0,10) : "link";
+    if (!user) {
+      return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+    }
+
+    // --- STEP 2: VALIDATION ---
+    if (!title?.trim() || !message?.trim()) {
+      return NextResponse.json({ message: "Title and Message required" }, { status: 400 });
+    }
+
+    // --- STEP 3: PROCESSING ---
+    let shortMessage = title.length < 15 ? message.slice(0, 10) : "link";
     let resolvedUrl = mediaUrl && mediaUrl.includes("tiktok") ? await resolveTikTokUrl(mediaUrl) : mediaUrl;
-
     const slug = generateSlug(`${title} ${shortMessage}`);
 
     const newPost = await Post.create({
@@ -127,16 +140,17 @@ export async function POST(req) {
       slug,
       message,
       mediaUrl: resolvedUrl || null,
-      mediaType: mediaUrl ? mediaType : mediaUrl?.includes("video") ? "video" : "image" || null,
+      mediaType: mediaUrl ? mediaType : (mediaUrl?.includes("video") ? "video" : "image"),
       likes: [],
       shares: 0,
       comments: [],
-      poll: hasPoll ? { pollMultiple: pollMultiple || false, options: pollOptions.map(opt => ({ text: opt.text, votes: 0 })) } : null,
+      poll: hasPoll ? { 
+        pollMultiple: pollMultiple || false, 
+        options: pollOptions.map(opt => ({ text: opt.text, votes: 0 })) 
+      } : null,
       voters: [],
       category
     });
-
-    await newPost.save();
 
     // Send newsletter email (optional)
     try {
