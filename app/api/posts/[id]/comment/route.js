@@ -26,14 +26,7 @@ export async function POST(req, { params }) {
     await connectDB();
     const { name, text, parentCommentId, fingerprint } = await req.json();
 
-    const newComment = {
-      _id: new mongoose.Types.ObjectId(),
-      authorId: fingerprint,
-      name,
-      text,
-      date: new Date(),
-      replies: []
-    };
+    
 
     const searchFilter = id.includes("-") ? { slug: id } : { _id: id };
     const post = await Post.findOne(searchFilter);
@@ -42,7 +35,14 @@ export async function POST(req, { params }) {
 
     let recipientId = post.authorId;
     let notificationType = "comment";
-
+    const newComment = {
+      _id: new mongoose.Types.ObjectId(),
+      authorId: recipientId,
+      name,
+      text,
+      date: new Date(),
+      replies: []
+    };
     if (!parentCommentId) {
       post.comments.unshift(newComment);
     } else {
