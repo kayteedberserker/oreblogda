@@ -1,10 +1,22 @@
-// backend: /models/MobileUserModel.js
 import mongoose from "mongoose";
 
-const MobileUserSchema = new mongoose.Schema({
-  deviceId: { type: String, required: true, unique: true },
-  username: { type: String, required: true },
-  createdAt: { type: Date, default: Date.now },
-});
+const mobileUserSchema = new mongoose.Schema(
+  {
+    deviceId: { type: String, required: true, unique: true }, // The fingerprint
+    username: { type: String, default: "Guest Author" },
+    pushToken: { type: String, default: null }, // 👈 Added: Stores the Expo Push Token
+    role: { type: String, default: "Author" }, 
+    description: { type: String, default: "" },
+    profilePic: {
+      url: { type: String, default: "" },
+      public_id: { type: String, default: "" },
+    },
+    lastActive: { type: Date, default: Date.now }, // 👈 Added: Good for engagement timing
+  },
+  { timestamps: true }
+);
 
-export default mongoose.models.MobileUser || mongoose.model("MobileUser", MobileUserSchema);
+// Correctly handle model re-compilation in Next.js
+const MobileUser = mongoose.models.MobileUsers || mongoose.model("MobileUsers", mobileUserSchema);
+
+export default MobileUser;

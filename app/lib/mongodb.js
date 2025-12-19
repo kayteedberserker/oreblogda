@@ -13,3 +13,4 @@ export default async function connectDB() {
     console.error("❌ MongoDB connection error:", error);
   }
 }
+// connectDB()

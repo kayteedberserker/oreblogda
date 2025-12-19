@@ -36,11 +36,22 @@ export async function GET(req) {
     const page = parseInt(searchParams.get("page")) || 1;
     const limit = parseInt(searchParams.get("limit")) || 30;
     const author = searchParams.get("author");
+    const authorId = searchParams.get("authorId"); // Support both param names just in case
     const category = searchParams.get("category");
     const skip = (page - 1) * limit;
 
     const query = {};
-    if (author) query.authorId = author;
+
+    // 1. Filter by Author if requested (Dashboard logic)
+    if (author || authorId) {
+      query.authorId = author || authorId;
+      // When checking a specific author's history, we look for ALL statuses
+      // so the dashboard can show "Pending" or "Rejected" states.
+    } else {
+      // 2. Public Feed logic: ONLY show approved posts
+      query.status = "approved";
+    }
+
     if (category) query.category = category;
 
     const posts = await Post.find(query)
@@ -99,6 +110,7 @@ export async function POST(req) {
     } = body;
 
     let user = null;
+    let isMobile = false;
 
     // --- STEP 1: AUTHENTICATION ---
     if (token) {
@@ -107,37 +119,38 @@ export async function POST(req) {
       } catch (err) { /* Token invalid */ }
     }
 
-    // If no token, check if this is a mobile request via fingerprint
     if (!user && fingerprint) {
       const foundMobileUser = await MobileUser.findOne({ deviceId: fingerprint });
       if (foundMobileUser) {
         user = {
-          id: foundMobileUser._id.toString(), // Convert ObjectId to string
+          id: foundMobileUser._id.toString(),
           username: foundMobileUser.username
         };
+        isMobile = true; // Mark as mobile for pending status & rate limiting
       }
     }
 
     if (!user) {
-      const res = NextResponse.json({ message: "Unauthorized" }, { status: 401 });
-      return addCorsHeaders(res);
+      return addCorsHeaders(NextResponse.json({ message: "Unauthorized" }, { status: 401 }));
     }
+    // --- STEP 2: ONCE-A-DAY RATE LIMIT (Only for Mobile) ---
+    if (isMobile) {
+      const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const existingPost = await Post.findOne({
+        authorId: user.id,
+        createdAt: { $gte: last24Hours }
+      });
 
-    // --- STEP 2: VALIDATION ---
-    if (!title?.trim() || !message?.trim()) {
-      const res = NextResponse.json({ message: "Title and Message required" }, { status: 400 });
-      return addCorsHeaders(res);
-    }
-
-    if (!category || !["News","Memes","Videos/Edits","Polls","Review","Gaming"].includes(category)) {
-      const res = NextResponse.json({ message: "Invalid category" }, { status: 400 });
-      return addCorsHeaders(res);
+      if (existingPost) {
+        return addCorsHeaders(NextResponse.json({ 
+          message: "You can only post once every 24 hours.",
+          status: "limited" 
+        }, { status: 429 }));
+      }
     }
 
     // --- STEP 3: PROCESSING ---
-    let shortMessage = title.length < 15 ? message.slice(0, 10) : "link";
-    let resolvedUrl = mediaUrl && mediaUrl.includes("tiktok") ? await resolveTikTokUrl(mediaUrl) : mediaUrl;
-    const slug = generateSlug(`${title} ${shortMessage}`);
+    const slug = generateSlug(`${title} ${title.length < 15 ? message.slice(0, 10) : "link"}`);
 
     const newPost = await Post.create({
       authorId: user.id,
@@ -145,54 +158,53 @@ export async function POST(req) {
       title,
       slug,
       message,
-      mediaUrl: resolvedUrl || null,
-      mediaType: mediaUrl ? mediaType : (mediaUrl?.includes("video") ? "video" : "image"),
-      likes: [],
-      shares: 0,
-      comments: [],
+      mediaUrl: mediaUrl || null,
+      mediaType: mediaUrl ? mediaType : "image",
+      status: isMobile ? "pending" : "approved", // 👈 Web = Approved, Mobile = Pending
       poll: hasPoll ? { 
         pollMultiple: pollMultiple || false, 
         options: pollOptions.map(opt => ({ text: opt.text, votes: 0 })) 
       } : null,
-      voters: [],
       category
     });
 
-    // --- STEP 4: NEWSLETTER ---
-    try {
-      const subscribers = await Newsletter.find({}, "email");
-      if (subscribers.length > 0) {
-        const transporter = nodemailer.createTransport({
-          service: "gmail",
-          auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
-        });
-
-        const mailOptions = {
-          from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
-          to: "Subscribers",
-          bcc: subscribers.map(s => s.email),
-          subject: `📰 New Post from ${user.username}`,
-          html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
-                  <h2 style="margin-bottom:10px;">New Post from ${user.username}</h2>
-                  <p>${message.length > 250 ? message.slice(0, 250) + "..." : message}</p>
-                  ${mediaUrl ? `<img src="${mediaUrl}" alt="Post Media" style="max-width:100%;border-radius:8px;margin-bottom:15px;">` : ""}
-                  <div style="margin-bottom:20px;">
-                    <a href="${process.env.SITE_URL}/post/${newPost.slug || newPost._id}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 20px;background-color:#007bff;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;">Read Full Post</a>
-                  </div>
-                </div>`
-        };
-        await transporter.sendMail(mailOptions);
-      }
-    } catch (emailErr) {
-      console.error("Newsletter email error:", emailErr);
-    }
-
-    const res = NextResponse.json({ message: "Post created successfully", post: newPost }, { status: 201 });
-    return addCorsHeaders(res);
+    return addCorsHeaders(NextResponse.json({ 
+      message: isMobile ? "Post submitted for approval" : "Post created successfully", 
+      post: newPost 
+    }, { status: 201 }));
 
   } catch (err) {
     console.error("POST /api/posts error:", err);
-    const res = NextResponse.json({ message: "Server error", error: err.message }, { status: 500 });
-    return addCorsHeaders(res);
+    return addCorsHeaders(NextResponse.json({ message: "Server error" }, { status: 500 }));
   }
 }
+
+
+// --- STEP 4: NEWSLETTER ---
+    // try {
+    //   const subscribers = await Newsletter.find({}, "email");
+    //   if (subscribers.length > 0) {
+    //     const transporter = nodemailer.createTransport({
+    //       service: "gmail",
+    //       auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
+    //     });
+
+    //     const mailOptions = {
+    //       from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
+    //       to: "Subscribers",
+    //       bcc: subscribers.map(s => s.email),
+    //       subject: `📰 New Post from ${user.username}`,
+    //       html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
+    //               <h2 style="margin-bottom:10px;">New Post from ${user.username}</h2>
+    //               <p>${message.length > 250 ? message.slice(0, 250) + "..." : message}</p>
+    //               ${mediaUrl ? `<img src="${mediaUrl}" alt="Post Media" style="max-width:100%;border-radius:8px;margin-bottom:15px;">` : ""}
+    //               <div style="margin-bottom:20px;">
+    //                 <a href="${process.env.SITE_URL}/post/${newPost.slug || newPost._id}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 20px;background-color:#007bff;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;">Read Full Post</a>
+    //               </div>
+    //             </div>`
+    //     };
+    //     await transporter.sendMail(mailOptions);
+    //   }
+    // } catch (emailErr) {
+    //   console.error("Newsletter email error:", emailErr);
+    // }
