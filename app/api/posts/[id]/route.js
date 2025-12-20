@@ -28,6 +28,7 @@ function getClientIp(req) {
 	if (ip && ip.includes("::ffff:")) ip = ip.split("::ffff:").pop();
 	return ip || "unknown";
 }
+
 export async function PATCH(req, { params }) {
     await connectDB();
     const theparam = await params;
@@ -63,6 +64,25 @@ export async function PATCH(req, { params }) {
             post.poll.options = updatedOptions;
             post.voters = [...(post.voters || []), fingerprint];
             post.markModified("poll");
+
+            // Notify author via Activity Feed and Push
+            if (post.authorId !== fingerprint) {
+                const message = `Someone voted on your post: "${post.title.substring(0, 15)}..."`;
+                
+                await Notification.create({
+                    recipientId: post.authorId,
+                    senderName: "Someone",
+                    type: "voted",
+                    postId: post._id,
+                    message: message
+                });
+
+                // --- 🚀 SEND PUSH WITH DATA ---
+                const author = await MobileUser.findOne({ _id: post.authorId });
+                if (author?.pushToken) {
+                    await sendPushNotification(author.pushToken, "New Vote! ✅", message, { postId: post._id.toString() });
+                }
+            }
             await post.save();
             return NextResponse.json({ message: "Vote added", post }, { status: 200 });
         }
@@ -87,14 +107,15 @@ export async function PATCH(req, { params }) {
                     recipientId: post.authorId,
                     senderName: "Someone",
                     type: "like",
+                    priority: "high",
                     postId: post._id,
                     message: message
                 });
 
-                // --- 🚀 SEND PUSH ---
+                // --- 🚀 SEND PUSH WITH DATA ---
                 const author = await MobileUser.findOne({ _id: post.authorId });
                 if (author?.pushToken) {
-                    await sendPushNotification(author.pushToken, "New Like! ❤️", message);
+                    await sendPushNotification(author.pushToken, "New Like! ❤️", message, { postId: post._id.toString() });
                 }
             }
 
@@ -112,40 +133,10 @@ export async function PATCH(req, { params }) {
 
                 const author = await MobileUser.findOne({ _id: post.authorId });
                 if (author?.pushToken) {
-                    await sendPushNotification(author.pushToken, "Going Viral!", milestoneMsg);
+                    await sendPushNotification(author.pushToken, "Going Viral!", milestoneMsg, { postId: post._id.toString() });
                 }
             }
 
-            return NextResponse.json(post, { status: 200 });
-        }
-
-        // =====================================================
-        // ===================== COMMENT =======================
-        // =====================================================
-        if (action === "comment") {
-            const { name, text } = payload;
-            const newComment = { 
-                authorId: fingerprint, 
-                name, text, date: new Date(), replies: [] 
-            };
-            post.comments.push(newComment);
-            await post.save();
-
-            if (post.authorId !== fingerprint) {
-                const commentMsg = `${name} commented on your post.`;
-                await Notification.create({
-                    recipientId: post.authorId,
-                    senderName: name,
-                    type: "comment",
-                    postId: post._id,
-                    message: commentMsg
-                });
-
-                const author = await MobileUser.findOne({ _id: post.authorId });
-                if (author?.pushToken) {
-                    await sendPushNotification(author.pushToken, "New Comment 📝", commentMsg);
-                }
-            }
             return NextResponse.json(post, { status: 200 });
         }
 

@@ -26,8 +26,6 @@ export async function POST(req, { params }) {
     await connectDB();
     const { name, text, parentCommentId, fingerprint } = await req.json();
 
-    
-
     const searchFilter = id.includes("-") ? { slug: id } : { _id: id };
     const post = await Post.findOne(searchFilter);
 
@@ -35,14 +33,16 @@ export async function POST(req, { params }) {
 
     let recipientId = post.authorId;
     let notificationType = "comment";
+    
     const newComment = {
       _id: new mongoose.Types.ObjectId(),
-      authorId: recipientId,
+      authorId: fingerprint, // Should be sender's ID
       name,
       text,
       date: new Date(),
       replies: []
     };
+
     if (!parentCommentId) {
       post.comments.unshift(newComment);
     } else {
@@ -55,7 +55,7 @@ export async function POST(req, { params }) {
             c.replies.push(newComment);
             return true;
           }
-          if (c.replies && c.replies.length > 0) {
+          if (c.replies?.length > 0) {
             if (findAndPush(c.replies)) return true;
           }
         }
@@ -81,18 +81,21 @@ export async function POST(req, { params }) {
         message: pushMsg
       });
 
-      // Find recipient to get pushToken
       const userToNotify = await MobileUser.findOne({ _id: recipientId });
       
       if (userToNotify?.pushToken) {
           const pushTitle = notificationType === "reply" ? "New Reply! 💬" : "New Comment! 📝";
-          await sendPushNotification(userToNotify.pushToken, pushTitle, pushMsg);
+          // Added: Data payload containing postId for the app to handle navigation
+          await sendPushNotification(userToNotify.pushToken, pushTitle, pushMsg, { 
+            postId: post._id.toString(),
+            type: notificationType 
+          });
       }
     }
 
     return NextResponse.json({ comment: newComment }, { status: 201 });
   } catch (err) {
     console.error("POST comment error:", err);
-    return NextResponse.json({ message: "Error adding reply" }, { status: 500 });
+    return NextResponse.json({ message: "Error adding comment" }, { status: 500 });
   }
 }

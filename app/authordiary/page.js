@@ -56,24 +56,33 @@ const Dashboard = () => {
 
     setUploading(true);
     try {
-      const arrayBuffer = await file.arrayBuffer();
+      // 1. Create FormData (Required for req.formData() on the server)
+      const formData = new FormData();
+      formData.append("file", file); // Use the key "file" to match your backend
+
       const res = await fetch("/api/upload", {
         method: "POST",
-        body: arrayBuffer,
+        // 2. Pass the formData as the body
+        // 3. DO NOT set headers, the browser will do it automatically
+        body: formData, 
       });
 
       const data = await res.json();
-      if (data.url) {
+      
+      if (res.ok && data.url) {
         setMediaUrl(data.url);
         setMediaType(file.type.startsWith("video") ? "video" : "image");
         toast.success("File uploaded successfully!");
-      } else toast.error("Upload failed.");
+      } else {
+        toast.error(data.message || "Upload failed.");
+      }
     } catch (err) {
+      console.error(err);
       toast.error("Something went wrong during upload.");
     } finally {
       setUploading(false);
     }
-  };
+};
 
   // --- Create Post ---
   const handleSubmit = async (e) => {
