@@ -31,22 +31,48 @@ function getClientIp(req) {
 
 export async function PATCH(req, { params }) {
     await connectDB();
-    const theparam = await params;
-    const { id } = theparam;
-
+    const resolvedParams = await params; 
+    const { id } = resolvedParams;
+    console.log(id);
+    
     try {
         const { action, payload, fingerprint } = await req.json();
         const post = await Post.findById(id);
-        
+
         if (!post) {
             return NextResponse.json({ message: "Post not found" }, { status: 404 });
         }
 
         const ip = getClientIp(req);
 
-        // =====================================================
-        // ======================= VOTE ========================
-        // =====================================================
+        /* ===========================
+           BOT CHECK FUNCTION
+        =========================== */
+        const isBotRequest = async (req, ip) => {
+            if (!ip) return false;
+            const botKeywords = [
+                "facebookexternalhit", "Facebot", "Googlebot", "Bingbot", "Twitterbot",
+                "LinkedInBot", "Slackbot", "Discordbot", "Pingdom", "AhrefsBot", "SemrushBot",
+                "MJ12bot", "Baiduspider", "YandexBot"
+            ];
+            const userAgent = req.headers.get("user-agent") || "";
+            const isBotUA = botKeywords.some(bot => userAgent.toLowerCase().includes(bot.toLowerCase()));
+            const botIPPrefixes = [
+                "66.102.", "66.249.", "64.233.", "34.", "65.0", "74.125.", "142.250.", "172.217.",
+                "209.85.", "216.58.", "31.13.", "66.220.", "69.171.", "15.206.", "52.66.", "13.",
+                "43.", "3.", "157.240.", "173.252.", "18.", "17.", "::1",
+                "198.7.237.195", "198.7.237.196", "198.7.237.197", "102.67.30.228", "198.7.237.198",
+                "204.", "198.7.237.199", "137.184.", "50.18.", "54.", "35.", "23.27", "13.5", "196.49.26.134"
+            ];
+            const isBotIP = botIPPrefixes.some(prefix => ip.startsWith(prefix));
+            return isBotUA || isBotIP;
+        };
+
+        const isBot = await isBotRequest(req, ip);
+
+        /* ===========================
+           VOTE LOGIC
+        =========================== */
         if (action === "vote") {
             const { selectedOptions } = payload;
             if (!post.poll || !Array.isArray(post.poll.options)) {
@@ -55,41 +81,42 @@ export async function PATCH(req, { params }) {
             if (post.voters?.includes(fingerprint)) {
                 return NextResponse.json({ message: "Already voted" }, { status: 400 });
             }
-            const updatedOptions = post.poll.options.map((option, index) => {
+
+            post.poll.options = post.poll.options.map((option, index) => {
                 const o = option.toObject ? option.toObject() : option;
                 return selectedOptions.includes(index)
                     ? { ...o, votes: (o.votes || 0) + 1 }
                     : o;
             });
-            post.poll.options = updatedOptions;
+
             post.voters = [...(post.voters || []), fingerprint];
             post.markModified("poll");
 
-            // Notify author via Activity Feed and Push
+            // Notify author if not voting on own post
             if (post.authorId !== fingerprint) {
                 const message = `Someone voted on your post: "${post.title.substring(0, 15)}..."`;
-                
+
                 await Notification.create({
                     recipientId: post.authorId,
                     senderName: "Someone",
-                    type: "voted",
+                    type: "like",
                     postId: post._id,
-                    message: message
+                    message
                 });
 
-                // --- 🚀 SEND PUSH WITH DATA ---
                 const author = await MobileUser.findOne({ _id: post.authorId });
                 if (author?.pushToken) {
                     await sendPushNotification(author.pushToken, "New Vote! ✅", message, { postId: post._id.toString() });
                 }
             }
+
             await post.save();
             return NextResponse.json({ message: "Vote added", post }, { status: 200 });
         }
 
-        // =====================================================
-        // ======================= LIKE ========================
-        // =====================================================
+        /* ===========================
+           LIKE LOGIC
+        =========================== */
         if (action === "like") {
             const alreadyLiked = post.likes.some(l => l.fingerprint === fingerprint);
             if (alreadyLiked) {
@@ -99,30 +126,30 @@ export async function PATCH(req, { params }) {
             post.likes.push({ fingerprint, date: new Date() });
             await post.save();
 
-            // Notify author via Activity Feed and Push
+            // Notify author if not liking own post
             if (post.authorId !== fingerprint) {
                 const message = `Someone liked your post: "${post.title.substring(0, 15)}..."`;
-                
+
                 await Notification.create({
                     recipientId: post.authorId,
                     senderName: "Someone",
                     type: "like",
                     priority: "high",
                     postId: post._id,
-                    message: message
+                    message
                 });
 
-                // --- 🚀 SEND PUSH WITH DATA ---
                 const author = await MobileUser.findOne({ _id: post.authorId });
                 if (author?.pushToken) {
                     await sendPushNotification(author.pushToken, "New Like! ❤️", message, { postId: post._id.toString() });
                 }
             }
 
-            // Milestone Algorithm
+            // Milestones
             const milestones = [5, 10, 25, 50, 100];
             if (milestones.includes(post.likes.length)) {
                 const milestoneMsg = `🔥 Trending! Your post reached ${post.likes.length} likes!`;
+
                 await Notification.create({
                     recipientId: post.authorId,
                     senderName: "System",
@@ -140,50 +167,44 @@ export async function PATCH(req, { params }) {
             return NextResponse.json(post, { status: 200 });
         }
 
-        // =====================================================
-        // ======================= SHARE =======================
-        // =====================================================
+        /* ===========================
+           SHARE LOGIC
+        =========================== */
         if (action === "share") {
             post.shares += 1;
             await post.save();
             return NextResponse.json(post, { status: 200 });
         }
 
-        // =====================================================
-        // ======================== VIEW =======================
-        // =====================================================
+        /* ===========================
+           VIEW LOGIC
+        =========================== */
         if (action === "view") {
             post.viewsIPs = post.viewsIPs || [];
-            const isBotRequest = async (req, ip) => {
-                if (!ip) return false;
-                const botKeywords = ["facebookexternalhit", "Facebot", "Googlebot", "Bingbot", "Twitterbot", "LinkedInBot", "Slackbot", "Discordbot", "Pingdom", "AhrefsBot", "SemrushBot", "MJ12bot", "Baiduspider", "YandexBot"];
-                const userAgent = req.headers.get("user-agent") || "";
-                const isBotUA = botKeywords.some(bot => userAgent.toLowerCase().includes(bot.toLowerCase()));
-                const botIPPrefixes = ["66.102.", "66.249.", "64.233.", "34.", "65.0", "74.125.", "142.250.", "172.217.", "209.85.", "216.58.", "31.13.", "66.220.", "69.171.", "15.206.", "52.66.", "13.", "43.", "3.", "157.240.", "173.252.", "18.", "17.", "::1", "198.7.237.195", "198.7.237.196", "198.7.237.197", "102.67.30.228","198.7.237.198", "204.", "198.7.237.199", "137.184.", " 50.18.", "54.", "35.", "23.27", "13.5", "196.49.26.134"];
-                const isBotIP = botIPPrefixes.some(prefix => ip.startsWith(prefix));
-                return isBotUA || isBotIP;
-            };
-
-            const isBot = await isBotRequest(req, ip);
             let country = "Unknown", city = "Unknown", timezone = "";
+
             try {
                 const response = await fetch(`https://ipinfo.io/${ip}/json`);
                 const data = await response.json();
                 country = data.country || "Unknown";
                 city = data.city || "Unknown";
                 timezone = data.timezone || "Unknown";
-            } catch (err) { console.log("Geo lookup failed:", err); }
+            } catch (err) {
+                console.log("Geo lookup failed:", err);
+            }
 
-            if (!isBot && !post.viewsIPs.includes(fingerprint) && fingerprint != null) {
+            if (!isBot && fingerprint && !post.viewsIPs.includes(fingerprint)) {
                 post.views += 1;
                 post.viewsIPs.push(fingerprint);
+
                 post.viewsData = post.viewsData || [];
                 post.viewsData.push({
                     visitorId: fingerprint,
                     ip, country, city, timezone,
-                    timestamp: new Date(),
+                    timestamp: new Date()
                 });
             }
+
             await post.save();
             return NextResponse.json(post, { status: 200 });
         }
@@ -195,6 +216,7 @@ export async function PATCH(req, { params }) {
         return NextResponse.json({ message: "Server error", error: err.message }, { status: 500 });
     }
 }
+
 
 
 

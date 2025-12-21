@@ -169,35 +169,6 @@ export default function PostCard({
 	};
 
 
-	const handleAddComment = async () => {
-		if (!commentText.trim() || !commentName.trim()) {
-			toast.error("Please enter your name and comment");
-			return;
-		}
-
-		try {
-			const res = await fetch(`/api/posts/${post._id}`, {
-				method: "PATCH",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					action: "comment",
-					payload: { name: commentName, text: commentText },
-					fingerprint: await getFingerprint()
-				}),
-			});
-
-			const data = await res.json();
-			refreshPosts({ ...post, comments: data.comments });
-
-			setCommentText("");
-			setCommentName("");
-			setShowCommentInput(false);
-			toast.success("Comment added!");
-		} catch (err) {
-			toast.error("Failed to comment");
-		}
-	};
-
 
 	const [author, setAuthor] = useState({ name: post.authorName, image: null });
 
@@ -569,10 +540,7 @@ export default function PostCard({
 							</>
 						)}
 					</div>
-
-					<motion.button
-						name="Open comment"
-						onClick={() => setShowCommentInput((prev) => !prev)}
+					<motion.div
 						whileHover={{ scale: 1.05 }}
 						className="flex items-center space-x-1"
 					>
@@ -585,7 +553,7 @@ export default function PostCard({
 						>
 							{totalComments}
 						</motion.span>
-					</motion.button>
+					</motion.div>
 
 					<motion.button
 						name="share"

@@ -3,8 +3,11 @@ import UserModel from "@/app/models/UserModel";
 import MobileUserModel from "@/app/models/MobileUserModel"; // 👈 Import the mobile model
 
 export async function GET(req, { params }) {
+    
+    
     const resolvedParams = await params; 
     const { id } = resolvedParams;
+    
 
     try {
         await connectDB();

@@ -21,75 +21,85 @@ import MobileUser from "@/app/models/MobileUserModel"; // 👈 Added
 import { sendPushNotification } from "@/app/lib/pushNotifications"; // 👈 Added
 
 export async function POST(req, { params }) {
-  const { id } = await params;
+  await connectDB();
+  const resolvedParams = await params;
+  const { id } = resolvedParams;
+
   try {
-    await connectDB();
-    const { name, text, parentCommentId, fingerprint } = await req.json();
+    const { name, text, parentCommentId, fingerprint, userId } = await req.json();
+
+    const deviceId = fingerprint;
+    const mobileUserId =
+      userId && mongoose.Types.ObjectId.isValid(userId)
+        ? new mongoose.Types.ObjectId(userId)
+        : null;
 
     const searchFilter = id.includes("-") ? { slug: id } : { _id: id };
     const post = await Post.findOne(searchFilter);
+    if (!post) {
+      return NextResponse.json({ message: "Post not found" }, { status: 404 });
+    }
 
-    if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
-
-    let recipientId = post.authorId;
-    let notificationType = "comment";
-    
     const newComment = {
       _id: new mongoose.Types.ObjectId(),
-      authorId: fingerprint, // Should be sender's ID
+      authorFingerprint: deviceId,
+      authorId: deviceId, // backward support
+      authorUserId: mobileUserId || null,
       name,
       text,
       date: new Date(),
       replies: []
     };
 
+    let recipientUserId = post.authorUserId;
+    let type = "comment";
+
     if (!parentCommentId) {
       post.comments.unshift(newComment);
     } else {
-      notificationType = "reply";
-      const findAndPush = (comments) => {
-        for (let c of comments) {
+      type = "reply";
+
+      const insertReply = comments => {
+        for (const c of comments) {
           if (c._id.toString() === parentCommentId) {
-            recipientId = c.authorId;
-            if (!c.replies) c.replies = [];
+            recipientUserId = c.authorUserId;
             c.replies.push(newComment);
             return true;
           }
-          if (c.replies?.length > 0) {
-            if (findAndPush(c.replies)) return true;
-          }
+          if (c.replies?.length && insertReply(c.replies)) return true;
         }
         return false;
       };
-      findAndPush(post.comments);
+
+      insertReply(post.comments);
       post.markModified("comments");
     }
 
     await post.save();
 
-    // --- 🔔 TRIGGER NOTIFICATION & PUSH ---
-    if (recipientId !== fingerprint) {
-      const pushMsg = notificationType === "reply" 
-          ? `${name} replied to your comment.` 
-          : `${name} commented on your post: "${post.title.substring(0, 20)}..."`;
+    // 🔔 Notify only MobileUsers
+    if (recipientUserId && recipientUserId.toString() !== mobileUserId?.toString()) {
+      const msg =
+        type === "reply"
+          ? `${name} replied to your comment.`
+          : `${name} commented on your post: "${post.title.slice(0, 20)}..."`;
 
       await Notification.create({
-        recipientId,
+        recipientId: recipientUserId,
         senderName: name,
-        type: notificationType,
+        type,
         postId: post._id,
-        message: pushMsg
+        message: msg
       });
 
-      const userToNotify = await MobileUser.findOne({ _id: recipientId });
-      
-      if (userToNotify?.pushToken) {
-          const pushTitle = notificationType === "reply" ? "New Reply! 💬" : "New Comment! 📝";
-          // Added: Data payload containing postId for the app to handle navigation
-          await sendPushNotification(userToNotify.pushToken, pushTitle, pushMsg, { 
-            postId: post._id.toString(),
-            type: notificationType 
-          });
+      const user = await MobileUser.findById(recipientUserId);
+      if (user?.pushToken) {
+        await sendPushNotification(
+          user.pushToken,
+          type === "reply" ? "New Reply 💬" : "New Comment 📝",
+          msg,
+          { postId: post._id.toString(), type }
+        );
       }
     }
 
