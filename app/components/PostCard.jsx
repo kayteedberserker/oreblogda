@@ -175,7 +175,7 @@ export default function PostCard({
 	useEffect(() => {
 		const fetchAuthor = async () => {
 			try {
-				const res = await fetch(`/api/users/${post.authorId}`);
+				const res = await fetch(`/api/users/${post.authorUserId || post.authorId}`);
 				if (!res.ok) throw new Error("Failed to fetch author");
 				const data = await res.json();
 				setAuthor({ name: data.name || post.authorName, image: data.user?.profilePic?.url });
@@ -217,90 +217,107 @@ export default function PostCard({
 
 	// ✅ --- UPDATED MESSAGE SECTION ---
 	const parseMessageSections = (msg) => {
-		const regex = /\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[br\]/gs;
+    // Added [source="(.*?)" text:(.*?)] to the regex
+    const regex = /\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[source="(.*?)" text:(.*?)\]|\[br\]/gs;
 
-		const parts = [];
-		let lastIndex = 0;
-		let match;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
 
-		while ((match = regex.exec(msg)) !== null) {
-			// Add text before the tag
-			if (match.index > lastIndex) {
-				parts.push({ type: "text", content: msg.slice(lastIndex, match.index) });
-			}
+    while ((match = regex.exec(msg)) !== null) {
+        if (match.index > lastIndex) {
+            parts.push({ type: "text", content: msg.slice(lastIndex, match.index) });
+        }
 
-			// Determine which tag matched
-			if (match[1] !== undefined) {
-				parts.push({ type: "section", content: match[1] });
-			} else if (match[2] !== undefined) {
-				parts.push({ type: "heading", content: match[2] });
-			} else if (match[3] !== undefined) {
-				parts.push({ type: "listItem", content: match[3] });
-			} else {
-				parts.push({ type: "br" }); // [br]
-			}
+        if (match[1] !== undefined) {
+            parts.push({ type: "section", content: match[1] });
+        } else if (match[2] !== undefined) {
+            parts.push({ type: "heading", content: match[2] });
+        } else if (match[3] !== undefined) {
+            parts.push({ type: "listItem", content: match[3] });
+        } else if (match[4] !== undefined) {
+            // match[4] is the URL, match[5] is the text
+            parts.push({ type: "link", url: match[4], content: match[5] });
+        } else {
+            parts.push({ type: "br" });
+        }
 
-			lastIndex = regex.lastIndex;
-		}
+        lastIndex = regex.lastIndex;
+    }
 
-		// Add remaining text
-		if (lastIndex < msg.length) {
-			parts.push({ type: "text", content: msg.slice(lastIndex) });
-		}
+    if (lastIndex < msg.length) {
+        parts.push({ type: "text", content: msg.slice(lastIndex) });
+    }
 
-		return parts;
-	};
+    return parts;
+};
 
 
 
 	const renderMessage = () => {
-		const maxLength = 150;
+    const maxLength = 150;
 
-		if (isFeed) {
-			const plainText = post.message.replace(/\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[br\]/gs, "");
-			const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
-			return <span>{truncated}</span>;
-		}
+    if (isFeed) {
+        // Updated the replace regex to include the source tag for the feed view
+        const plainText = post.message.replace(/\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[source=".*?" text:.*?\]|\[br\]/gs, "");
+        const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
+        return <span style={{ whiteSpace: 'pre-wrap' }}>{truncated}</span>;
+    }
 
-		const parts = parseMessageSections(post.message);
+    const parts = parseMessageSections(post.message);
 
-		return parts.map((p, i) => {
-			switch (p.type) {
-				case "text":
-					return <span key={i}>{p.content}</span>;
+    return parts.map((p, i) => {
+        switch (p.type) {
+            case "text":
+                // Added whiteSpace style to respect your "Enter" keys
+                return <span key={i} style={{ whiteSpace: 'pre-wrap' }}>{p.content}</span>;
 
-				case "br":
-					return <br key={i} />;
+            case "br":
+                return <br key={i} />;
 
-				case "heading":
-					return (
-						<h2 key={i} className="text-xl font-bold my-2 ">
-							{p.content}
-						</h2>
-					);
+            case "link":
+                return (
+                    <a 
+                        key={i} 
+                        href={p.url} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="text-blue-500 underline font-bold"
+                    >
+                        {p.content}
+                    </a>
+                );
 
-				case "listItem":
-					return (
-						<li key={i} className="ml-24 md:ml-[170px] lg:ml-[290px] list-disc">
-							{p.content}
-						</li>
-					);
+            case "heading":
+                return (
+                    <h2 key={i} className="text-xl font-bold my-2 ">
+                        {p.content}
+                    </h2>
+                );
 
-				case "section":
-					return (
-						<div
-							key={i}
-							className="bg-gray-100 dark:bg-gray-700 p-2 my-2 w-fit max-w-[70%] ml-20 md:ml-[150px] lg:ml-[270px] rounded-md border-l-4 border-blue-500"
-						>
-							{p.content}
-						</div>
-					);
+            case "listItem":
+                return (
+                    <li key={i} className="ml-24 md:ml-[170px] lg:ml-[290px] list-disc">
+                        {p.content}
+                    </li>
+                );
 
-				default:
-					return null;
-			}
-		});
-	};
+            case "section":
+                return (
+                    <div
+                        key={i}
+                        className="bg-gray-100 dark:bg-gray-700 p-2 my-2 w-fit max-w-[70%] mx-auto md:ml-[150px] lg:ml-[270px] rounded-md border-l-4 border-blue-500"
+                        style={{ whiteSpace: 'pre-wrap' }}
+                    >
+                        {p.content}
+                    </div>
+                );
+
+            default:
+                return null;
+        }
+    });
+};
 
 	const [idLink, setidLink] = useState()
 	useEffect(() => {

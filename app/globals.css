@@ -31,7 +31,14 @@ html {
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
+div, span, p {
+  white-space: pre-wrap;
+}
 
+/* If you are using NativeWind/Tailwind, this is often safer */
+.text-base {
+  white-space: pre-wrap;
+}
 .postCardImg {
   background-position: center;
   background-repeat: no-repeat;
