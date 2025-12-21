@@ -151,9 +151,11 @@ export async function POST(req) {
 
     // --- STEP 3: PROCESSING ---
     const slug = generateSlug(`${title} ${title.length < 15 ? message.slice(0, 10) : "link"}`);
-
+    console.log("reached here");
+    
     const newPost = await Post.create({
-      authorId: user.id,
+      authorUserId: user.id,
+      authorId: fingerprint,
       authorName: user.username,
       title,
       slug,

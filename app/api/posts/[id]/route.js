@@ -33,7 +33,6 @@ export async function PATCH(req, { params }) {
     await connectDB();
     const resolvedParams = await params; 
     const { id } = resolvedParams;
-    console.log(id);
     
     try {
         const { action, payload, fingerprint } = await req.json();
@@ -104,7 +103,7 @@ export async function PATCH(req, { params }) {
                     message
                 });
 
-                const author = await MobileUser.findOne({ _id: post.authorId });
+                const author = await MobileUser.findOne({ _id: post.authorUserId });
                 if (author?.pushToken) {
                     await sendPushNotification(author.pushToken, "New Vote! ✅", message, { postId: post._id.toString() });
                 }
@@ -139,7 +138,7 @@ export async function PATCH(req, { params }) {
                     message
                 });
 
-                const author = await MobileUser.findOne({ _id: post.authorId });
+                const author = await MobileUser.findOne({ deviceId: post.authorId });
                 if (author?.pushToken) {
                     await sendPushNotification(author.pushToken, "New Like! ❤️", message, { postId: post._id.toString() });
                 }
@@ -158,7 +157,7 @@ export async function PATCH(req, { params }) {
                     message: milestoneMsg
                 });
 
-                const author = await MobileUser.findOne({ _id: post.authorId });
+                const author = await MobileUser.findOne({ deviceId: post.authorId });
                 if (author?.pushToken) {
                     await sendPushNotification(author.pushToken, "Going Viral!", milestoneMsg, { postId: post._id.toString() });
                 }

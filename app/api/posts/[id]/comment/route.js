@@ -29,13 +29,15 @@ export async function POST(req, { params }) {
     const { name, text, parentCommentId, fingerprint, userId } = await req.json();
 
     const deviceId = fingerprint;
-    const mobileUserId =
-      userId && mongoose.Types.ObjectId.isValid(userId)
-        ? new mongoose.Types.ObjectId(userId)
-        : null;
-
+    let mobileUserId
+    const foundMobileUser = await MobileUser.findOne({ deviceId: fingerprint });
+    if (foundMobileUser) {
+      mobileUserId = foundMobileUser._id;
+    }
     const searchFilter = id.includes("-") ? { slug: id } : { _id: id };
     const post = await Post.findOne(searchFilter);
+    
+
     if (!post) {
       return NextResponse.json({ message: "Post not found" }, { status: 404 });
     }
@@ -44,21 +46,18 @@ export async function POST(req, { params }) {
       _id: new mongoose.Types.ObjectId(),
       authorFingerprint: deviceId,
       authorId: deviceId, // backward support
-      authorUserId: mobileUserId || null,
+      authorUserId: mobileUserId,
       name,
       text,
       date: new Date(),
       replies: []
     };
-
     let recipientUserId = post.authorUserId;
     let type = "comment";
-
     if (!parentCommentId) {
       post.comments.unshift(newComment);
     } else {
       type = "reply";
-
       const insertReply = comments => {
         for (const c of comments) {
           if (c._id.toString() === parentCommentId) {
@@ -78,6 +77,7 @@ export async function POST(req, { params }) {
     await post.save();
 
     // 🔔 Notify only MobileUsers
+    
     if (recipientUserId && recipientUserId.toString() !== mobileUserId?.toString()) {
       const msg =
         type === "reply"

@@ -9,13 +9,10 @@ const commentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     default: () => new mongoose.Types.ObjectId()
   },
-
   // NEW (preferred)
   authorFingerprint: { type: String },
-
   // OLD (backward compatibility)
   authorId: { type: String },
-
   // Mobile-only (for notifications)
   authorUserId: {
     type: mongoose.Schema.Types.ObjectId,
