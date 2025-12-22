@@ -44,7 +44,7 @@ export async function GET(req) {
 
     // 1. Filter by Author if requested (Dashboard logic)
     if (author || authorId) {
-      query.authorId = author || authorId;
+      query.authorUserId = author || authorId;
       // When checking a specific author's history, we look for ALL statuses
       // so the dashboard can show "Pending" or "Rejected" states.
     } else {
@@ -53,7 +53,7 @@ export async function GET(req) {
     }
 
     if (category) query.category = category;
-
+    
     const posts = await Post.find(query)
       .sort({ createdAt: -1 })
       .skip(skip)

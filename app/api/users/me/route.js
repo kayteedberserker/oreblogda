@@ -12,10 +12,10 @@ export async function GET(req) {
   try {
     // Find or Create the user so the profile always exists
     let user = await MobileUserModel.findOne({ deviceId: fingerprint });
-    
     if (!user) {
+    let randNum = Math.floor(Math.random() * 10000000);
       // If they don't exist in DB yet, create them now
-      user = await MobileUserModel.create({ deviceId: fingerprint, username: "Kaytee" });
+      user = await MobileUserModel.create({ deviceId: fingerprint, username: `User${randNum}` });
     }
 
     return NextResponse.json(user, { status: 200 });

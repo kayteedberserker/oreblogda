@@ -38,8 +38,6 @@ const Dashboard = () => {
     fetchUser();
   }, [router]);
 
-  if (!user) return <p className="min-h-[75vh]">Loading...</p>;
-
   // --- Poll Logic ---
   const handlePollOptionChange = (i, val) => {
     const newOptions = [...pollOptions];
@@ -64,11 +62,11 @@ const Dashboard = () => {
         method: "POST",
         // 2. Pass the formData as the body
         // 3. DO NOT set headers, the browser will do it automatically
-        body: formData, 
+        body: formData,
       });
 
       const data = await res.json();
-      
+
       if (res.ok && data.url) {
         setMediaUrl(data.url);
         setMediaType(file.type.startsWith("video") ? "video" : "image");
@@ -82,7 +80,7 @@ const Dashboard = () => {
     } finally {
       setUploading(false);
     }
-};
+  };
 
   // --- Create Post ---
   const handleSubmit = async (e) => {
@@ -137,7 +135,16 @@ const Dashboard = () => {
       setLoading(false);
     }
   };
-
+  if (!user) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-white dark:bg-[#0a0a0a]">
+        <div className="flex flex-col items-center">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+          <p className="mt-4 text-gray-500 dark:text-gray-400">Verifying Admin Access...</p>
+        </div>
+      </div>
+    );
+  }
   return (
     <div className="min-h-[70vh] relative" style={{ padding: "2rem" }}>
       {/* Subtle anime glow */}
@@ -146,13 +153,16 @@ const Dashboard = () => {
         <Link className="text-2xl hover:text-red-500 hover:underline" href={"authordiary/profile"}>
           Edit Profile Details
         </Link>
+        <Link className="text-2xl hover:text-red-500 hover:underline" href={"authordiary/approvalpage"}>
+          Post Approval
+        </Link>
       </div>
       <hr className="my-6" />
 
       <h2>Create New Post</h2>
       <form onSubmit={handleSubmit} className="space-y-4">
         {/* Title */}
-        <input 
+        <input
           type="text"
           placeholder="Post Title"
           value={title}
@@ -162,7 +172,7 @@ const Dashboard = () => {
         />
 
         {/* Main Message + inline sections */}
-        <label htmlFor="">Write your main message here...<br/> Use [section]Your section[/section] to add a section, <br/> [h]Heading[/h] To add heading, <br/> [li]list item[/li] To create list</label>
+        <label htmlFor="">Write your main message here...<br /> Use [section]Your section[/section] to add a section, <br /> [h]Heading[/h] To add heading, <br /> [li]list item[/li] To create list</label>
         <textarea
           placeholder="Write your main message here... Use [section]Your section[/section] to add a section"
           value={message}
@@ -188,7 +198,7 @@ const Dashboard = () => {
 
         {/* Media */}
         <div className="flex flex-col gap-2">
-          <input 
+          <input
             type="text"
             placeholder="TikTok / External URL (optional)"
             value={mediaUrlLink}
@@ -196,7 +206,7 @@ const Dashboard = () => {
             disabled={uploading}
             className="border p-2 rounded"
           />
-          <input 
+          <input
             type="file"
             accept="image/*,video/*"
             onChange={handleFileChange}
@@ -217,17 +227,17 @@ const Dashboard = () => {
         {/* Poll */}
         <div>
           <label>
-            <input  type="checkbox" checked={hasPoll} onChange={(e) => setHasPoll(e.target.checked)} /> Add a poll
+            <input type="checkbox" checked={hasPoll} onChange={(e) => setHasPoll(e.target.checked)} /> Add a poll
           </label>
         </div>
         {hasPoll && (
           <div className="space-y-2">
             <label>
-              <input  type="checkbox" checked={pollMultiple} onChange={(e) => setPollMultiple(e.target.checked)} /> Allow multiple selections
+              <input type="checkbox" checked={pollMultiple} onChange={(e) => setPollMultiple(e.target.checked)} /> Allow multiple selections
             </label>
             {pollOptions.map((option, i) => (
               <div key={i} className="flex gap-2 items-center">
-                <input 
+                <input
                   type="text"
                   value={option}
                   onChange={(e) => handlePollOptionChange(i, e.target.value)}
@@ -247,7 +257,7 @@ const Dashboard = () => {
         )}
 
         <button
-        aria-label="Create post"
+          aria-label="Create post"
           type="submit"
           disabled={loading || uploading}
           className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-60"
@@ -258,7 +268,7 @@ const Dashboard = () => {
 
       <ToastContainer position="top-right" autoClose={3000} theme="colored" />
     </div>
- 
+
 
   );
 };

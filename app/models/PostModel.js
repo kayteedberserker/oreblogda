@@ -162,7 +162,12 @@ const postSchema = new mongoose.Schema(
       type: String,
       enum: ["pending", "approved", "rejected"],
       default: "approved"
-    }
+    },
+
+    expiresAt: { 
+    type: Date, 
+    index: { expires: 0 } 
+  }
   },
   { timestamps: true }
 );
