@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
 import dynamic from "next/dynamic";
+import AdsterraNative from "./AdsterraNative";
+import AdsterraBannerSync from "./AdsterraBannerSync";
 
 const FooterAds = dynamic(() => import("./FooterAds"), {
   ssr: false,
@@ -98,6 +100,7 @@ export default function Footer({ postsContainerId }) {
 
       <div className="max-w-7xl mx-auto px-4 grow sm:px-6 lg:px-8">
       {/* <FooterAds /> */}
+      <AdsterraNative />
         {/* Newsletter Form */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -140,6 +143,7 @@ export default function Footer({ postsContainerId }) {
           )}
         </motion.div>
           {/* <FooterAds /> */}
+          <AdsterraBannerSync />
         {/* Socials */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

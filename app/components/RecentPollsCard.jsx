@@ -3,6 +3,7 @@ import useSWR from "swr";
 import Link from "next/link";
 import Poll from "./Poll";
 import dynamic from "next/dynamic";
+import AdsterraBanner from "./AdsterraBanner";
 
 const FooterAds = dynamic(() => import("./FooterAds"), {
   ssr: false,
@@ -53,6 +54,7 @@ export default function RecentPollsCard() {
                 View full poll
               </Link>
               {/* <FooterAds /> */}
+              <AdsterraBanner />
             </li>
           
           

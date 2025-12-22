@@ -16,6 +16,8 @@ const ArticleAd = dynamic(() => import("./ArticleAd"), {
 	ssr: false,
 });
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
+import AdsterraBanner from "./AdsterraBanner";
+import AdsterraBannerSync from "./AdsterraBannerSync";
 
 export default function PostCard({
 	post,
@@ -175,9 +177,10 @@ export default function PostCard({
 	useEffect(() => {
 		const fetchAuthor = async () => {
 			try {
-				const res = await fetch(`/api/users/${post.authorUserId || post.authorId}`);
+				const res = await fetch(`/api/users/${post.authorId || post.authorUserId}`);
 				if (!res.ok) throw new Error("Failed to fetch author");
 				const data = await res.json();
+
 				setAuthor({ name: data.name || post.authorName, image: data.user?.profilePic?.url });
 			} catch (err) {
 			}
@@ -217,107 +220,107 @@ export default function PostCard({
 
 	// ✅ --- UPDATED MESSAGE SECTION ---
 	const parseMessageSections = (msg) => {
-    // Added [source="(.*?)" text:(.*?)] to the regex
-    const regex = /\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[source="(.*?)" text:(.*?)\]|\[br\]/gs;
+		// Added [source="(.*?)" text:(.*?)] to the regex
+		const regex = /\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[source="(.*?)" text:(.*?)\]|\[br\]/gs;
 
-    const parts = [];
-    let lastIndex = 0;
-    let match;
+		const parts = [];
+		let lastIndex = 0;
+		let match;
 
-    while ((match = regex.exec(msg)) !== null) {
-        if (match.index > lastIndex) {
-            parts.push({ type: "text", content: msg.slice(lastIndex, match.index) });
-        }
+		while ((match = regex.exec(msg)) !== null) {
+			if (match.index > lastIndex) {
+				parts.push({ type: "text", content: msg.slice(lastIndex, match.index) });
+			}
 
-        if (match[1] !== undefined) {
-            parts.push({ type: "section", content: match[1] });
-        } else if (match[2] !== undefined) {
-            parts.push({ type: "heading", content: match[2] });
-        } else if (match[3] !== undefined) {
-            parts.push({ type: "listItem", content: match[3] });
-        } else if (match[4] !== undefined) {
-            // match[4] is the URL, match[5] is the text
-            parts.push({ type: "link", url: match[4], content: match[5] });
-        } else {
-            parts.push({ type: "br" });
-        }
+			if (match[1] !== undefined) {
+				parts.push({ type: "section", content: match[1] });
+			} else if (match[2] !== undefined) {
+				parts.push({ type: "heading", content: match[2] });
+			} else if (match[3] !== undefined) {
+				parts.push({ type: "listItem", content: match[3] });
+			} else if (match[4] !== undefined) {
+				// match[4] is the URL, match[5] is the text
+				parts.push({ type: "link", url: match[4], content: match[5] });
+			} else {
+				parts.push({ type: "br" });
+			}
 
-        lastIndex = regex.lastIndex;
-    }
+			lastIndex = regex.lastIndex;
+		}
 
-    if (lastIndex < msg.length) {
-        parts.push({ type: "text", content: msg.slice(lastIndex) });
-    }
+		if (lastIndex < msg.length) {
+			parts.push({ type: "text", content: msg.slice(lastIndex) });
+		}
 
-    return parts;
-};
+		return parts;
+	};
 
 
 
 	const renderMessage = () => {
-    const maxLength = 150;
+		const maxLength = 150;
 
-    if (isFeed) {
-        // Updated the replace regex to include the source tag for the feed view
-        const plainText = post.message.replace(/\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[source=".*?" text:.*?\]|\[br\]/gs, "");
-        const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
-        return <span style={{ whiteSpace: 'pre-wrap' }}>{truncated}</span>;
-    }
+		if (isFeed) {
+			// Updated the replace regex to include the source tag for the feed view
+			const plainText = post.message.replace(/\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[source=".*?" text:.*?\]|\[br\]/gs, "");
+			const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
+			return <span style={{ whiteSpace: 'pre-wrap' }}>{truncated}</span>;
+		}
 
-    const parts = parseMessageSections(post.message);
+		const parts = parseMessageSections(post.message);
 
-    return parts.map((p, i) => {
-        switch (p.type) {
-            case "text":
-                // Added whiteSpace style to respect your "Enter" keys
-                return <span key={i} style={{ whiteSpace: 'pre-wrap' }}>{p.content}</span>;
+		return parts.map((p, i) => {
+			switch (p.type) {
+				case "text":
+					// Added whiteSpace style to respect your "Enter" keys
+					return <span key={i} style={{ whiteSpace: 'pre-wrap' }}>{p.content}</span>;
 
-            case "br":
-                return <br key={i} />;
+				case "br":
+					return <br key={i} />;
 
-            case "link":
-                return (
-                    <a 
-                        key={i} 
-                        href={p.url} 
-                        target="_blank" 
-                        rel="noopener noreferrer" 
-                        className="text-blue-500 underline font-bold"
-                    >
-                        {p.content}
-                    </a>
-                );
+				case "link":
+					return (
+						<a
+							key={i}
+							href={p.url}
+							target="_blank"
+							rel="noopener noreferrer"
+							className="text-blue-500 underline font-bold"
+						>
+							{p.content}
+						</a>
+					);
 
-            case "heading":
-                return (
-                    <h2 key={i} className="text-xl font-bold my-2 ">
-                        {p.content}
-                    </h2>
-                );
+				case "heading":
+					return (
+						<h2 key={i} className="text-xl font-bold my-2 ">
+							{p.content}
+						</h2>
+					);
 
-            case "listItem":
-                return (
-                    <li key={i} className="ml-24 md:ml-[170px] lg:ml-[290px] list-disc">
-                        {p.content}
-                    </li>
-                );
+				case "listItem":
+					return (
+						<li key={i} className="ml-24 md:ml-[170px] lg:ml-[290px] list-disc">
+							{p.content}
+						</li>
+					);
 
-            case "section":
-                return (
-                    <div
-                        key={i}
-                        className="bg-gray-100 dark:bg-gray-700 p-2 my-2 w-fit max-w-[70%] mx-auto md:ml-[150px] lg:ml-[270px] rounded-md border-l-4 border-blue-500"
-                        style={{ whiteSpace: 'pre-wrap' }}
-                    >
-                        {p.content}
-                    </div>
-                );
+				case "section":
+					return (
+						<div
+							key={i}
+							className="bg-gray-100 dark:bg-gray-700 p-2 my-2 w-fit max-w-[70%] mx-auto md:ml-[150px] lg:ml-[270px] rounded-md border-l-4 border-blue-500"
+							style={{ whiteSpace: 'pre-wrap' }}
+						>
+							{p.content}
+						</div>
+					);
 
-            default:
-                return null;
-        }
-    });
-};
+				default:
+					return null;
+			}
+		});
+	};
 
 	const [idLink, setidLink] = useState()
 	useEffect(() => {
@@ -331,12 +334,13 @@ export default function PostCard({
 
 	// Helper function to insert ads after every N words
 	// Insert ads into a message that might be a string or JSX
-	function renderMessageWithAds(blocks, minWordsPerAd = 80) {
+	function renderMessageWithAds(blocks, minWordsPerAd = 100) {
 		if (!Array.isArray(blocks)) return blocks;
 
 		let wordCount = 0;
 		const output = [];
 		let adInserted = false;
+		let adCounter = 0; // Keep track of how many ads we've added for unique IDs
 
 		const countWords = (text) =>
 			typeof text === "string" ? text.trim().split(/\s+/).length : 0;
@@ -347,21 +351,12 @@ export default function PostCard({
 				<React.Fragment key={`b-${i}`}>{block}</React.Fragment>
 			);
 
-			// --------------------------
 			// 2. Count words inside block
-			// --------------------------
-
 			let blockWords = 0;
-
-			// CASE: Simple text node
 			if (typeof block === "string") {
 				blockWords = countWords(block);
-			}
-
-			// CASE: React element (section, h, li, br etc.)
-			else if (React.isValidElement(block)) {
+			} else if (React.isValidElement(block)) {
 				const t = block.props.children;
-
 				if (typeof t === "string") {
 					blockWords = countWords(t);
 				} else if (Array.isArray(t)) {
@@ -373,40 +368,36 @@ export default function PostCard({
 
 			wordCount += blockWords;
 
-			// -----------------------------------------------------------------
 			// 3. DO NOT INSERT ADS INSIDE LISTS
-			// -----------------------------------------------------------------
 			const tag = block?.type?.toString() || "";
 			const isListItem = block.type === "li" || tag.includes("li");
-
 			if (isListItem) return;
 
-			// -----------------------------------------------------------------
 			// 4. Insert ad AFTER the block *only if* enough words accumulated
-			// -----------------------------------------------------------------
-			// if (wordCount >= minWordsPerAd) {
-			// 	output.push(
-			// 		<div key={`ad-${i}`} className="my-4">
-			// 			<ArticleAd />
-			// 		</div>
-			// 	);
-			// 	wordCount = 0;
-			// 	adInserted = true;
-			// }
+			// Inside the word-count loop where you insert the ad:
+			if (wordCount >= minWordsPerAd) {
+				output.push(
+					<AdsterraBanner
+						key={`article-ad-${i}`}
+						adKey="c16b5115d36780065921b9d98585fc19"
+					/>
+				);
+				wordCount = 0;
+				adInserted = true;
+			}
 		});
 
-		// -----------------------------------------------------------
 		// 5. Always show at least ONE ad if article is too short
-		// -----------------------------------------------------------
-		// if (!adInserted && blocks.length > 2) {
-		// 	output.splice(
-		// 		1,
-		// 		0,
-		// 		<div key="fallback-ad" className="my-4">
-		// 			<ArticleAd />
-		// 		</div>
-		// 	);
-		// }
+		if (!adInserted && blocks.length > 2) {
+			output.push(
+					<AdsterraBanner
+						key={`article-ad}`}
+						adKey="c16b5115d36780065921b9d98585fc19"
+					/>
+				);
+				wordCount = 0;
+				adInserted = true;
+		}
 
 		return output;
 	}
@@ -472,8 +463,9 @@ export default function PostCard({
 						)
 					) : (
 						<>
-							{renderMessageWithAds(renderMessage(), 80)}
+							{renderMessageWithAds(renderMessage(), 100)}
 							<input type="hidden" value="Oreblogda - Anime blog" aria-label="Oreblogda - Anime Blog" />
+							<AdsterraBannerSync />
 						</>
 					)}
 				</div>

@@ -30,7 +30,6 @@ export async function OPTIONS() {
 // ----------------------
 export async function GET(req) {
   await connectDB();
-
   try {
     const { searchParams } = new URL(req.url);
     const page = parseInt(searchParams.get("page")) || 1;
@@ -44,7 +43,12 @@ export async function GET(req) {
 
     // 1. Filter by Author if requested (Dashboard logic)
     if (author || authorId) {
-      query.authorUserId = author || authorId;
+      const available = await Post.find({ authorId: author || authorId });
+      if (available.length > 0) {
+        query.authorId = author || authorId;
+      }else{
+        query.authorUserId = author || authorId;
+      }
       // When checking a specific author's history, we look for ALL statuses
       // so the dashboard can show "Pending" or "Rejected" states.
     } else {
