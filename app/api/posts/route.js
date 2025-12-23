@@ -110,7 +110,8 @@ export async function POST(req) {
     const body = await req.json();
     const { 
       title, message, mediaUrl, mediaType, hasPoll, 
-      pollMultiple, pollOptions, category, fingerprint 
+      pollMultiple, pollOptions, category, fingerprint,
+      rewardToken // 👈 Added this
     } = body;
 
     let user = null;
@@ -118,27 +119,26 @@ export async function POST(req) {
 
     // --- STEP 1: AUTHENTICATION ---
     if (token) {
-      try {
-        user = verifyToken(token);
-      } catch (err) { /* Token invalid */ }
+      try { user = verifyToken(token); } catch (err) { }
     }
 
     if (!user && fingerprint) {
       const foundMobileUser = await MobileUser.findOne({ deviceId: fingerprint });
       if (foundMobileUser) {
-        user = {
-          id: foundMobileUser._id.toString(),
-          username: foundMobileUser.username
-        };
-        isMobile = true; // Mark as mobile for pending status & rate limiting
+        user = { id: foundMobileUser._id.toString(), username: foundMobileUser.username };
+        isMobile = true;
       }
     }
 
     if (!user) {
       return addCorsHeaders(NextResponse.json({ message: "Unauthorized" }, { status: 401 }));
     }
-    // --- STEP 2: ONCE-A-DAY RATE LIMIT (Only for Mobile) ---
-    if (isMobile) {
+
+    // --- STEP 2: RATE LIMIT ---
+    // 💡 Logic: If rewardToken is valid, skip the 24h check
+    const isRewarded = rewardToken === `rewarded_${fingerprint}`;
+
+    if (isMobile && !isRewarded) {
       const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
       const existingPost = await Post.findOne({
         authorId: user.id,
@@ -152,10 +152,38 @@ export async function POST(req) {
         }, { status: 429 }));
       }
     }
+    if (!isMobile) {
+      // --- STEP 4: NEWSLETTER ---
+    try {
+      const subscribers = await Newsletter.find({}, "email");
+      if (subscribers.length > 0) {
+        const transporter = nodemailer.createTransport({
+          service: "gmail",
+          auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
+        });
 
+        const mailOptions = {
+          from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
+          to: "Subscribers",
+          bcc: subscribers.map(s => s.email),
+          subject: `📰 New Post from ${user.username}`,
+          html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
+                  <h2 style="margin-bottom:10px;">New Post from ${user.username}</h2>
+                  <p>${message.length > 250 ? message.slice(0, 250) + "..." : message}</p>
+                  ${mediaUrl ? `<img src="${mediaUrl}" alt="Post Media" style="max-width:100%;border-radius:8px;margin-bottom:15px;">` : ""}
+                  <div style="margin-bottom:20px;">
+                    <a href="${process.env.SITE_URL}/post/${newPost.slug || newPost._id}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 20px;background-color:#007bff;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;">Read Full Post</a>
+                  </div>
+                </div>`
+        };
+        await transporter.sendMail(mailOptions);
+      }
+    } catch (emailErr) {
+      console.error("Newsletter email error:", emailErr);
+    }
+    }
     // --- STEP 3: PROCESSING ---
     const slug = generateSlug(`${title} ${title.length < 15 ? message.slice(0, 10) : "link"}`);
-    console.log("reached here");
     
     const newPost = await Post.create({
       authorUserId: user.id,
@@ -166,7 +194,7 @@ export async function POST(req) {
       message,
       mediaUrl: mediaUrl || null,
       mediaType: mediaUrl ? mediaType : "image",
-      status: isMobile ? "pending" : "approved", // 👈 Web = Approved, Mobile = Pending
+      status: isMobile ? "pending" : "approved",
       poll: hasPoll ? { 
         pollMultiple: pollMultiple || false, 
         options: pollOptions.map(opt => ({ text: opt.text, votes: 0 })) 
