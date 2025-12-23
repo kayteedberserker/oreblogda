@@ -1,8 +1,8 @@
 import connectDB from "@/app/lib/mongodb";
 import Post from "@/app/models/PostModel";
-import Notification from "@/app/models/NotificationModel"; // 👈 Following your pattern
-import MobileUser from "@/app/models/MobileUserModel"; // 👈 Following your pattern
-import { sendPushNotification } from "@/app/lib/pushNotifications"; // 👈 Following your pattern
+import Notification from "@/app/models/NotificationModel"; 
+import MobileUser from "@/app/models/MobileUserModel"; 
+import { sendPushNotification } from "@/app/lib/pushNotifications"; 
 import { NextResponse } from "next/server";
 
 export async function PATCH(req, { params }) {
@@ -17,20 +17,28 @@ export async function PATCH(req, { params }) {
 
     try {
         // 1. Prepare Update Data
-        // If rejected, set expiresAt to 12 hours from now. 
-        // If approved, ensure expiresAt is removed ($unset) so it stays forever.
-        const updateData = { status: status };
+        // We manually set statusChangedAt because findByIdAndUpdate bypasses middleware
+        const now = new Date();
+        const updateData = { 
+            status: status,
+            statusChangedAt: now 
+        };
         
+        const unsetData = {};
+
         if (status === "rejected") {
-            updateData.expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000); // 12 Hours
-        } else {
-            updateData.$unset = { expiresAt: "" }; 
+            // Rejection cooldown: 12 hours
+            updateData.expiresAt = new Date(now.getTime() + 12 * 60 * 60 * 1000); 
+        } else if (status === "approved") {
+            // Important: If it's approved, we remove expiresAt so it stays live
+            unsetData.expiresAt = ""; 
         }
 
         // 2. Update the post
+        // Using $set for data and $unset to remove expiration if approved
         const updatedPost = await Post.findByIdAndUpdate(
             id,
-            updateData,
+            { $set: updateData, ...(status === "approved" && { $unset: unsetData }) },
             { new: true }
         );
 
@@ -47,19 +55,18 @@ export async function PATCH(req, { params }) {
             
             const msg = isApproved
                 ? `Great news! Your post "${updatedPost.title.slice(0, 25)}..." has been approved and is now live.`
-                : `Your post "${updatedPost.title.slice(0, 25)}..." was not approved. It will be removed from your diary in 12 hours.`;
+                : `Your post "${updatedPost.title.slice(0, 25)}..." was not approved. You can try again in 12 hours.`;
 
             // Create in-app notification record
             await Notification.create({
                 recipientId: recipientUserId,
                 senderName: "System",
-                type: "like", // Updated types for better tracking
+                type: "like", 
                 postId: updatedPost._id,
                 message: msg
             });
 
             // Determine the navigation action
-            // Approved -> Open the Post | Rejected -> Open the Diary
             let action = isApproved
                 ? {
                     postId: updatedPost._id.toString(),
@@ -84,7 +91,8 @@ export async function PATCH(req, { params }) {
 
         return NextResponse.json({
             message: `Post ${status}`,
-            success: true
+            success: true,
+            post: updatedPost
         });
 
     } catch (err) {

@@ -164,6 +164,12 @@ const postSchema = new mongoose.Schema(
       default: "approved"
     },
 
+    // NEW: Locked timestamp for cooldowns
+    statusChangedAt: { 
+      type: Date, 
+      default: Date.now 
+    },
+
     expiresAt: { 
     type: Date, 
     index: { expires: 0 } 
@@ -173,7 +179,19 @@ const postSchema = new mongoose.Schema(
 );
 
 /* =====================================================
-   6. HOT RELOAD SAFE EXPORT
+   6. MIDDLEWARE: Only update statusChangedAt on status change
+===================================================== */
+
+postSchema.pre('save', function(next) {
+  // If the 'status' field was modified, update our custom timestamp
+  if (this.isModified('status')) {
+    this.statusChangedAt = new Date();
+  }
+  next();
+});
+
+/* =====================================================
+   7. HOT RELOAD SAFE EXPORT
 ===================================================== */
 
 if (process.env.NODE_ENV === "development") {

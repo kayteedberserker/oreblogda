@@ -22,7 +22,6 @@ export default function AuthorPage() {
 	// Fetch author + first posts
 	const fetchAuthorData = useCallback(async () => {
 		setpageLoading(true);
-		console.log(id);
 
 		try {
 			const [userRes, postRes] = await Promise.all([

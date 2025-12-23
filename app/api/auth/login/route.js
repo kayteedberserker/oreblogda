@@ -11,7 +11,7 @@ export async function POST(req) {
   const user = await userModel.findOne({ email });
   if (!user)
     return NextResponse.json({ message: "Invalid credentials" }, { status: 400 });
-  if (user.role != "Author") {
+  if (user.role == "User") {
     await user.deleteOne({ email });
     return NextResponse.json({ message: "Access denied" }, { status: 400 });
 

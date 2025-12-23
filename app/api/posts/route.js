@@ -43,7 +43,7 @@ export async function GET(req) {
 
     // 1. Filter by Author if requested (Dashboard logic)
     if (author || authorId) {
-      const available = await Post.find({ authorId: author || authorId });
+      const available = await Post.find({ authorId: author });
       if (available.length > 0) {
         query.authorId = author || authorId;
       }else{

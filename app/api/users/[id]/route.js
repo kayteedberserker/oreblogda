@@ -11,13 +11,21 @@ export async function GET(req, { params }) {
 
     try {
         await connectDB();
-
+        let user
         // 1. Try to find the user in the Web Admin collection
-        let user = await UserModel.findById(id).select("-password").lean();
+        try {
+            user = await UserModel.findById(id).select("-password").lean();
+        } catch (error) {
+            console.error("Error fetching user from web admin collection:", error);
+        }
+        if (!user) {
+            user = await UserModel.findOne({newId : id}).select("-password").lean();
+        }
 
         // 2. If not found, try the Mobile User collection
         if (!user) {
-            user = await MobileUserModel.findById(id).lean();
+            
+            user = await MobileUserModel.findOne({ deviceId: id }).lean();
         }
 
         // 3. If still not found, return 404
