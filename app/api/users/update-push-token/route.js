@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import connectDB from "@/app/lib/mongodb"; // You'll need a utility to connect to MongoDB
-import User from "@/app/models/UserModel"; // Assuming you have a User model defined
+import MobileUser from '@/app/models/MobileUserModel'; // Assuming you have a User model defined
 
 export async function POST(request) {
   try {
@@ -19,7 +19,7 @@ export async function POST(request) {
     }
 
     // 4. Update or Create User
-    const user = await User.findOneAndUpdate(
+    const user = await MobileUser.findOneAndUpdate(
       { deviceId: deviceId },
       { pushToken: pushToken },
       { 
