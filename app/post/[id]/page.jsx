@@ -28,8 +28,8 @@ export default async function PostPage({ params }) {
   const similarPosts = (simData.posts || []).filter((p) => p._id !== id);
   // Prepare strings for SEO
   const description = post.message?.slice(0, 150) || "Read this post on Oreblogda";
-  const postUrl = `https://oreblogda.vercel.app/post/${post._id}`;
-  const postImage = post.mediaUrl || "https://oreblogda.vercel.app/og-image.png";
+  const postUrl = `https://oreblogda.com/post/${post._id}`;
+  const postImage = post.mediaUrl || "https://oreblogda.com/og-image.png";
 
   // 🚨 VERY IMPORTANT:
   // No client-only component is rendered directly here.

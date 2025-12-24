@@ -13,7 +13,7 @@ Allow: /categories/polls
 Disallow: /authordiary
 Disallow: /authordiary/profile
 
-Sitemap: https://oreblogda.vercel.app/sitemap.xml
+Sitemap: https://oreblogda.com/sitemap.xml
 `,
     {
       headers: {

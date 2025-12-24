@@ -11,7 +11,7 @@ export default function AdsterraNative() {
     script.async = true;
     script.setAttribute("data-cfasync", "false");
     script.src =
-      "https://pl28313019.effectivegatecpm.com/6452f17517ce377b3db19dc7ffef8407/invoke.js";
+      "https://pl28321415.effectivegatecpm.com/9740100d8b85e3ff6f266e16a7d43c32/invoke.js";
 
     document.body.appendChild(script);
   }, []);
@@ -19,7 +19,7 @@ export default function AdsterraNative() {
   return (
     <div
       className="my-6"
-      id="container-6452f17517ce377b3db19dc7ffef8407"
+      id="container-9740100d8b85e3ff6f266e16a7d43c32"
     />
   );
 }

@@ -130,7 +130,7 @@ export default function AuthorPage() {
 
 							{/* Ad after every 2 posts */}
 							{(index + 1) % 2 === 0 && (
-								<AdsterraBanner adKey="c16b5115d36780065921b9d98585fc19" />
+								<AdsterraBanner adKey="54eb965c7aa17f4628834c16b38ef17e" />
 							)}
 						</div>
 					))}

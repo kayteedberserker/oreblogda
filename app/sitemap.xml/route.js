@@ -7,7 +7,7 @@ export async function GET() {
   try {
     await connectDB();
     const posts = await Post.find().sort({ createdAt: -1 });
-    const baseUrl = "https://oreblogda.vercel.app";
+    const baseUrl = "https://oreblogda.com";
 
     const urls = posts
       .map(
@@ -44,7 +44,7 @@ export async function GET() {
     const fallback = `<?xml version="1.0" encoding="UTF-8"?>
     <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
       <url>
-        <loc>https://oreblogda.vercel.app</loc>
+        <loc>https://oreblogda.com</loc>
         <lastmod>${new Date().toISOString()}</lastmod>
       </url>
     </urlset>`;

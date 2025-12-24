@@ -2,7 +2,7 @@
 
 export default function AdsterraBannerSync() {
   // Using the sync-iframe source for the 468x60 key
-  const adKey = '0cfc5dd4d10f00218a78c61ae0f57450';
+  const adKey = '210eae0aa8eb0a53c768e9591ea05f9d';
   const iframeSrc = `//www.highperformanceformat.com/watchnew?key=${adKey}`;
 
   return (

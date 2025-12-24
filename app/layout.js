@@ -19,7 +19,7 @@ export const metadata = {
 	keywords: "anime, anime blog, anime news, anime memes, anime stories, trending anime, anime edits, gaming, gaming news, game updates, games, mobile games, freefire, callofduty, pubg, efootball, minecraft, amoung us, dream league soccer, oreblogda, anime votes",
 
 	authors: [
-		{ name: "Kaytee", url: "https://oreblogda.vercel.app" }
+		{ name: "Kaytee", url: "https://oreblogda.com" }
 	],
 
 	creator: "Kaytee",
@@ -30,11 +30,11 @@ export const metadata = {
 	openGraph: {
 		title: "Oreblogda – My Anime Blog",
 		description: "A modern anime blog where users can post, share, and explore trending anime stories, memes, and news on anime and games.",
-		url: "https://oreblogda.vercel.app",
+		url: "https://oreblogda.com",
 		siteName: "Oreblogda",
 		images: [
 			{
-				url: "https://oreblogda.vercel.app/og-image.png",
+				url: "https://oreblogda.com/og-image.png",
 				width: 1200,
 				height: 630,
 				alt: "Oreblogda - Anime Blog",
@@ -48,16 +48,16 @@ export const metadata = {
 		card: "summary_large_image",
 		title: "Oreblogda – My Anime Blog",
 		description: "A modern anime blog where users can post, share, and explore trending anime stories, memes, and news.",
-		images: ["https://oreblogda.vercel.app/og-image.png"],
+		images: ["https://oreblogda.com/og-image.png"],
 		creator: "@oreblogda",
 	},
 
 	alternates: {
-		canonical: "https://oreblogda.vercel.app",
+		canonical: "https://oreblogda.com",
 	},
 
 	icons: {
-		icon: "https://oreblogda.vercel.app/iconblue.png",
+		icon: "https://oreblogda.com/iconblue.png",
 	},
 };
 

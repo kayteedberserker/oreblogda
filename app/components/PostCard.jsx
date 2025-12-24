@@ -379,7 +379,7 @@ export default function PostCard({
 				output.push(
 					<AdsterraBanner
 						key={`article-ad-${i}`}
-						adKey="c16b5115d36780065921b9d98585fc19"
+						adKey="54eb965c7aa17f4628834c16b38ef17e"
 					/>
 				);
 				wordCount = 0;
@@ -392,7 +392,7 @@ export default function PostCard({
 			output.push(
 					<AdsterraBanner
 						key={`article-ad}`}
-						adKey="c16b5115d36780065921b9d98585fc19"
+						adKey="54eb965c7aa17f4628834c16b38ef17e"
 					/>
 				);
 				wordCount = 0;

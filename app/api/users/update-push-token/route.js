@@ -1,29 +1,52 @@
-const express = require('express');
-const router = express.Router();
-const User = require('./models/User'); // Adjust path to your User model
+import { NextResponse } from 'next/server';
+import dbConnect from '@/lib/dbConnect'; // You'll need a utility to connect to MongoDB
+import User from '@/models/User';
 
-// Endpoint to update the push token for account migration
-router.post('/api/users/update-push-token', async (req, res) => {
-    const { deviceId, pushToken } = req.body;
+export async function POST(request) {
+  try {
+    // 1. Connect to Database
+    await dbConnect();
 
+    // 2. Parse request body
+    const { deviceId, pushToken } = await request.json();
+
+    // 3. Validation
     if (!deviceId || !pushToken) {
-        return res.status(400).json({ message: "Missing deviceId or pushToken" });
+      return NextResponse.json(
+        { message: "Missing deviceId or pushToken" },
+        { status: 400 }
+      );
     }
 
-    try {
-        // Find user by deviceId and update their token
-        const user = await User.findOneAndUpdate(
-            { deviceId: deviceId },
-            { pushToken: pushToken },
-            { new: true, upsert: true } // Create if doesn't exist, return updated doc
-        );
+    // 4. Update or Create User
+    const user = await User.findOneAndUpdate(
+      { deviceId: deviceId },
+      { pushToken: pushToken },
+      { 
+        new: true, 
+        upsert: true,
+        runValidators: true // Ensures model validation still runs
+      }
+    );
 
-        console.log(`✅ Updated Push Token for User: ${deviceId}`);
-        res.status(200).json({ success: true, user });
-    } catch (error) {
-        console.error("❌ Error updating push token:", error);
-        res.status(500).json({ message: "Internal Server Error" });
-    }
-});
+    console.log(`✅ Updated Push Token for User: ${deviceId}`);
 
-module.exports = router;
+    // 5. Return Success
+    return NextResponse.json({ 
+      success: true, 
+      user: {
+        username: user.username,
+        deviceId: user.deviceId
+        // Don't send back sensitive data if not needed
+      } 
+    }, { status: 200 });
+
+  } catch (error) {
+    console.error("❌ Error updating push token:", error);
+    
+    return NextResponse.json(
+      { message: "Internal Server Error", error: error.message },
+      { status: 500 }
+    );
+  }
+}
