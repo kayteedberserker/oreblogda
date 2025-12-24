@@ -86,6 +86,7 @@ export default function ContactPage() {
               <option>Community Join Request</option>
               <option>Bug Report</option>
               <option>Suggestion</option>
+              <option>Request Account Removal</option>
               <option>Collaboration</option>
             </select>
           </div>
