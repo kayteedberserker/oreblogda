@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.kaytee.oreblogda",
+      "sha256_cert_fingerprints": [
+        "9D:E9:44:06:C9:62:46:EC:9A:C2:6A:59:68:CE:8D:FA:EB:5C:2A:6B:5A:CC:11:69:AF:61:AB:37:81:90:05:E3"
+      ]
+    }
+  }
+]
