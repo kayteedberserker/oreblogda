@@ -79,7 +79,6 @@ export default function PostCard({
 		const viewed = JSON.parse(localStorage.getItem("viewedPosts") || "[]");
 
 		if (!viewed.includes(post._id)) {
-
 			// create async wrapper
 			const sendView = async () => {
 				const fingerprint = await getFingerprint(); // ✅ now we can await

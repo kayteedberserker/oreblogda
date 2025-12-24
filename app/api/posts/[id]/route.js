@@ -191,8 +191,8 @@ export async function PATCH(req, { params }) {
             } catch (err) {
                 console.log("Geo lookup failed:", err);
             }
-
             if (!isBot && fingerprint && !post.viewsIPs.includes(fingerprint)) {
+                
                 post.views += 1;
                 post.viewsIPs.push(fingerprint);
 
@@ -205,6 +205,7 @@ export async function PATCH(req, { params }) {
             }
 
             await post.save();
+            
             return NextResponse.json(post, { status: 200 });
         }
 
