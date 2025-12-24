@@ -75,7 +75,6 @@ const Dashboard = () => {
         toast.error(data.message || "Upload failed.");
       }
     } catch (err) {
-      console.error(err);
       toast.error("Something went wrong during upload.");
     } finally {
       setUploading(false);

@@ -98,7 +98,6 @@ export default function PostCard({
 						JSON.stringify([...viewed, post._id])
 					);
 				} catch (err) {
-					console.error(err);
 				}
 			};
 
