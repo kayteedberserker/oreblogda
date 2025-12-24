@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
-import dbConnect from '@/lib/dbConnect'; // You'll need a utility to connect to MongoDB
-import User from '@/models/User';
+import connectDB from "@/app/lib/mongodb"; // You'll need a utility to connect to MongoDB
+import User from "@/app/models/UserModel"; // Assuming you have a User model defined
 
 export async function POST(request) {
   try {
     // 1. Connect to Database
-    await dbConnect();
+    await connectDB();
 
     // 2. Parse request body
     const { deviceId, pushToken } = await request.json();
