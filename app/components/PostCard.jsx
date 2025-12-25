@@ -178,14 +178,14 @@ export default function PostCard({
 				const res = await fetch(`/api/users/${post.authorId || post.authorUserId}`);
 				if (!res.ok) throw new Error("Failed to fetch author");
 				const data = await res.json();
-
+				
 				setAuthor({ name: data.name || post.authorName, image: data.user?.profilePic?.url });
 			} catch (err) {
 			}
 		};
 
-		if (post.authorId) fetchAuthor();
-	}, [post.authorId, post.authorName]);
+		if (post.authorId || post.authorUserId) fetchAuthor();
+	}, [post.authorId, post.authorUserId, post.authorName]);
 
 	const isLongMessage = post.message.length > 150;
 	const displayMessage =
