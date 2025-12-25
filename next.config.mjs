@@ -4,6 +4,7 @@ const nextConfig = {
     domains: ["res.cloudinary.com"], // allow Cloudinary images
   },
   async redirects() {
+    console.log("🚀 Someone tried to install app...");
     return [
       {
         source: '/download',
