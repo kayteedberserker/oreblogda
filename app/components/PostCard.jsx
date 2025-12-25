@@ -408,7 +408,7 @@ export default function PostCard({
 				{/* Author & Views */}
 				<div className="flex justify-between items-center mb-1">
 					<Link
-						href={`/author/${post.authorId}`}
+						href={`/author/${post.authorId || post.authorUserId}`}
 						className="flex items-center space-x-2 hover:underline"
 					>
 						{author.image ? (
