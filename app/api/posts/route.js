@@ -154,6 +154,26 @@ export async function POST(req) {
                 }, { status: 429 }));
             }
         }
+
+        // --- STEP 3: PROCESSING ---
+        const slug = generateSlug(`${title} ${title.length < 15 ? message.slice(0, 10) : "link"}`);
+
+        const newPost = await Post.create({
+            authorUserId: user.id,
+            authorId: fingerprint,
+            authorName: user.username,
+            title,
+            slug,
+            message,
+            mediaUrl: mediaUrl || null,
+            mediaType: mediaUrl ? mediaType : "image",
+            status: isMobile ? "pending" : "approved",
+            poll: hasPoll ? {
+                pollMultiple: pollMultiple || false,
+                options: pollOptions.map(opt => ({ text: opt.text, votes: 0 }))
+            } : null,
+            category
+        });
         if (!isMobile) {
             // --- STEP 4: NEWSLETTER ---
             try {
@@ -184,57 +204,6 @@ export async function POST(req) {
                 console.error("Newsletter email error:", emailErr);
             }
         }
-        // --- STEP 3: PROCESSING ---
-        const slug = generateSlug(`${title} ${title.length < 15 ? message.slice(0, 10) : "link"}`);
-
-        const newPost = await Post.create({
-            authorUserId: user.id,
-            authorId: fingerprint,
-            authorName: user.username,
-            title,
-            slug,
-            message,
-            mediaUrl: mediaUrl || null,
-            mediaType: mediaUrl ? mediaType : "image",
-            status: isMobile ? "pending" : "approved",
-            poll: hasPoll ? {
-                pollMultiple: pollMultiple || false,
-                options: pollOptions.map(opt => ({ text: opt.text, votes: 0 }))
-            } : null,
-            category
-        });
-
-        // --- STEP 4: NEWSLETTER ---
-        if (!isMobile) {
-            try {
-                const subscribers = await Newsletter.find({}, "email");
-                if (subscribers.length > 0) {
-                    const transporter = nodemailer.createTransport({
-                        service: "gmail",
-                        auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
-                    });
-
-                    const mailOptions = {
-                        from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
-                        to: "Subscribers",
-                        bcc: subscribers.map(s => s.email),
-                        subject: `📰 New Post from ${user.username}`,
-                        html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
-                  <h2 style="margin-bottom:10px;">New Post from ${user.username}</h2>
-                  <p>${message.length > 250 ? message.slice(0, 250) + "..." : message}</p>
-                  ${mediaUrl ? `<img src="${mediaUrl}" alt="Post Media" style="max-width:100%;border-radius:8px;margin-bottom:15px;">` : ""}
-                  <div style="margin-bottom:20px;">
-                    <a href="${process.env.SITE_URL}/post/${newPost.slug || newPost._id}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 20px;background-color:#007bff;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;">Read Full Post</a>
-                  </div>
-                </div>`
-                    };
-                    await transporter.sendMail(mailOptions);
-                }
-            } catch (emailErr) {
-                console.error("Newsletter email error:", emailErr);
-            }
-        }
-
         if (isMobile) {
             // Put your tokens in an array
             const adminTokens = [
