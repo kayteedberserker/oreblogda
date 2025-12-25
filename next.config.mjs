@@ -7,7 +7,7 @@ const nextConfig = {
     return [
       {
         source: '/download',
-        destination: 'https://expo.dev/artifacts/eas/t81hLZrqffFmwSjYZRvHEo.apk',
+        destination: 'https://d.apkpure.com/b/APK/com.kaytee.oreblogda?version=latest',
         permanent: false,
       },
     ];
