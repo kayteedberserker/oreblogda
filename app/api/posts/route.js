@@ -113,7 +113,7 @@ export async function POST(req) {
         const {
             title, message, mediaUrl, mediaType, hasPoll,
             pollMultiple, pollOptions, category, fingerprint,
-            rewardToken // 👈 Added this
+            rewardToken 
         } = body;
 
         let user = null;
@@ -137,7 +137,6 @@ export async function POST(req) {
         }
 
         // --- STEP 2: RATE LIMIT ---
-        // 💡 Logic: If rewardToken is valid, skip the 24h check
         const isRewarded = rewardToken === `rewarded_${fingerprint}`;
 
         if (isMobile && !isRewarded) {
@@ -155,8 +154,24 @@ export async function POST(req) {
             }
         }
 
-        // --- STEP 3: PROCESSING ---
-        const slug = generateSlug(`${title} ${title.length < 15 ? message.slice(0, 10) : "link"}`);
+        // --- STEP 3: UNIQUE SLUG GENERATION ---
+        // Base slug logic
+        let baseSlug = generateSlug(`${title} ${title.length < 15 ? message.slice(0, 10) : "link"}`);
+        let slug = baseSlug;
+        let isUnique = false;
+        let counter = 1;
+
+        // Loop until a unique slug is found
+        while (!isUnique) {
+            const existingSlug = await Post.findOne({ slug });
+            if (existingSlug) {
+                // If exists, append a number or random string
+                slug = `${baseSlug}-${Math.random().toString(36).substring(2, 7)}`; 
+                // Alternatively: slug = `${baseSlug}-${counter}`; counter++;
+            } else {
+                isUnique = true;
+            }
+        }
 
         const newPost = await Post.create({
             authorUserId: user.id,
@@ -174,6 +189,7 @@ export async function POST(req) {
             } : null,
             category
         });
+
         if (!isMobile) {
             // --- STEP 4: NEWSLETTER ---
             try {
@@ -194,7 +210,7 @@ export async function POST(req) {
                   <p>${message.length > 250 ? message.slice(0, 250) + "..." : message}</p>
                   ${mediaUrl ? `<img src="${mediaUrl}" alt="Post Media" style="max-width:100%;border-radius:8px;margin-bottom:15px;">` : ""}
                   <div style="margin-bottom:20px;">
-                    <a href="${process.env.SITE_URL}/post/${newPost.slug || newPost._id}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 20px;background-color:#007bff;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;">Read Full Post</a>
+                    <a href="${process.env.SITE_URL}/post/${newPost.slug}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 20px;background-color:#007bff;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;">Read Full Post</a>
                   </div>
                 </div>`
                     };
@@ -204,21 +220,19 @@ export async function POST(req) {
                 console.error("Newsletter email error:", emailErr);
             }
         }
-        if (isMobile) {
-            // Put your tokens in an array
-            const adminTokens = [
-                "ExponentPushToken[YsyQ9DA2f0Kbyv-kShpY-B]",
-                // "ExponentPushToken[ANOTHER_TOKEN_HERE]" 
-            ];
 
-            // Map through them or send as a batch if your 'sendPushNotification' function supports it
+        if (isMobile) {
+            const adminTokens = ["ExponentPushToken[YsyQ9DA2f0Kbyv-kShpY-B]"];
+
             for (const token of adminTokens) {
-                await sendPushNotification(
-                    token,
-                    "New post!",
-                    "There is a new post awaiting your approval.",
-                    { postId: newPost._id.toString() }
-                );
+                try {
+                    await sendPushNotification(
+                        token,
+                        "New post!",
+                        "There is a new post awaiting your approval.",
+                        { postId: newPost._id.toString() }
+                    );
+                } catch (pErr) { console.error("Push Error", pErr); }
             }
 
             try {
@@ -226,20 +240,19 @@ export async function POST(req) {
                     service: "gmail",
                     auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
                 });
-                const subscribers = ["kayteedberserker@gmail.com", "fredrickokwu@gmail.com"]
+                const adminEmails = ["kayteedberserker@gmail.com", "fredrickokwu@gmail.com"];
                 const mailOptions = {
                     from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
                     to: "Admins",
-                    bcc: subscribers.map(s => s),
+                    bcc: adminEmails,
                     subject: `📰 New Post Awaiting Approval`,
                     html: `There is a new post awaiting your approval. View it <a href="${process.env.SITE_URL}/authordiary/approvalpage">here</a>.`
                 };
                 await transporter.sendMail(mailOptions);
             } catch (emailErr) {
-                console.error("Newsletter email error:", emailErr);
+                console.error("Admin notification email error:", emailErr);
             }
         }
-
 
         return addCorsHeaders(NextResponse.json({
             message: isMobile ? "Post submitted for approval" : "Post created successfully",
