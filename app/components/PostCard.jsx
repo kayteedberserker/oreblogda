@@ -16,8 +16,6 @@ const ArticleAd = dynamic(() => import("./ArticleAd"), {
 	ssr: false,
 });
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
-import AdsterraBanner from "./AdsterraBanner";
-import AdsterraBannerSync from "./AdsterraBannerSync";
 
 export default function PostCard({
 	post,
@@ -374,12 +372,12 @@ export default function PostCard({
 			// 4. Insert ad AFTER the block *only if* enough words accumulated
 			// Inside the word-count loop where you insert the ad:
 			if (wordCount >= minWordsPerAd) {
-				output.push(
-					<AdsterraBanner
-						key={`article-ad-${i}`}
-						adKey="54eb965c7aa17f4628834c16b38ef17e"
-					/>
-				);
+				// output.push(
+				// 	<AdsterraBanner
+				// 		key={`article-ad-${i}`}
+				// 		adKey="54eb965c7aa17f4628834c16b38ef17e"
+				// 	/>
+				// );
 				wordCount = 0;
 				adInserted = true;
 			}
@@ -388,10 +386,10 @@ export default function PostCard({
 		// 5. Always show at least ONE ad if article is too short
 		if (!adInserted && blocks.length > 2) {
 			output.push(
-					<AdsterraBanner
-						key={`article-ad}`}
-						adKey="54eb965c7aa17f4628834c16b38ef17e"
-					/>
+					// <AdsterraBanner
+					// 	key={`article-ad}`}
+					// 	adKey="54eb965c7aa17f4628834c16b38ef17e"
+					// />
 				);
 				wordCount = 0;
 				adInserted = true;
@@ -463,7 +461,7 @@ export default function PostCard({
 						<>
 							{renderMessageWithAds(renderMessage(), 100)}
 							<input type="hidden" value="Oreblogda - Anime blog" aria-label="Oreblogda - Anime Blog" />
-							<AdsterraBannerSync />
+							{/* <AdsterraBannerSync /> */}
 						</>
 					)}
 				</div>

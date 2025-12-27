@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import PostCard from "./PostCard";
 import dynamic from "next/dynamic";
-import AdsterraNative from "./AdsterraNative";
 
 const SimilarPostAd = dynamic(() => import("./SimilarPostAd"), {
   ssr: false,
@@ -67,7 +66,6 @@ export default function SimilarPosts({ category, currentPostId }) {
             items.push(
               <div key={`ad-${index}`} className="flex-none w-fit">
                 {/* <SimilarPostAd /> */}
-                <AdsterraNative />
               </div>
             );
           }

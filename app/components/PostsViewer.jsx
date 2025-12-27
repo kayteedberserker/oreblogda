@@ -6,7 +6,6 @@ import RecentPollsCard from "./RecentPollsCard";
 import { FaPoll } from "react-icons/fa";
 import { useScrollAnimation } from "./useScrollAnimation";
 import dynamic from "next/dynamic";
-import AdsterraBannerSync from "./AdsterraBannerSync";
 const ArticleAd = dynamic(() => import("./ArticleAd"), {
   ssr: false,
 });
@@ -75,7 +74,7 @@ export default function PostsViewer({ initialPosts }) {
               {index % 2 === 1 && (
                 <div className="my-6 w-full flex justify-center">
                   {/* Use the Sync component here for the larger 468x60 format */}
-                  <AdsterraBannerSync />
+                  {/* <AdsterraBannerSync /> */}
                 </div>
               )}
             </div>

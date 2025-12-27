@@ -5,8 +5,6 @@ import { useParams } from "next/navigation";
 import PostCard from "@/app/components/PostCard";
 import AuthorPageAd from "@/app/components/AuthorPageAd";
 import ArticleAd from "@/app/components/ArticleAd";
-import AdsterraBannerSync from "@/app/components/AdsterraBannerSync";
-import AdsterraBanner from "@/app/components/AdsterraBanner";
 
 export default function AuthorPage() {
 	const { id } = useParams();
@@ -105,7 +103,6 @@ export default function AuthorPage() {
 					{/* Ad under author bio */}
 					<div className="mb-8">
 						{/* <ArticleAd /> */}
-						<AdsterraBannerSync />
 					</div>
 				</>
 			)}
@@ -128,10 +125,10 @@ export default function AuthorPage() {
 						<div key={post._id} className="mb-12">
 							<PostCard post={post} isFeed />
 
-							{/* Ad after every 2 posts */}
+							{/* Ad after every 2 posts
 							{(index + 1) % 2 === 0 && (
 								<AdsterraBanner adKey="54eb965c7aa17f4628834c16b38ef17e" />
-							)}
+							)} */}
 						</div>
 					))}
 

@@ -8,7 +8,6 @@ import { useScrollAnimation } from "@/app/components/useScrollAnimation";
 import { motion } from "framer-motion";
 import FooterAds from "@/app/components/FooterAds";
 import ArticleAd from "@/app/components/ArticleAd";
-import AdsterraBannerSync from "@/app/components/AdsterraBannerSync";
 
 const limit = 5;
 const fetcher = (url) => fetch(url, { cache: "no-store" }).then((res) => res.json());
@@ -69,12 +68,6 @@ export default function ClientCategoryPage({ category, initialPosts }) {
 
                 {/* Insert ad after every 2 posts */}
                 {/* {(index + 1) % 2 === 0 && <ArticleAd />} */}
-                {index % 2 === 1 && (
-                  <div className="my-6 w-full flex justify-center">
-                    {/* Use the Sync component here for the larger 468x60 format */}
-                    <AdsterraBannerSync />
-                  </div>
-                )}
               </div>
             ))}
 
