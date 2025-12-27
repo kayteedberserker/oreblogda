@@ -50,7 +50,7 @@ export async function PATCH(req, { params }) {
         const isBotRequest = async (req, ip) => {
             if (!ip) return false;
             const botKeywords = [
-                "facebookexternalhit", "Facebot", "Googlebot", "Bingbot", "Twitterbot",
+                "facebookexternalhit", "Facebot", "Facebook", "Google", "Googlebot", "Bingbot", "Twitterbot",
                 "LinkedInBot", "Slackbot", "Discordbot", "Pingdom", "AhrefsBot", "SemrushBot",
                 "MJ12bot", "Baiduspider", "YandexBot"
             ];
