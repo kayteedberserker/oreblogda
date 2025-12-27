@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import cloudinary from "@/app/lib/cloudinary";
+import { Readable } from "stream";
 
 export const runtime = "nodejs";
 
@@ -9,40 +10,61 @@ export async function POST(req) {
     const file = formData.get("file");
 
     if (!file) {
-      return NextResponse.json({ message: "No file provided" }, { status: 400 });
+      return NextResponse.json(
+        { message: "No file provided" },
+        { status: 400 }
+      );
     }
 
-    // Convert file to buffer
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
+    const isVideo = file.type?.startsWith("video");
 
-    // Determine if it's a video or image
-    const isVideo = file.type.startsWith("video");
+    // Convert file to stream (better than buffering for videos)
+    const arrayBuffer = await file.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    const stream = Readable.from(buffer);
 
-    // Upload to Cloudinary
-    const uploadRes = await new Promise((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
-        { 
+    const uploadResult = await new Promise((resolve, reject) => {
+      const uploadStream = cloudinary.uploader.upload_stream(
+        {
           folder: "posts",
-          resource_type: isVideo ? "video" : "image" // Required for videos
+          resource_type: isVideo ? "video" : "image",
+
+          // 🔑 Critical video optimizations
+          ...(isVideo && {
+            eager_async: true, // upload first, process later
+            eager: [],         // no eager transforms
+          }),
         },
-        (err, result) => {
-          if (err) reject(err);
+        (error, result) => {
+          if (error) reject(error);
           else resolve(result);
         }
-      ).end(buffer);
+      );
+
+      stream.pipe(uploadStream);
     });
 
-    // Optimization for images, raw URL for videos
-    let finalUrl = uploadRes.secure_url;
-    if (!isVideo) {
-      finalUrl = uploadRes.secure_url.replace(
+    // ---- Delivery URL Optimization ----
+    let finalUrl = uploadResult.secure_url;
+
+    if (isVideo) {
+      // Video delivery optimization
+      finalUrl = finalUrl.replace(
+        "/upload/",
+        "/upload/q_auto,vc_auto/"
+      );
+    } else {
+      // Image delivery optimization
+      finalUrl = finalUrl.replace(
         "/upload/",
         "/upload/f_auto,q_auto/"
       );
     }
 
-    return NextResponse.json({ url: finalUrl, resource_type: uploadRes.resource_type });
+    return NextResponse.json({
+      url: finalUrl,
+      resource_type: uploadResult.resource_type,
+    });
   } catch (err) {
     console.error("Upload error:", err);
     return NextResponse.json(
