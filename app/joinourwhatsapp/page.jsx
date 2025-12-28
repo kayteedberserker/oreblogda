@@ -7,6 +7,7 @@ export default function JoinWhatsApp() {
   const channelLink =
     "https://whatsapp.com/channel/0029VbBkiupCRs1wXFWtDG3N";
 
+
   return (
     <main className="min-h-screen grid place-items-center text-center px-4">
       <div>
@@ -26,6 +27,9 @@ export default function JoinWhatsApp() {
         >
           Join on WhatsApp
         </a>
+        <center>
+            <a href="https://oreblogda.com" className="mt-5 w-fit p-3 block bg-gray-600 text-white px-6 py-3 rounded-lg text-xs font-light">Continue to Posts</a>
+        </center>
       </div>
     </main>
   );
