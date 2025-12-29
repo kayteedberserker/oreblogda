@@ -87,6 +87,7 @@ export default function ContactPage() {
               <option>Bug Report</option>
               <option>Suggestion</option>
               <option>Request Account Removal</option>
+              <option>Request Account Recovery</option>
               <option>Collaboration</option>
             </select>
           </div>
