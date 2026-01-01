@@ -104,6 +104,35 @@ async function resolveTikTokUrl(url) {
 // ----------------------
 // POST: create a new post
 // ----------------------
+
+async function notifyAllMobileUsersAboutPost(newPost, authorName) {
+    const mobileUsers = await MobileUser.find(
+        { pushToken: { $exists: true, $ne: null } },
+        "pushToken"
+    );
+
+    if (!mobileUsers.length) return;
+
+    for (const user of mobileUsers) {
+        try {
+            await sendPushNotification(
+                user.pushToken,
+                "📰 New post on Oreblogda",
+                `${authorName} just posted: ${newPost.title.length > 50
+                    ? newPost.title.slice(0, 50) + "…"
+                    : newPost.title}`,
+                {
+                    postId: newPost._id.toString(),
+                    slug: newPost.slug // 👈 important for navigation
+                }
+            );
+        } catch (err) {
+            console.error("Push notify mobile user failed:", err);
+        }
+    }
+}
+
+
 export async function POST(req) {
     await connectDB();
 
@@ -113,7 +142,7 @@ export async function POST(req) {
         const {
             title, message, mediaUrl, mediaType, hasPoll,
             pollMultiple, pollOptions, category, fingerprint,
-            rewardToken 
+            rewardToken
         } = body;
 
         let user = null;
@@ -166,7 +195,7 @@ export async function POST(req) {
             const existingSlug = await Post.findOne({ slug });
             if (existingSlug) {
                 // If exists, append a number or random string
-                slug = `${baseSlug}-${Math.random().toString(36).substring(2, 7)}`; 
+                slug = `${baseSlug}-${Math.random().toString(36).substring(2, 7)}`;
                 // Alternatively: slug = `${baseSlug}-${counter}`; counter++;
             } else {
                 isUnique = true;
@@ -218,6 +247,12 @@ export async function POST(req) {
                 }
             } catch (emailErr) {
                 console.error("Newsletter email error:", emailErr);
+            }
+            // --- STEP 5: NOTIFY ALL MOBILE USERS ---
+            try {
+                await notifyAllMobileUsersAboutPost(newPost, user.username);
+            } catch (notifyErr) {
+                console.error("Mobile push broadcast error:", notifyErr);
             }
         }
 
