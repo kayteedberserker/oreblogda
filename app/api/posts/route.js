@@ -133,6 +133,26 @@ async function notifyAllMobileUsersAboutPost(newPost, authorName) {
 }
 
 
+function normalizePostContent(content) {
+  if (!content || typeof content !== "string") return content;
+
+  let cleaned = content;
+
+  // 1️⃣ Remove whitespace BEFORE opening tags
+  cleaned = cleaned.replace(/\s+\[(h|li|section)\]/g, "[$1]");
+
+  // 2️⃣ Remove whitespace AFTER opening tags
+  cleaned = cleaned.replace(/\[(h|li|section)\]\s+/g, "[$1]");
+
+  // 3️⃣ Remove whitespace BEFORE closing tags
+  cleaned = cleaned.replace(/\s+\[\/(h|li|section)\]/g, "[/$1]");
+
+  // 4️⃣ Remove whitespace AFTER closing tags
+  cleaned = cleaned.replace(/\[\/(h|li|section)\]\s+/g, "[/$1]");
+
+  return cleaned.trim();
+}
+
 export async function POST(req) {
     await connectDB();
 
@@ -147,7 +167,7 @@ export async function POST(req) {
 
         let user = null;
         let isMobile = false;
-
+        const newMessage = normalizePostContent(message);
         // --- STEP 1: AUTHENTICATION ---
         if (token) {
             try { user = verifyToken(token); } catch (err) { }
@@ -185,7 +205,7 @@ export async function POST(req) {
 
         // --- STEP 3: UNIQUE SLUG GENERATION ---
         // Base slug logic
-        let baseSlug = generateSlug(`${title} ${title.length < 15 ? message.slice(0, 10) : "link"}`);
+        let baseSlug = generateSlug(`${title} ${title.length < 15 ? newMessage.slice(0, 10) : "link"}`);
         let slug = baseSlug;
         let isUnique = false;
         let counter = 1;
@@ -208,7 +228,7 @@ export async function POST(req) {
             authorName: user.username,
             title,
             slug,
-            message,
+            message: newMessage,
             mediaUrl: mediaUrl || null,
             mediaType: mediaUrl ? mediaType : "image",
             status: isMobile ? "pending" : "approved",
@@ -236,7 +256,7 @@ export async function POST(req) {
                         subject: `📰 New Post from ${user.username}`,
                         html: `<div style="font-family:Arial,sans-serif;line-height:1.6;color:#333;">
                   <h2 style="margin-bottom:10px;">New Post from ${user.username}</h2>
-                  <p>${message.length > 250 ? message.slice(0, 250) + "..." : message}</p>
+                  <p>${newMessage.length > 250 ? newMessage.slice(0, 250) + "..." : newMessage}</p>
                   ${mediaUrl ? `<img src="${mediaUrl}" alt="Post Media" style="max-width:100%;border-radius:8px;margin-bottom:15px;">` : ""}
                   <div style="margin-bottom:20px;">
                     <a href="${process.env.SITE_URL}/post/${newPost.slug}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:12px 20px;background-color:#007bff;color:#fff;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;">Read Full Post</a>
