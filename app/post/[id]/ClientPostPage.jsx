@@ -1,4 +1,5 @@
 "use client";
+import Head from "next/head";
 
 import { useEffect, useState } from "react";
 import Cookies from "js-cookie";
@@ -46,40 +47,63 @@ export default function ClientPostPage({
       Cookies.set(`viewed-${postData._id}`, "true", { expires: 1 });
     }
   }, [postData, mutate]);
-
+  
   return (
+    
     <div className="p-2 md:p-6 rounded-2xl">
       {/* SEO */}
-      <NextSeo
-        title={postData.title}
-        description={description}
-        canonical={postUrl}
-        openGraph={{
-          url: postUrl,
-          title: postData.title,
-          description,
-          images: [
-            {
-              url: postImage,
-              width: 800,
-              height: 600,
-              alt: postData.title,
-            },
-          ],
-        }}
-      />
+      <Head>
+				<title>{postData.title} | Oreblogda</title>
+				<meta name="description" content={description} />
 
-      <ArticleJsonLd
-        type="BlogPosting"
-        url={postUrl}
-        title={postData.title}
-        images={[postImage]}
-        datePublished={postData.createdAt}
-        dateModified={postData.updatedAt || postData.createdAt}
-        authorName={postData.authorName || "Oreblogda"}
-        description={description}
-      />
+				{/* Open Graph */}
+				<meta property="og:type" content="article" />
+				<meta property="og:title" content={postData.title} />
+				<meta property="og:description" content={description} />
+				<meta property="og:image" content={postImage} />
+				<meta property="og:image:width" content="1200" />
+				<meta property="og:image:height" content="630" />
+				<meta property="og:url" content={postUrl} />
+				<meta property="og:site_name" content="Oreblogda" />
 
+				{/* Twitter Card */}
+				<meta name="twitter:card" content="summary_large_image" />
+				<meta name="twitter:title" content={postData.title} />
+				<meta name="twitter:description" content={description} />
+				<meta name="twitter:image" content={postImage} />
+
+				{/* Canonical */}
+				<link rel="canonical" href={postUrl} />
+
+				{/* JSON-LD structured data */}
+				<script
+					type="application/ld+json"
+					dangerouslySetInnerHTML={{
+						__html: JSON.stringify({
+							"@context": "https://schema.org",
+							"@type": "BlogPosting",
+							headline: postData.title,
+							image: [postImage],
+							url: postUrl,
+							datePublished: new Date(postData.createdAt).toISOString(),
+							dateModified: new Date(postData.updatedAt || postData.createdAt).toISOString(),
+							author: {
+								"@type": "Person",
+								name: postData.authorName || "Oreblogda",
+							},
+							description: description,
+							publisher: {
+								"@type": "Organization",
+								name: "Oreblogda",
+								logo: {
+									"@type": "ImageObject",
+									url: "https://oreblogda.com/ogimage.png",
+								},
+							},
+						}),
+					}}
+				/>
+			</Head>
       <div className="max-w-7xl mx-auto py-4">
         <div className="flex flex-col lg:flex-row lg:space-x-4">
           <div className="flex-2">

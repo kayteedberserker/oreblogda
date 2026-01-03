@@ -34,7 +34,7 @@ export const metadata = {
 		siteName: "Oreblogda",
 		images: [
 			{
-				url: "https://oreblogda.com/og-image.png",
+				url: "https://oreblogda.com/ogimage.png",
 				width: 1200,
 				height: 630,
 				alt: "Oreblogda - Anime Blog",
@@ -48,7 +48,7 @@ export const metadata = {
 		card: "summary_large_image",
 		title: "Oreblogda – My Anime Blog",
 		description: "A modern anime and gaming blog where users can post, share, and explore trending anime stories, memes, news, reviews, gaming updates, trending games, community reviews on both anime and games.",
-		images: ["https://oreblogda.com/og-image.png"],
+		images: ["https://oreblogda.com/ogimage.png"],
 		creator: "@oreblogda",
 	},
 

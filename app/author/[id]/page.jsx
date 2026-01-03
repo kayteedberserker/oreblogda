@@ -1,165 +1,90 @@
-"use client";
+// app/author/[id]/page.js  (server component)
+import AuthorPageClient from "./AuthorPageClient.jsx"; // your client component
+import { notFound } from "next/navigation";
 
-import { useEffect, useState, useCallback } from "react";
-import { useParams } from "next/navigation";
-import PostCard from "@/app/components/PostCard";
-import AuthorPageAd from "@/app/components/AuthorPageAd";
-import ArticleAd from "@/app/components/ArticleAd";
+export const dynamic = "force-dynamic";
+export async function generateMetadata({ params }) {
+	const awaitParams = await params;
+	const { id } = awaitParams;
 
-export default function AuthorPage() {
-	const { id } = useParams();
+	// Fetch author info
+	const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/users/${id}`);
+	if (!res.ok) return notFound();
 
-	const [author, setAuthor] = useState(null);
-	const [posts, setPosts] = useState([]);
-	const [page, setPage] = useState(1);
-	const [hasMore, setHasMore] = useState(true);
-	const [loading, setLoading] = useState(false);
-	const [pageloading, setpageLoading] = useState(false);
+	const author = await res.json();
 
+	const description =
+		author.user.description?.slice(0, 150) ||
+		`Posts by ${author.user.username} on Oreblogda`;
 
-	// Fetch author + first posts
-	const fetchAuthorData = useCallback(async () => {
-		setpageLoading(true);
+	const authorUrl = `https://oreblogda.com/author/${id}`;
+	const authorImage = author.user.profilePic?.url || "https://oreblogda.com/default-avatar.png";
 
-		try {
-			const [userRes, postRes] = await Promise.all([
-				fetch(`/api/users/${id}`),
-				fetch(`/api/posts?author=${id}&page=1&limit=6`),
-			]);
-
-			const userData = await userRes.json();
-			const postData = await postRes.json();
-
-			if (userRes.ok) setAuthor(userData.user);
-			if (postRes.ok) {
-				setPosts(postData.posts);
-				if (postData.posts.length < 6) setHasMore(false);
-			}
-		} catch { } finally {
-			setpageLoading(false);
-		}
-	}, [id]);
-
-	// Fetch more posts
-	const fetchMorePosts = useCallback(async () => {
-		if (!hasMore || loading) return;
-		setLoading(true);
-
-		try {
-			const res = await fetch(`/api/posts?author=${id}&page=${page}&limit=6`);
-			const data = await res.json();
-
-			if (res.ok) {
-				setPosts((prev) => [...prev, ...data.posts]);
-				if (data.posts.length < 6) setHasMore(false);
-			}
-		} catch { } finally {
-			setLoading(false);
-		}
-	}, [id, page, hasMore, loading]);
-
-	useEffect(() => {
-		fetchAuthorData();
-	}, [id]);
-
-	const handleLoadMore = () => {
-		if (hasMore && !loading) setPage((p) => p + 1);
+	return {
+		title: `${author.user.username} – Oreblogda`,
+		description,
+		openGraph: {
+			title: `${author.user.username} – Oreblogda`,
+			description,
+			url: authorUrl,
+			siteName: "Oreblogda",
+			images: [
+				{
+					url: authorImage,
+					width: 1200,
+					height: 630,
+					alt: author.user.username,
+				},
+			],
+			type: "profile",
+		},
+		twitter: {
+			card: "summary_large_image",
+			title: `${author.user.username} – Oreblogda`,
+			description,
+			images: [authorImage],
+			creator: "@oreblogda",
+		},
+		alternates: {
+			canonical: authorUrl,
+		},
+		authors: [
+			{
+				name: author.user.username,
+				url: authorUrl,
+			},
+		],
+		other: {
+			"application/ld+json": {
+				"@context": "https://schema.org",
+				"@type": "Person",
+				name: author.user.username,
+				url: authorUrl,
+				image: authorImage,
+				description: description,
+			},
+		},
 	};
+}
+export default async function AuthorPage({ params }) {
+	const awaitParams = await params;
+	const { id } = awaitParams;
 
-	useEffect(() => {
-		if (page > 1) fetchMorePosts();
-	}, [page]);
-	if (pageloading) {
-		return (
-			<div className="flex h-screen items-center justify-center bg-white dark:bg-gray-900">
-				<div className="flex flex-col items-center">
-					<div className="h-12 w-12 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
-					<p className="mt-4 text-gray-500 dark:text-gray-400">Loading Page...</p>
-				</div>
-			</div>
-		);
-	}
+	// Pre-fetch first 6 posts server-side (optional)
+	const [userRes, postRes] = await Promise.all([
+		fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/users/${id}`),
+		fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/posts?author=${id}&page=1&limit=6`),
+	]);
+
+	if (!userRes.ok || !postRes.ok) return notFound();
+
+	const userData = await userRes.json();
+	const postData = await postRes.json();
 
 	return (
-		<div className="max-w-7xl mx-auto mt-6 min-h-[70vh]">
-
-			{/* Author Bio */}
-			{author && (
-				<>
-					<div className="mb-6 flex items-center gap-4">
-						<img
-							src={author.profilePic?.url || "/default-avatar.png"}
-							alt={author.username}
-							className="w-30 h-30 md:w-60 md:h-60 rounded-full object-cover border"
-						/>
-						<div>
-							<h1 className="text-2xl font-bold">{author.username}</h1>
-							<p className="text-gray-600">
-								{author.description || "This author hasn’t added a description yet."}
-							</p>
-						</div>
-					</div>
-
-					{/* Ad under author bio */}
-					<div className="mb-8">
-						{/* <ArticleAd /> */}
-					</div>
-				</>
-			)}
-
-			{/* Posts + Side Ads */}
-			<div className="relative lg:flex lg:gap-6">
-				{/* Left Side Ad */}
-				{/* <div className="hidden lg:block lg:w-[250px] sticky top-24 self-start h-[calc(100vh-6rem)]">
-          <div className="max-h=[40vh]">
-            {posts.length > 0 && <AuthorPageAd />}
-          </div>
-          <div className="max-h-[40vh]">
-            {posts.length > 0 && <AuthorPageAd />}
-          </div>
-        </div> */}
-
-				{/* Post Feed */}
-				<div className="flex-1">
-					{posts.map((post, index) => (
-						<div key={post._id} className="mb-12">
-							<PostCard post={post} isFeed />
-
-							{/* Ad after every 2 posts
-							{(index + 1) % 2 === 0 && (
-								<AdsterraBanner adKey="54eb965c7aa17f4628834c16b38ef17e" />
-							)} */}
-						</div>
-					))}
-
-					{/* Load More Button */}
-					{hasMore && (
-						<div className="flex justify-center my-8">
-							<button
-								onClick={handleLoadMore}
-								disabled={loading}
-								className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-							>
-								{loading ? "Loading..." : "Load More"}
-							</button>
-						</div>
-					)}
-
-					{!hasMore && posts.length > 0 && (
-						<p className="text-center text-gray-500 mt-6">No more posts.</p>
-					)}
-				</div>
-
-				{/* Right Side Ad */}
-				{/* <div className="hidden lg:block lg:w-[250px] sticky top-24 self-start h-[calc(100vh-5rem)]">
-          <div className="max-h=[40vh]">
-            {posts.length > 0 && <AuthorPageAd />}
-          </div>
-          <div className="max-h=[40vh]">
-            {posts.length > 0 && <AuthorPageAd />}
-          </div>
-        </div> */}
-			</div>
-		</div>
+		<AuthorPageClient
+			author={userData.user}
+			initialPosts={postData.posts}
+		/>
 	);
 }
