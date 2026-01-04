@@ -8,37 +8,37 @@ import { toast } from "react-toastify";
 // --- HELPERS ---
 
 const getFlagEmoji = (countryCode, size = "w40") => {
-  if (!countryCode || typeof countryCode !== 'string' || countryCode.length !== 2) {
-    return <span className="text-lg">🌐</span>;
-  }
-  const code = countryCode.toLowerCase();
-  return (
-    <img 
-      src={`https://flagcdn.com/${size}/${code}.png`} 
-      alt={countryCode}
-      className="inline-block w-6 h-auto rounded-sm shadow-sm"
-      onError={(e) => { e.target.style.display = 'none'; }}
-    />
-  );
+    if (!countryCode || typeof countryCode !== 'string' || countryCode.length !== 2) {
+        return <span className="text-lg">🌐</span>;
+    }
+    const code = countryCode.toLowerCase();
+    return (
+        <img
+            src={`https://flagcdn.com/${size}/${code}.png`}
+            alt={countryCode}
+            className="inline-block w-6 h-auto rounded-sm shadow-sm"
+            onError={(e) => { e.target.style.display = 'none'; }}
+        />
+    );
 };
 
 const MetricCard = ({ title, value, color, loading, trend }) => (
-  <div className="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-200 dark:border-gray-700 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
-    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{title}</p>
-    {loading ? (
-      <div className="h-8 w-20 bg-gray-100 dark:bg-gray-700 animate-pulse rounded-lg"></div>
-    ) : (
-      <div className="flex items-baseline gap-2">
-        <h2 className={`text-3xl font-black italic tracking-tighter ${color}`}>{value?.toLocaleString() || 0}</h2>
-        {trend !== undefined && (
-          <span className={`text-[10px] font-black ${trend >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-            {trend >= 0 ? '↑' : '↓'}{Math.abs(trend)}%
-          </span>
+    <div className="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-200 dark:border-gray-700 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
+        <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{title}</p>
+        {loading ? (
+            <div className="h-8 w-20 bg-gray-100 dark:bg-gray-700 animate-pulse rounded-lg"></div>
+        ) : (
+            <div className="flex items-baseline gap-2">
+                <h2 className={`text-3xl font-black italic tracking-tighter ${color}`}>{value?.toLocaleString() || 0}</h2>
+                {trend !== undefined && (
+                    <span className={`text-[10px] font-black ${trend >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                        {trend >= 0 ? '↑' : '↓'}{Math.abs(trend)}%
+                    </span>
+                )}
+            </div>
         )}
-      </div>
-    )}
-    <div className={`absolute bottom-0 left-0 h-1 bg-current opacity-10 ${color}`} style={{ width: '100%' }}></div>
-  </div>
+        <div className={`absolute bottom-0 left-0 h-1 bg-current opacity-10 ${color}`} style={{ width: '100%' }}></div>
+    </div>
 );
 
 // --- MAIN COMPONENT ---
@@ -47,7 +47,7 @@ export default function FullAdminDashboard() {
     const [stats, setStats] = useState(null);
     const [userList, setUserList] = useState([]);
     const [dormantCount, setDormantCount] = useState(0);
-    
+
     // Loading States
     const [initialLoading, setInitialLoading] = useState(true);
     const [statsLoading, setStatsLoading] = useState(false);
@@ -71,8 +71,8 @@ export default function FullAdminDashboard() {
     useEffect(() => {
         const init = async () => {
             await Promise.all([
-                fetchDashboardData(true), 
-                fetchUsers(true), 
+                fetchDashboardData(true),
+                fetchUsers(true),
                 fetchDormantCount()
             ]);
             setInitialLoading(false);
@@ -202,47 +202,91 @@ export default function FullAdminDashboard() {
     return (
         <div className="min-h-screen bg-gray-50 p-4 md:p-8 dark:bg-[#0a0a0a] text-gray-900 dark:text-gray-100 transition-colors duration-500">
             <div className="mx-auto max-w-7xl">
-                
+
                 {/* --- HEADER HUD --- */}
-                <header className="flex flex-col md:flex-row justify-between items-start md:items-center mb-10 gap-4">
-                    <div>
-                        <h1 className="text-4xl font-black italic tracking-tighter uppercase">Command Center</h1>
-                        <div className="flex items-center gap-2 mt-1">
-                          <div className="h-1 w-12 bg-blue-600"></div>
-                          <span className="text-[8px] font-black uppercase tracking-widest text-gray-400">System v4.0.2</span>
+                <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-10 gap-6">
+                    {/* TITLE SECTION */}
+                    <div className="w-full xl:w-auto flex justify-between items-center">
+                        <div>
+                            <h1 className="text-3xl md:text-4xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white">
+                                Command Center
+                            </h1>
+                            <div className="flex items-center gap-2 mt-1">
+                                <div className="h-1 w-12 bg-blue-600"></div>
+                                <span className="text-[8px] font-black uppercase tracking-widest text-gray-400">System v4.0.2</span>
+                            </div>
+                        </div>
+
+                        {/* Mobile-only Push Button (Visible only on small screens next to title) */}
+                        <div className="md:hidden">
+                            <button
+                                onClick={sendBulkPush}
+                                disabled={sendingPush}
+                                className="bg-orange-500 text-white p-3 rounded-2xl shadow-lg shadow-orange-500/20 active:scale-95 disabled:opacity-50"
+                            >
+                                {sendingPush ? (
+                                    <div className="h-5 w-5 border-2 border-white border-t-transparent animate-spin rounded-full"></div>
+                                ) : (
+                                    "🚀"
+                                )}
+                            </button>
                         </div>
                     </div>
-                    
-                    <div className="flex items-center gap-4">
-                        <button 
+
+                    {/* ACTIONS SECTION */}
+                    <div className="flex flex-col md:flex-row items-start md:items-center gap-4 w-full xl:w-auto">
+
+                        {/* DESKTOP PUSH BUTTON */}
+                        <button
                             onClick={sendBulkPush}
                             disabled={sendingPush}
-                            className="bg-orange-500/10 border border-orange-500/20 px-4 py-2 rounded-2xl flex items-center gap-4 group hover:bg-orange-500 transition-all active:scale-95 disabled:opacity-50"
+                            className="hidden md:flex bg-orange-500/10 border border-orange-500/20 px-4 py-2 rounded-2xl items-center gap-4 group hover:bg-orange-500 transition-all active:scale-95 disabled:opacity-50"
                         >
                             <div className="text-left">
                                 <p className="text-[8px] font-black text-orange-500 group-hover:text-white uppercase tracking-widest">Dormant (30d+)</p>
-                                <p className="text-sm font-black group-hover:text-white">{dormantCount}</p>
+                                <p className="text-sm font-black text-gray-900 dark:text-white group-hover:text-white">{dormantCount}</p>
                             </div>
                             <span className="bg-orange-500 text-white p-2 rounded-xl group-hover:bg-white group-hover:text-orange-500 transition-colors">
-                              {sendingPush ? <div className="h-4 w-4 border-2 border-current border-t-transparent animate-spin rounded-full"></div> : "🚀"}
+                                {sendingPush ? (
+                                    <div className="h-4 w-4 border-2 border-current border-t-transparent animate-spin rounded-full"></div>
+                                ) : (
+                                    "🚀"
+                                )}
                             </span>
                         </button>
 
-                        {/* UPDATED RANGE SELECTOR */}
-                        <div className="flex bg-white dark:bg-gray-800 p-1 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm">
-                            {["today", "yesterday", "24h", "7days", "30days", "thisMonth", "lastMonth"].map((r) => (
-                                <button 
-                                    key={r}
-                                    onClick={() => setRange(r)}
-                                    className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all ${range === r ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "text-gray-400 hover:text-blue-500"}`}
+                        {/* RANGE SELECTOR GRID */}
+                        <div className="
+            grid grid-cols-3 sm:grid-cols-4 md:flex 
+            w-full md:w-auto
+            bg-white dark:bg-gray-800 
+            p-1.5 
+            rounded-2xl 
+            border border-gray-200 dark:border-gray-700 
+            shadow-sm 
+            gap-1
+        ">
+                            {[
+                                { id: 'today', label: 'Today' },
+                                { id: 'yesterday', label: 'Yesterday' },
+                                { id: '24h', label: '24H' },
+                                { id: '7days', label: '7 Days' },
+                                { id: '30days', label: '30 Days' },
+                                { id: 'thisMonth', label: 'Month' },
+                                { id: 'lastMonth', label: 'Prev' }
+                            ].map((r) => (
+                                <button
+                                    key={r.id}
+                                    onClick={() => setRange(r.id)}
+                                    className={`
+                        px-3 py-2.5 md:py-2 rounded-xl text-[9px] font-black uppercase transition-all
+                        ${range === r.id
+                                            ? "bg-blue-600 text-white shadow-md shadow-blue-600/30 active:scale-95"
+                                            : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-200"
+                                        }
+                    `}
                                 >
-                                    {r === 'today' ? 'Today' : 
-                                     r === 'yesterday' ? 'Yesterday' : 
-                                     r === '24h' ? 'Past 24H' : 
-                                     r === '7days' ? 'Past 7 Days' : 
-                                     r === '30days' ? 'Past 30 Days' : 
-                                     r === 'thisMonth' ? 'This Month' : 
-                                     'Last Month'}
+                                    {r.label}
                                 </button>
                             ))}
                         </div>
@@ -260,18 +304,20 @@ export default function FullAdminDashboard() {
 
                 {/* --- ANALYTICS ROW --- */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                    {/* Activity Chart */}
-                    <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-200 dark:border-gray-700 relative overflow-hidden">
-                        <div className="flex justify-between items-center mb-10">
-                          <h3 className="font-black text-[10px] uppercase tracking-widest text-gray-400 flex items-center gap-2">
-                              <span className="h-2 w-2 rounded-full bg-blue-600 animate-ping"></span>
-                              Activity Flow
-                          </h3>
+                    {/* Activity Chart Container */}
+                    <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-4 md:p-6 rounded-[2rem] md:rounded-[2.5rem] border border-gray-200 dark:border-gray-700 relative overflow-hidden">
+                        <div className="flex justify-between items-center mb-8">
+                            <h3 className="font-black text-[10px] uppercase tracking-widest text-gray-400 flex items-center gap-2">
+                                <span className="h-2 w-2 rounded-full bg-blue-600 animate-ping"></span>
+                                Activity Flow
+                            </h3>
+                            {/* Mobile Instruction Hint */}
+                            <span className="md:hidden text-[8px] font-bold text-gray-400 uppercase tracking-widest italic">Swipe to view →</span>
                         </div>
-                        
+
                         {/* LOADING ANIMATION FOR CHART */}
                         {statsLoading && (
-                            <div className="absolute inset-0 bg-white/60 dark:bg-gray-800/60 z-10 flex items-center justify-center backdrop-blur-[2px] transition-all">
+                            <div className="absolute inset-0 bg-white/60 dark:bg-gray-800/60 z-30 flex items-center justify-center backdrop-blur-[2px] transition-all">
                                 <div className="flex flex-col items-center">
                                     <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
                                     <p className="mt-2 text-[8px] font-black text-blue-600 uppercase tracking-widest">Updating Data...</p>
@@ -279,28 +325,56 @@ export default function FullAdminDashboard() {
                             </div>
                         )}
 
-                        <div className="flex items-end justify-between h-56 gap-2">
-                            {stats?.dailyActivity?.map((data, idx) => {
-                                const maxVal = Math.max(...stats.dailyActivity.map(d => d.count), 1);
-                                const barHeight = (data.count / maxVal) * 160;
-                                let displayDate = data._id;
-                                if (range !== '24h' && range !== 'today' && range !== 'yesterday') {
-                                    const d = new Date(data._id);
-                                    displayDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-                                }
-                                return (
-                                    <div key={idx} className="flex-1 flex flex-col items-center group relative">
-                                        <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-all bg-gray-900 text-white text-[9px] font-black px-2 py-1 rounded-lg shadow-xl z-20">
-                                          {data.count} opens
+                        {/* SCROLLABLE WRAPPER */}
+                        <div className="overflow-x-auto pb-4 scrollbar-hide">
+                            {/* Min-width ensures bars don't get too thin on small screens */}
+                            <div className="flex items-end justify-between h-64 gap-1 md:gap-2 min-w-[600px] md:min-w-full px-2">
+                                {stats?.dailyActivity?.map((data, idx) => {
+                                    const maxVal = Math.max(...stats.dailyActivity.map(d => d.count), 1);
+                                    const barHeight = (data.count / maxVal) * 140; // Adjusted for label space
+
+                                    let displayDate = data._id;
+                                    if (!['24h', 'today', 'yesterday'].includes(range)) {
+                                        const d = new Date(data._id);
+                                        displayDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+                                    }
+
+                                    // Show only every 3rd label on long ranges to keep it clean, or all on short ranges
+                                    const shouldShowLabel = stats.dailyActivity.length <= 10 || idx % (stats.dailyActivity.length > 24 ? 4 : 1) === 0;
+
+                                    return (
+                                        <div key={idx} className="flex-1 flex flex-col items-center group relative">
+                                            {/* PERMANENT COUNT LABEL (Visible on Mobile) */}
+                                            <div className="mb-2 transition-all">
+                                                <span className={`text-[9px] font-black ${data.count > 0 ? 'text-blue-600' : 'text-gray-300 dark:text-gray-600'}`}>
+                                                    {data.count}
+                                                </span>
+                                            </div>
+
+                                            {/* BAR */}
+                                            <div
+                                                className={`w-full max-w-[24px] rounded-t-md md:rounded-t-lg transition-all duration-1000 ease-out group-hover:brightness-110 
+                                ${data.count > 0
+                                                        ? 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.1)]'
+                                                        : 'bg-gray-100 dark:bg-gray-700'
+                                                    }`}
+                                                style={{ height: `${Math.max(barHeight, 4)}px` }}
+                                            ></div>
+
+                                            {/* X-AXIS DATE LABEL */}
+                                            <div className="h-6 flex items-center justify-center">
+                                                {shouldShowLabel ? (
+                                                    <p className="text-[8px] mt-3 text-gray-400 font-black uppercase text-center tracking-tighter group-hover:text-blue-600 transition-colors whitespace-nowrap">
+                                                        {displayDate}
+                                                    </p>
+                                                ) : (
+                                                    <div className="mt-3 w-1 h-1 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+                                                )}
+                                            </div>
                                         </div>
-                                        <div 
-                                          className={`w-full max-w-[20px] rounded-t-lg transition-all duration-1000 ease-out group-hover:brightness-110 ${data.count > 0 ? 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.1)]' : 'bg-gray-100 dark:bg-gray-700'}`} 
-                                          style={{ height: `${Math.max(barHeight, 5)}px` }}
-                                        ></div>
-                                        <p className="text-[8px] mt-3 text-gray-400 font-black uppercase text-center tracking-tighter group-hover:text-blue-600 transition-colors">{displayDate}</p>
-                                    </div>
-                                );
-                            })}
+                                    );
+                                })}
+                            </div>
                         </div>
                     </div>
 
@@ -326,17 +400,17 @@ export default function FullAdminDashboard() {
                     <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4">
                         <h3 className="font-black text-xl italic uppercase tracking-tighter">User Registry</h3>
                         <div className="flex items-center gap-4">
-                            <button 
+                            <button
                                 onClick={() => setShowOnlyActive(!showOnlyActive)}
                                 className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all flex items-center gap-2 ${showOnlyActive ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-gray-100 dark:bg-gray-900 text-gray-400 border border-gray-200 dark:border-gray-700'}`}
                             >
                                 <span className={`h-1.5 w-1.5 rounded-full ${showOnlyActive ? 'bg-white animate-pulse' : 'bg-gray-400'}`}></span>
                                 Active Pulse
                             </button>
-                            <select 
-                              value={selectedCountry} 
-                              onChange={(e) => { setSelectedCountry(e.target.value); setPage(1); }} 
-                              className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-2 px-4 rounded-xl text-[9px] font-black uppercase outline-none focus:ring-2 ring-blue-500"
+                            <select
+                                value={selectedCountry}
+                                onChange={(e) => { setSelectedCountry(e.target.value); setPage(1); }}
+                                className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-2 px-4 rounded-xl text-[9px] font-black uppercase outline-none focus:ring-2 ring-blue-500"
                             >
                                 <option value="All">Global Feed</option>
                                 {stats?.countries?.map(c => <option key={c._id} value={c._id}>{c._id}</option>)}
@@ -366,17 +440,17 @@ export default function FullAdminDashboard() {
                                         </td>
                                     </tr>
                                 ) : userList.map((u) => (
-                                    <tr 
-                                        key={u._id} 
+                                    <tr
+                                        key={u._id}
                                         onClick={() => handleUserSelect(u)}
                                         className={`cursor-pointer transition-all ${selectedUser?._id === u._id ? 'bg-blue-600/5 border-l-4 border-blue-600' : 'hover:bg-gray-50 dark:hover:bg-white/5 border-l-4 border-transparent'}`}
                                     >
                                         <td className="px-8 py-4">
                                             <div className="flex items-center gap-4">
-                                                <img 
-                                                    src={u.profilePic?.url || u.image || u.avatar || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'} 
-                                                    className="h-10 w-10 rounded-2xl object-cover border border-gray-200 dark:border-gray-700 bg-gray-100 shadow-sm" 
-                                                    alt="pfp" 
+                                                <img
+                                                    src={u.profilePic?.url || u.image || u.avatar || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'}
+                                                    className="h-10 w-10 rounded-2xl object-cover border border-gray-200 dark:border-gray-700 bg-gray-100 shadow-sm"
+                                                    alt="pfp"
                                                 />
                                                 <div>
                                                     <p className="font-black text-gray-900 dark:text-white text-sm">{u.username || "ANONYMOUS"}</p>
@@ -410,19 +484,19 @@ export default function FullAdminDashboard() {
                     <div className="p-4 bg-gray-50 dark:bg-gray-900/30 flex justify-between items-center px-8 border-t border-gray-100 dark:border-gray-700">
                         <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Relay {page} / {totalPages}</span>
                         <div className="flex gap-2">
-                            <button 
-                              disabled={page === 1 || tableLoading} 
-                              onClick={() => { setPage(p => p - 1); setSelectedUser(null); }} 
-                              className="px-5 py-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-30 font-black text-[9px] uppercase hover:shadow-md transition-all active:scale-95"
+                            <button
+                                disabled={page === 1 || tableLoading}
+                                onClick={() => { setPage(p => p - 1); setSelectedUser(null); }}
+                                className="px-5 py-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-30 font-black text-[9px] uppercase hover:shadow-md transition-all active:scale-95"
                             >
-                              PREV
+                                PREV
                             </button>
-                            <button 
-                              disabled={page === totalPages || tableLoading} 
-                              onClick={() => { setPage(p => p + 1); setSelectedUser(null); }} 
-                              className="px-5 py-2 rounded-xl bg-blue-600 text-white font-black text-[9px] uppercase hover:bg-blue-700 shadow-lg shadow-blue-500/20 active:scale-95"
+                            <button
+                                disabled={page === totalPages || tableLoading}
+                                onClick={() => { setPage(p => p + 1); setSelectedUser(null); }}
+                                className="px-5 py-2 rounded-xl bg-blue-600 text-white font-black text-[9px] uppercase hover:bg-blue-700 shadow-lg shadow-blue-500/20 active:scale-95"
                             >
-                              NEXT
+                                NEXT
                             </button>
                         </div>
                     </div>
@@ -432,24 +506,24 @@ export default function FullAdminDashboard() {
                 {selectedUser && (
                     <div className="bg-white dark:bg-gray-800 rounded-[3rem] border-2 border-blue-600/30 p-8 shadow-2xl animate-in fade-in slide-in-from-bottom-8 duration-500 mb-20 relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-6">
-                            <button 
-                              onClick={() => setSelectedUser(null)} 
-                              className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-400 hover:text-red-500 transition-all hover:rotate-90"
+                            <button
+                                onClick={() => setSelectedUser(null)}
+                                className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-400 hover:text-red-500 transition-all hover:rotate-90"
                             >
                                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
                             </button>
                         </div>
-                        
+
                         <div className="flex flex-col lg:flex-row gap-10">
                             {/* Profile Part */}
                             <div className="flex flex-col items-center lg:items-start shrink-0">
-                                <img 
-                                    src={selectedUser.profilePic?.url || selectedUser.image || selectedUser.avatar || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'} 
-                                    className="h-44 w-44 rounded-[3rem] object-cover border-4 border-white dark:border-gray-700 shadow-2xl mb-6 bg-gray-100" 
-                                    alt="Avatar" 
+                                <img
+                                    src={selectedUser.profilePic?.url || selectedUser.image || selectedUser.avatar || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'}
+                                    className="h-44 w-44 rounded-[3rem] object-cover border-4 border-white dark:border-gray-700 shadow-2xl mb-6 bg-gray-100"
+                                    alt="Avatar"
                                 />
-                                <Link 
-                                    href={`/author/${selectedUser.deviceId || selectedUser._id}`} 
+                                <Link
+                                    href={`/author/${selectedUser.deviceId || selectedUser._id}`}
                                     className="w-full bg-blue-600 text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] text-center hover:bg-blue-700 hover:shadow-xl transition-all flex items-center justify-center gap-2 group"
                                 >
                                     Access Profile <span className="group-hover:translate-x-1 transition-transform">↗</span>
@@ -480,7 +554,7 @@ export default function FullAdminDashboard() {
                                             <span className="p-2 bg-blue-600 rounded-xl text-white text-xs shadow-lg shadow-blue-500/30">🔔</span>
                                             <h4 className="font-black text-xs uppercase tracking-[0.2em]">Signal Composer</h4>
                                         </div>
-                                        
+
                                         {!selectedUser.pushToken ? (
                                             <div className="p-6 bg-red-500/5 border border-red-500/20 rounded-2xl text-red-500 font-black text-[10px] uppercase text-center tracking-widest">
                                                 Communication link offline. No Push Token detected.
@@ -488,22 +562,22 @@ export default function FullAdminDashboard() {
                                         ) : (
                                             <div className="space-y-4">
                                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    <input 
-                                                        type="text" 
-                                                        placeholder="SIGNAL TITLE..." 
+                                                    <input
+                                                        type="text"
+                                                        placeholder="SIGNAL TITLE..."
                                                         value={pushMessage.title}
-                                                        onChange={(e) => setPushMessage({...pushMessage, title: e.target.value})}
+                                                        onChange={(e) => setPushMessage({ ...pushMessage, title: e.target.value })}
                                                         className="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 text-[11px] font-black uppercase outline-none focus:ring-2 ring-blue-500 transition-all placeholder:text-gray-300"
                                                     />
-                                                    <input 
-                                                        type="text" 
-                                                        placeholder="OPERATOR MESSAGE..." 
+                                                    <input
+                                                        type="text"
+                                                        placeholder="OPERATOR MESSAGE..."
                                                         value={pushMessage.body}
-                                                        onChange={(e) => setPushMessage({...pushMessage, body: e.target.value})}
+                                                        onChange={(e) => setPushMessage({ ...pushMessage, body: e.target.value })}
                                                         className="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 text-[11px] font-black outline-none focus:ring-2 ring-blue-500 transition-all placeholder:text-gray-300"
                                                     />
                                                 </div>
-                                                <button 
+                                                <button
                                                     onClick={sendSinglePush}
                                                     disabled={sendingPush}
                                                     className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-3"
@@ -516,25 +590,25 @@ export default function FullAdminDashboard() {
 
                                     {/* Additional Metadata */}
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:col-span-3">
-                                      <div>
-                                          <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Station Origin</label>
-                                          <p className="font-black flex items-center gap-2 text-lg">
-                                              <span className="text-2xl leading-none">{getFlagEmoji(selectedUser.country)}</span>
-                                              {selectedUser.country || "UNKNOWN"}
-                                          </p>
-                                      </div>
-                                      <div>
-                                          <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Hardware ID</label>
-                                          <p className="text-[10px] font-mono text-gray-500 break-all">{selectedUser.deviceId || "VIRTUAL_DEVICE"}</p>
-                                      </div>
-                                      <div>
-                                          <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Relay Pulse</label>
-                                          <div className="bg-gray-50 dark:bg-gray-900/50 p-2 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-                                              <p className="text-[9px] font-mono text-gray-400 truncate">
-                                                  {selectedUser.pushToken || "COMM_LINK_DOWN"}
-                                              </p>
-                                          </div>
-                                      </div>
+                                        <div>
+                                            <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Station Origin</label>
+                                            <p className="font-black flex items-center gap-2 text-lg">
+                                                <span className="text-2xl leading-none">{getFlagEmoji(selectedUser.country)}</span>
+                                                {selectedUser.country || "UNKNOWN"}
+                                            </p>
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Hardware ID</label>
+                                            <p className="text-[10px] font-mono text-gray-500 break-all">{selectedUser.deviceId || "VIRTUAL_DEVICE"}</p>
+                                        </div>
+                                        <div>
+                                            <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Relay Pulse</label>
+                                            <div className="bg-gray-50 dark:bg-gray-900/50 p-2 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
+                                                <p className="text-[9px] font-mono text-gray-400 truncate">
+                                                    {selectedUser.pushToken || "COMM_LINK_DOWN"}
+                                                </p>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

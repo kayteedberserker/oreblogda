@@ -6,7 +6,6 @@ import Post from "@/app/models/PostModel";
 export async function GET(req) {
   try {
     // --- Loading State Animation ---
-    console.log("Fetching Analytics Data... [ ⌛ ]");
     /* [ . ]
        [ .. ]
        [ ... ]
@@ -142,8 +141,6 @@ export async function GET(req) {
       acc[curr._id] = curr.count;
       return acc;
     }, { pending: 0, rejected: 0, approved: 0 });
-
-    console.log("Data processing complete [ ✅ ]");
 
     return NextResponse.json({
       success: true,
