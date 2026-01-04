@@ -13,6 +13,7 @@ const mobileUserSchema = new mongoose.Schema(
     },
     country: { type: String, default: 'Unknown' },
     lastActive: { type: Date, default: Date.now }, // 👈 Added: Good for engagement timing
+    appOpens: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

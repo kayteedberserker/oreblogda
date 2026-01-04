@@ -4,6 +4,22 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "react-toastify";
 
+// New Helper: Returns an SVG image URL from FlagCDN
+const getFlagEmoji = (countryCode, size = "w40") => {
+  if (!countryCode || typeof countryCode !== 'string' || countryCode.length !== 2) {
+    return <span className="text-lg">🌐</span>;
+  }
+  const code = countryCode.toLowerCase();
+  return (
+    <img 
+      src={`https://flagcdn.com/${size}/${code}.png`} 
+      alt={countryCode}
+      className="inline-block w-6 h-auto rounded-sm shadow-sm"
+      onError={(e) => { e.target.style.display = 'none'; }}
+    />
+  );
+};
+
 export default function FullAdminDashboard() {
     const [stats, setStats] = useState(null);
     const [userList, setUserList] = useState([]);
@@ -27,7 +43,6 @@ export default function FullAdminDashboard() {
 
     useEffect(() => {
         const init = async () => {
-            // Added fetchDormantCount to initial load
             await Promise.all([fetchDashboardData(true), fetchUsers(true), fetchDormantCount()]);
             setInitialLoading(false);
         };
@@ -85,7 +100,7 @@ export default function FullAdminDashboard() {
     const handleUserSelect = async (user) => {
         setSelectedUser(user);
         setUserMetaLoading(true);
-        setPushMessage({ title: "", body: "" }); // Reset composer on new selection
+        setPushMessage({ title: "", body: "" });
         try {
             const res = await fetch(`/api/admin/users/posts?userId=${user._id}`);
             const data = await res.json();
@@ -159,7 +174,6 @@ export default function FullAdminDashboard() {
                     </div>
                     
                     <div className="flex items-center gap-4">
-                        {/* Dormant Re-engagement Card */}
                         <button 
                             onClick={sendBulkPush}
                             className="bg-orange-500/10 border border-orange-500/20 px-4 py-2 rounded-xl flex items-center gap-3 group hover:bg-orange-500 transition-all"
@@ -188,7 +202,7 @@ export default function FullAdminDashboard() {
                 {/* --- METRICS --- */}
                 <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
                     <MetricCard title="Total Users" value={stats?.totalUsers} color="text-blue-600" loading={statsLoading} />
-                    <MetricCard title="App Opens" value={stats?.totalAppOpens} color="text-purple-500" loading={statsLoading} />
+                    <MetricCard title="App Opens" value={stats?.totalAppOpens} color="text-purple-500" loading={statsLoading} trend={stats?.activityTrend} />
                     <MetricCard title="Pending" value={stats?.postStats?.pending} color="text-orange-500" loading={statsLoading} />
                     <MetricCard title="Approved" value={stats?.postStats?.approved} color="text-green-500" loading={statsLoading} />
                     <MetricCard title="Rejected" value={stats?.postStats?.rejected} color="text-red-500" loading={statsLoading} />
@@ -232,7 +246,7 @@ export default function FullAdminDashboard() {
                             {stats?.countries?.map(c => (
                                 <div key={c._id} className="flex items-center justify-between p-3 rounded-2xl bg-gray-50 dark:bg-gray-900 border border-transparent hover:border-blue-500/30 transition-all">
                                     <div className="flex items-center gap-3">
-                                        <span className="text-lg">{c._id === 'NG' ? '🇳🇬' : '🌐'}</span>
+                                        <span className="text-lg leading-none">{getFlagEmoji(c._id)}</span>
                                         <span className="font-black text-[10px] text-gray-500">{c._id || "Other"}</span>
                                     </div>
                                     <span className="font-black text-blue-600 text-xs">{c.count}</span>
@@ -302,7 +316,8 @@ export default function FullAdminDashboard() {
                                         </td>
                                         <td className="px-8 py-4">
                                             <span className="font-black text-[10px] uppercase flex items-center gap-2">
-                                                {u.country === 'NG' ? '🇳🇬' : '🌐'} {u.country || "---"}
+                                                <span className="text-base leading-none">{getFlagEmoji(u.country)}</span>
+                                                {u.country || "---"}
                                             </span>
                                         </td>
                                         <td className="px-8 py-4 text-[10px] font-bold text-gray-400 uppercase">
@@ -414,7 +429,8 @@ export default function FullAdminDashboard() {
                                     <div>
                                         <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Station Origin</label>
                                         <p className="font-black flex items-center gap-2 text-lg">
-                                            {selectedUser.country === 'NG' ? '🇳🇬' : '🌐'} {selectedUser.country || "UNKNOWN"}
+                                            <span className="text-2xl leading-none">{getFlagEmoji(selectedUser.country)}</span>
+                                            {selectedUser.country || "UNKNOWN"}
                                         </p>
                                     </div>
 
@@ -441,7 +457,7 @@ export default function FullAdminDashboard() {
     );
 }
 
-function MetricCard({ title, value, color, loading }) {
+function MetricCard({ title, value, color, loading, trend }) {
     return (
         <div className="p-6 rounded-3xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 shadow-sm relative overflow-hidden group">
             <div className="absolute top-0 right-0 w-16 h-16 bg-blue-600/5 rounded-bl-full group-hover:scale-110 transition-transform"></div>
@@ -449,7 +465,14 @@ function MetricCard({ title, value, color, loading }) {
             {loading ? (
                 <div className="h-8 w-2/3 bg-gray-100 dark:bg-gray-700 animate-pulse rounded-md"></div>
             ) : (
-                <h2 className={`text-4xl font-black tracking-tighter ${color} italic`}>{value?.toLocaleString() || 0}</h2>
+                <div className="flex flex-col">
+                    <h2 className={`text-4xl font-black tracking-tighter ${color} italic`}>{value?.toLocaleString() || 0}</h2>
+                    {trend !== undefined && (
+                        <div className={`text-[10px] font-black mt-1 flex items-center gap-1 ${trend >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {trend >= 0 ? '▲' : '▼'} {Math.abs(trend)}% <span className="text-gray-400 opacity-50 uppercase tracking-tighter">vs Prev</span>
+                        </div>
+                    )}
+                </div>
             )}
         </div>
     );

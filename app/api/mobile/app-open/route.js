@@ -7,10 +7,12 @@ export async function POST(req) {
     await connectDB();
     const { deviceId } = await req.json();
 
-    // Update the lastActive timestamp every time they open the app
     await MobileUser.updateOne(
       { deviceId },
-      { $set: { lastActive: new Date() } }
+      { 
+        $set: { lastActive: new Date() },
+        $inc: { appOpens: 1 } // Increments the new field by 1
+      }
     );
 
     return NextResponse.json({ success: true });

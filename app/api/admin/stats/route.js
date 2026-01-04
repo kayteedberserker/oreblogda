@@ -10,40 +10,77 @@ export async function GET(req) {
     const range = searchParams.get("range") || "7days";
 
     let startDate = new Date();
-    let groupByFormat = "%Y-%m-%d"; // Default: Day
+    let prevStartDate = new Date(); 
+    let groupByFormat = "%Y-%m-%d"; 
     let steps = 7;
 
+    // --- 1. SET TIME WINDOWS ---
     if (range === "24h") {
       startDate.setHours(startDate.getHours() - 24);
-      groupByFormat = "%H:00"; // Hourly
+      prevStartDate.setHours(prevStartDate.getHours() - 48); 
+      groupByFormat = "%H:00"; 
       steps = 24;
     } else if (range === "30days") {
       startDate.setDate(startDate.getDate() - 30);
+      prevStartDate.setDate(prevStartDate.setDate() - 60);
       steps = 30;
     } else {
       startDate.setDate(startDate.getDate() - 7);
+      prevStartDate.setDate(prevStartDate.setDate() - 14);
+      steps = 7;
     }
 
-    const [postStatsArray, totalUsers, countries, rawActivity, appOpenData] = await Promise.all([
+    const [postStatsArray, totalUsers, countries, rawActivity, currentPeriodOpens, prevPeriodOpens] = await Promise.all([
+      // 1. Post Status Distribution
       Post.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
+      
+      // 2. Global User Count
       MobileUser.countDocuments(),
+      
+      // 3. Geographic Distribution
       MobileUser.aggregate([
         { $group: { _id: "$country", count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]),
+      
+      // 4. Activity Flow (Chart Data) - CHANGED TO SUM OPENS, NOT PEOPLE
       MobileUser.aggregate([
         { $match: { lastActive: { $gte: startDate } } },
-        { $group: { _id: { $dateToString: { format: groupByFormat, date: "$lastActive" } }, count: { $sum: 1 } } },
+        { 
+          $group: { 
+            _id: { $dateToString: { format: groupByFormat, date: "$lastActive" } }, 
+            count: { $sum: "$appOpens" } // Now chart shows total clicks
+          } 
+        },
         { $sort: { "_id": 1 } }
       ]),
+      
+      // 5. Current Window App Opens
       MobileUser.aggregate([
         { $match: { lastActive: { $gte: startDate } } },
+        { $group: { _id: null, total: { $sum: "$appOpens" } } }
+      ]),
+
+      // 6. Previous Window App Opens
+      MobileUser.aggregate([
+        { $match: { lastActive: { $gte: prevStartDate, $lt: startDate } } },
         { $group: { _id: null, total: { $sum: "$appOpens" } } }
       ])
     ]);
 
-    // --- FILLING THE GAPS (Zero-Fill Logic) ---
+    // --- 2. TREND CALCULATION ---
+    const currentTotal = currentPeriodOpens[0]?.total || 0;
+    const prevTotal = prevPeriodOpens[0]?.total || 0;
+    
+    let activityTrend = 0;
+    if (prevTotal > 0) {
+      activityTrend = Math.round(((currentTotal - prevTotal) / prevTotal) * 100);
+    } else {
+      activityTrend = currentTotal > 0 ? 100 : 0;
+    }
+
+    // --- 3. GAP FILLING LOGIC ---
     const activityMap = new Map(rawActivity.map(i => [i._id, i.count]));
     const dailyActivity = [];
     
@@ -73,7 +110,8 @@ export async function GET(req) {
         postStats, 
         countries, 
         dailyActivity,
-        totalAppOpens: appOpenData[0]?.total || 0 
+        activityTrend, 
+        totalAppOpens: currentTotal 
       }
     });
   } catch (err) {
