@@ -57,8 +57,15 @@ export const metadata = {
 	},
 
 	icons: {
-		icon: "https://oreblogda.com/iconblue.png",
+		icon: [
+			{
+				url: "https://oreblogda.com/favicon.ico",
+				type: "image/png",
+				sizes: "96x96",
+			},
+		],
 	},
+
 };
 
 
@@ -83,14 +90,14 @@ export default function RootLayout({ children }) {
 						dedupingInterval: 2000, // cache identical requests for 2s
 					}}>
 						<Navbar />
-						
-							<div className="mt-15 pt-1 bg-linear-to-br from-blue-50 via-white to-pink-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950 transition-colors relative">
-								<CategoryNav />
-					             <main>
+
+						<div className="mt-15 pt-1 bg-linear-to-br from-blue-50 via-white to-pink-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950 transition-colors relative">
+							<CategoryNav />
+							<main>
 								{children}
-					             </main>
-							</div>
-							<ToastContainer />
+							</main>
+						</div>
+						<ToastContainer />
 						<Footer postsContainerId="postsContainer" />
 					</SWRConfig>
 				</ThemeProvider>
