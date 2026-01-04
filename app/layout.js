@@ -59,7 +59,7 @@ export const metadata = {
 	icons: {
 		icon: [
 			{
-				url: "https://oreblogda.com/favicon.ico",
+				url: "/iconblue.png",
 				type: "image/png",
 				sizes: "96x96",
 			},
