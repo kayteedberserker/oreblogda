@@ -155,6 +155,9 @@ const Dashboard = () => {
         <Link className="text-2xl hover:text-red-500 hover:underline" href={"authordiary/approvalpage"}>
           Post Approval
         </Link>
+        <Link className="text-2xl hover:text-red-500 hover:underline" href={"authordiary/dashboard"}>
+          Mobile Dashboard
+        </Link>
       </div>
       <hr className="my-6" />
 
