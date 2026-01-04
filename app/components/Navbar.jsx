@@ -40,7 +40,7 @@ const Navbar = () => {
         <div className="flex justify-between h-16 items-center">
           
           {/* --- LOGO ENGINE --- */}
-          <div 
+          <motion.div 
             className="shrink-0 relative group"
             whileHover={{ scale: 1.02 }}
           >
@@ -56,7 +56,7 @@ const Navbar = () => {
             </Link>
             {/* Logo Glow Effect */}
             <div className="absolute inset-0 bg-blue-500/10 blur-xl rounded-full opacity-0 group-hover:opacity-100 transition-opacity" />
-          </div>
+          </motion.div>
 
           {/* --- DESKTOP NAVIGATION --- */}
           <div className="hidden md:flex space-x-8 items-center">
@@ -114,7 +114,7 @@ const Navbar = () => {
       {/* --- MOBILE TERMINAL MENU --- */}
       <AnimatePresence>
         {isMobileOpen && (
-          <div
+          <motion.div
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "100vh", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
@@ -166,7 +166,7 @@ const Navbar = () => {
                  <p className="text-[10px] font-mono text-gray-400">LOC: LEKKI_NODE_NG</p>
               </div>
             </div>
-          </div>
+          </motion.div>
         )}
       </AnimatePresence>
 

@@ -100,7 +100,7 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
           const isSelected = selectedOptions.includes(i);
 
           return (
-            <div 
+            <motion.div 
               key={i} 
               whileHover={!submitted && !readOnly ? { scale: 1.02 } : {}}
               onClick={() => handleOptionChange(i)}
@@ -136,7 +136,7 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
                 <span>Votes: {opt.votes}</span>
                 {isSelected && <span className="text-blue-600 animate-pulse">SELECTED</span>}
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>
