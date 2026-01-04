@@ -49,103 +49,155 @@ export default function ClientCategoryPage({ category, initialPosts }) {
   }, [hasMore, isLoading, isValidating, setSize]);
 
   return (
-    <motion.div ref={ref} initial="hidden" animate={controls} variants={variants} className="bg-transparent rounded-2xl shadow-md">
-      <div className="max-w-7xl mx-auto px-2 md:px-8 py-6 relative min-h-[75vh]">
+    <div 
+      ref={ref} 
+      initial="hidden" 
+      animate={controls} 
+      variants={variants} 
+      className="bg-transparent rounded-2xl shadow-md"
+    >
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 relative min-h-[75vh]">
 
-        {/* Background effects */}
-        <div className="absolute top-10 left-10 w-48 h-48 bg-blue-300 dark:bg-indigo-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-10 right-10 w-56 h-56 bg-pink-300 dark:bg-pink-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
+        {/* --- ATMOSPHERIC BACKGROUND EFFECTS --- */}
+        <div className="absolute top-10 left-10 w-48 h-48 bg-blue-400 dark:bg-indigo-900 opacity-10 rounded-full blur-[100px] animate-pulse pointer-events-none" />
+        <div className="absolute bottom-10 right-10 w-56 h-56 bg-blue-300 dark:bg-blue-700 opacity-10 rounded-full blur-[120px] animate-pulse pointer-events-none" />
 
-        <div className="md:flex md:gap-8">
+        <div className="md:flex md:gap-12">
+          {/* --- MAIN CONTENT AREA --- */}
           <div
             id="postsContainer"
-            className="md:flex-2 max-h-[100vh] overflow-y-auto pr-2 scrollbar-hide"
+            className="md:flex-1 max-h-[100vh] overflow-y-auto pr-2 scrollbar-hide"
           >
-            <h1 className="text-2xl font-bold mb-6 capitalize">{category}</h1>
-            {uniquePosts.map((post, index) => (
-              <div key={post._id} className="break-inside-avoid mb-6">
-                <PostCard post={post} posts={uniquePosts} setPosts={() => { }} isFeed />
-
-                {/* Insert ad after every 2 posts */}
-                {/* {(index + 1) % 2 === 0 && <ArticleAd />} */}
+            {/* Category HUD Header */}
+            <div className="relative mb-10 pb-4 border-b-2 border-gray-100 dark:border-gray-800">
+              <div className="flex items-center gap-3 mb-1">
+                <div className="h-2 w-2 bg-blue-600 rounded-full animate-ping" />
+                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-blue-600">Archive Sector</span>
               </div>
-            ))}
+              <h1 className="text-4xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white">
+                Folder: <span className="text-blue-600">{category}</span>
+              </h1>
+              <div className="absolute bottom-0 left-0 h-[2px] w-20 bg-blue-600" />
+            </div>
 
-            {(isLoading || isValidating) && (
-              <p className="text-center text-gray-500 mt-4">Loading more...</p>
-            )}
+            <div className="flex flex-col gap-6">
+              {uniquePosts.map((post, index) => (
+                <div key={post._id} className="break-inside-avoid">
+                  <PostCard post={post} posts={uniquePosts} setPosts={() => { }} isFeed />
+                  
+                  {/* Ad Placeholder logic kept consistent */}
+                  {/* {(index + 1) % 2 === 0 && <ArticleAd />} */}
+                </div>
+              ))}
+            </div>
 
-            {hasMore && !isLoading && !isValidating && (
-              <div className="text-center mt-6">
-                <button
-                  aria-label="Load more"
-                  onClick={() => setSize((prev) => prev + 1)}
-                  className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                >
-                  Load more
-                </button>
-              </div>
-            )}
-
-            {!hasMore && uniquePosts.length > 0 && (
-              <p className="text-center text-gray-400 mt-4">No more posts to show</p>
-            )}
-            {!isLoading && uniquePosts.length === 0 && (
-              <p className="text-center text-gray-500 mt-4">
-                No posts found in this category
-              </p>
-            )}
+            {/* --- LOADING & FEEDBACK --- */}
+            <div className="py-12">
+              {(isLoading || isValidating) ? (
+                <div className="flex flex-col items-center gap-3">
+                   {/* Custom Loading Animation per instructions */}
+                   <div className="w-16 h-1 bg-gray-100 dark:bg-gray-800 overflow-hidden rounded-full">
+                      <div className="h-full bg-blue-600 animate-[loading_1.5s_infinite]" />
+                   </div>
+                   <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 animate-pulse">
+                      Retrieving Data...
+                   </p>
+                </div>
+              ) : hasMore ? (
+                <div className="text-center mt-6">
+                  <button
+                    aria-label="Load more"
+                    onClick={() => setSize((prev) => prev + 1)}
+                    className="group relative px-8 py-3 bg-gray-900 dark:bg-white rounded-xl overflow-hidden transition-all hover:scale-105 active:scale-95"
+                  >
+                    <div className="absolute inset-0 bg-blue-600 translate-y-full group-hover:translate-y-0 transition-transform" />
+                    <span className="relative z-10 text-white dark:text-black group-hover:text-white font-black uppercase italic tracking-widest text-xs">
+                      Fetch More Records
+                    </span>
+                  </button>
+                </div>
+              ) : uniquePosts.length > 0 ? (
+                <p className="text-center text-[10px] font-black uppercase tracking-[0.5em] text-gray-400 mt-4">
+                  END OF ARCHIVE
+                </p>
+              ) : (
+                <div className="text-center py-20 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-3xl">
+                  <p className="text-gray-500 font-black uppercase italic tracking-widest">
+                    No posts found in <span className="text-blue-600">{category}</span>
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Sidebar */}
-          <div className="hidden md:flex flex-col gap-[15px] md:w-1/3">
-            <RecentPollsCard />
-            {/* <FooterAds /> */}
-          </div>
+          {/* --- DESKTOP SIDEBAR --- */}
+          <aside className="hidden md:flex flex-col gap-6 md:w-[350px]">
+            <div className="sticky top-6">
+               <div className="flex items-center gap-2 mb-4">
+                  <div className="h-1 w-4 bg-blue-600" />
+                  <span className="text-[10px] font-black uppercase tracking-widest">Related Intel</span>
+               </div>
+               <RecentPollsCard />
+            </div>
+          </aside>
 
-          {/* Mini drawer */}
+          {/* --- TACTICAL MINI DRAWER (Mobile Only) --- */}
           <div className="md:hidden">
             <button
               aria-label="Open drawer"
               onClick={() => setDrawerOpen((prev) => !prev)}
-              className="fixed top-1/3 right-[-20px] transform -translate-y-1/2 z-50 w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg"
+              className={`fixed top-1/2 -right-2 transform -translate-y-1/2 z-50 w-14 h-14 rounded-l-2xl flex items-center justify-center shadow-2xl transition-all ${
+                drawerOpen ? "bg-red-600" : "bg-blue-600"
+              }`}
             >
-              <FaPoll />
+              <div className="relative">
+                {drawerOpen ? <span className="text-xl text-white">✕</span> : <FaPoll className="text-xl text-white" />}
+                {!drawerOpen && <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-blue-600 animate-ping" />}
+              </div>
             </button>
 
+            {/* Drawer Sliding Panel */}
             <div
-              className={`fixed top-1/4 right-0 z-40 w-fit max-w-full bg-white dark:bg-gray-800 p-4 shadow-lg rounded-l-lg transition-transform duration-300 ${drawerOpen ? "translate-x-0" : "translate-x-full"
-                }`}
+              className={`fixed top-0 right-0 z-40 h-full w-[85%] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-xl border-l border-blue-600/20 p-6 shadow-[-20px_0_50px_rgba(0,0,0,0.3)] transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+                drawerOpen ? "translate-x-0" : "translate-x-full"
+              }`}
             >
-              <RecentPollsCard />
+              <div className="mt-20">
+                <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-2xl font-black italic uppercase tracking-tighter">Tactical HUD</h2>
+                  <span className="text-[8px] font-mono opacity-40 italic">SECURE_LINK</span>
+                </div>
+                <RecentPollsCard />
+              </div>
             </div>
+
+            {/* Backdrop Blur */}
+            {drawerOpen && (
+              <div 
+                onClick={() => setDrawerOpen(false)}
+                className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30" 
+              />
+            )}
           </div>
         </div>
 
-        {/* Scrollbar & Styles */}
+        {/* Global Styles for this component */}
         <style jsx>{`
-          .scrollbar-hide::-webkit-scrollbar {
-            width: 0px;
+          .scrollbar-hide::-webkit-scrollbar { width: 0px; }
+          .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+          
+          @keyframes loading {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
           }
-          .scrollbar-hide {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-          }
-          div[style*="overflow-y: auto"]::-webkit-scrollbar {
-            width: 6px;
-          }
-          div[style*="overflow-y: auto"]::-webkit-scrollbar-track {
-            background: transparent;
-          }
+
+          div[style*="overflow-y: auto"]::-webkit-scrollbar { width: 4px; }
           div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
-            background-color: rgba(107, 114, 128, 0.5);
+            background-color: #2563eb;
             border-radius: 10px;
-          }
-          .dark div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
-            background-color: rgba(156, 163, 175, 0.3);
           }
         `}</style>
       </div>
-    </motion.div>
+    </div>
   );
 }

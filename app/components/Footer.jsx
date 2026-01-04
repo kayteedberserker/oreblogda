@@ -92,116 +92,153 @@ export default function Footer({ postsContainerId }) {
 
   return (
     <footer
-      className={`py-10 relative transition-colors flex bottom-0 flex-col duration-300 ${systemTheme === "dark" ? "bg-gray-900 text-gray-100" : "bg-gray-100 text-gray-900"
-        }`}
+      className={`py-12 relative transition-colors flex flex-col duration-500 overflow-hidden border-t border-gray-100 dark:border-blue-900/20 ${
+        systemTheme === "dark" ? "bg-[#050505] text-gray-100" : "bg-gray-50 text-gray-900"
+      }`}
     >
+      {/* --- DECORATIVE HUD ELEMENTS --- */}
+      <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-blue-500/50 to-transparent" />
+      <div className="absolute top-0 left-1/4 w-[1px] h-full bg-blue-500/5 pointer-events-none" />
+      <div className="absolute top-0 right-1/4 w-[1px] h-full bg-blue-500/5 pointer-events-none" />
 
-      <div className="max-w-7xl mx-auto px-4 grow sm:px-6 lg:px-8">
-      {/* <FooterAds /> */}
-        {/* Newsletter Form */}
-        <motion.div
+      <div className="max-w-7xl mx-auto px-4 grow sm:px-6 lg:px-8 relative z-10">
+        
+        {/* Newsletter Section */}
+        <div
           initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
           transition={{ duration: 0.5 }}
-          className="text-center mb-8"
+          className="text-center mb-12"
         >
-          <h3 className="text-2xl font-bold mb-2">Subscribe to our Newsletter</h3>
-          <p className={systemTheme === "dark" ? "text-gray-400 mb-4" : "text-gray-700 mb-4"}>
-            Get updates when we post new content!
+          <div className="inline-flex items-center gap-2 mb-3">
+             <div className="w-1 h-1 bg-blue-600 rounded-full animate-ping" />
+             <span className="text-[10px] font-black uppercase tracking-[0.4em] text-blue-600">Sync Signal</span>
+          </div>
+          
+          <h3 className="text-3xl font-black italic uppercase tracking-tighter mb-2">
+            Stay Connected
+          </h3>
+          <p className={`text-xs font-bold uppercase tracking-widest mb-6 ${systemTheme === "dark" ? "text-gray-500" : "text-gray-400"}`}>
+            Receive direct intelligence updates
           </p>
+
           <form
             onSubmit={handleSubscribe}
-            className="flex flex-col sm:flex-row justify-center items-center gap-2"
+            className="flex flex-col sm:flex-row justify-center items-stretch gap-0 max-w-md mx-auto group"
           >
             <input
               type="email"
-              placeholder="Your email"
+              placeholder="TERMINAL@USER.COM"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className={`p-2 border shadow rounded-md w-full sm:w-auto flex-1 transition-colors duration-300 ${systemTheme === "dark"
-                  ? "bg-gray-800 text-gray-100 border-gray-700"
-                  : "bg-white text-gray-900 border-gray-300"
-                }`}
+              className={`p-4 border-2 shadow-none rounded-t-xl sm:rounded-l-xl sm:rounded-tr-none w-full flex-1 transition-all outline-none text-xs font-black tracking-widest uppercase ${
+                systemTheme === "dark"
+                  ? "bg-gray-900/50 border-gray-800 focus:border-blue-600 focus:bg-gray-900"
+                  : "bg-white border-gray-200 focus:border-blue-600"
+              }`}
               required
             />
             <button
               aria-label="Subscribe"
               type="submit"
               disabled={loading}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-md font-semibold text-white"
+              className="relative px-8 py-4 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase italic tracking-widest text-xs transition-all overflow-hidden rounded-b-xl sm:rounded-r-xl sm:rounded-bl-none"
             >
-              {loading ? "Subscribing..." : "Subscribe"}
+              {loading ? (
+                /* LOADING ANIMATION per instructions */
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span>Syncing...</span>
+                </div>
+              ) : (
+                "Link Intel"
+              )}
+              {/* Button Glitch Effect on Hover */}
+              <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500 skew-x-12" />
             </button>
           </form>
-          {message && (
-            <p className={systemTheme === "dark" ? "mt-2 text-green-400" : "mt-2 text-green-600"}>
-              {message}
-            </p>
-          )}
-        </motion.div>
-          {/* <FooterAds /> */}
-        {/* Socials */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2, duration: 0.5 }}
-          className={`flex justify-center gap-3 mb-6 transition-colors duration-300 ${systemTheme === "dark" ? "text-gray-400" : "text-gray-600"
-            }`}
-        >
-          <a href="https://x.com/oreblogda" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
-            Twitter
-          </a>
-          <a href="https://www.instagram.com/oreblogda/" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
-            Instagram
-          </a>
-          <a href="https://whatsapp.com/channel/0029VbBkiupCRs1wXFWtDG3N" target="_blank" rel="noopener noreferrer" className="hover:text-blue-500">
-            Whatsapp
-          </a>
-          <a
-            href="https://web.facebook.com/profile.php?id=61582505145912"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="hover:text-blue-500"
-          >
-            Facebook
-          </a>
-        </motion.div>
 
-        {/* Legal & Copyright */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4, duration: 0.5 }}
-          className={`flex flex-col sm:flex-row justify-between items-center text-sm transition-colors duration-300 ${systemTheme === "dark" ? "text-gray-500" : "text-gray-700"
-            }`}
+          {message && (
+            <motion.p 
+              initial={{ opacity: 0, scale: 0.9 }} 
+              animate={{ opacity: 1, scale: 1 }}
+              className={`mt-4 text-[10px] font-black uppercase tracking-widest ${systemTheme === "dark" ? "text-blue-400" : "text-blue-600"}`}
+            >
+              {`> ${message}`}
+            </motion.p>
+          )}
+        </div>
+
+        {/* Social Links HUD */}
+        <div
+          initial={{ opacity: 0 }}
+          whileInView={{ opacity: 1 }}
+          transition={{ delay: 0.2 }}
+          className="flex flex-wrap justify-center gap-6 mb-10"
         >
-          <div className="mb-2 sm:mb-0">
-            <a href="/terms" className="hover:text-blue-500 mr-4">
-              Terms & Conditions
+          {['Twitter', 'Instagram', 'Whatsapp', 'Facebook'].map((platform) => (
+            <a 
+              key={platform}
+              href={platform === 'Twitter' ? 'https://x.com/oreblogda' : platform === 'Instagram' ? 'https://www.instagram.com/oreblogda/' : platform === 'Whatsapp' ? 'https://whatsapp.com/channel/0029VbBkiupCRs1wXFWtDG3N' : 'https://web.facebook.com/profile.php?id=61582505145912'}
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="text-[10px] font-black uppercase tracking-[0.2em] hover:text-blue-500 transition-colors border-b border-transparent hover:border-blue-500 pb-1"
+            >
+              {platform}
             </a>
-            <a href="/privacy" className="hover:text-blue-500">
-              Privacy Policy
-            </a>
+          ))}
+        </div>
+
+        {/* Legal & Copyright System Info */}
+        <div
+          className={`flex flex-col sm:flex-row justify-between items-center text-[10px] font-bold uppercase tracking-widest pt-8 border-t border-gray-100 dark:border-gray-800 ${
+            systemTheme === "dark" ? "text-gray-600" : "text-gray-400"
+          }`}
+        >
+          <div className="mb-4 sm:mb-0 space-x-6">
+            <a href="/terms" className="hover:text-blue-500 transition-colors">Terms_Conditions</a>
+            <a href="/privacy" className="hover:text-blue-500 transition-colors">Privacy_Policy</a>
           </div>
-          <div>&copy; {new Date().getFullYear()} Oreblogda. All rights reserved.</div>
-        </motion.div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+            <span>&copy; {new Date().getFullYear()} OREBLOGDA.SYS_V4.0</span>
+          </div>
+        </div>
       </div>
-      <a href="https://whatsapp.com/channel/0029VbBkiupCRs1wXFWtDG3N" target="_blank" rel="noopener noreferrer"
+
+      {/* --- FIXED HARDWARE BUTTONS --- */}
+      
+      {/* Whatsapp Floating Button */}
+      <a 
+        href="https://whatsapp.com/channel/0029VbBkiupCRs1wXFWtDG3N" 
+        target="_blank" 
+        rel="noopener noreferrer"
         aria-label="Whatsapp"
-        className="fixed bottom-18 right-1 md:right-6 hover:cursor-pointer w-10 h-10 text-2xl flex items-center justify-center rounded-full shadow-lg transition-opacity duration-300"
+        className="fixed bottom-18 right-4 md:right-8 group z-40 transition-transform active:scale-90"
       >
-        <img src="/whatsapp.png" alt="Go to Whatsapp" className=" h-full w-full rounded-full" />
+        <div className="relative w-12 h-12 flex items-center justify-center bg-white dark:bg-gray-900 rounded-full shadow-2xl border border-gray-100 dark:border-gray-800">
+          <img src="/whatsapp.png" alt="WA" className="w-10 h-10 rounded-full" />
+          <div className="absolute -inset-1 bg-green-500/20 rounded-full animate-ping pointer-events-none" />
+        </div>
       </a>
-      {/* Back to top */}
+
+      {/* Back to top - Tactical Version */}
       {showBackToTop && (
         <button
           aria-label="Go to top"
           onClick={scrollToTop}
-          className="fixed bottom-6 right-1 md:right-6 bg-blue-600 hover:bg-blue-700 hover:cursor-pointer text-white p-3 w-10 h-10 text-2xl flex items-center justify-center rounded-full shadow-lg transition-opacity duration-300"
+          className="fixed bottom-6 right-4 md:right-8 z-40 bg-blue-600 text-white w-12 h-12 flex items-center justify-center rounded-xl shadow-2xl hover:bg-blue-700 transition-all active:scale-90 border-b-4 border-blue-800"
         >
-          ↑
+          <span className="font-black text-xl">↑</span>
         </button>
       )}
+
+      <style jsx>{`
+        footer {
+          background-image: radial-gradient(circle at 50% 100%, rgba(37, 99, 235, 0.05), transparent 50%);
+        }
+      `}</style>
     </footer>
   );
 }

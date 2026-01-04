@@ -51,98 +51,155 @@ export default function PostsViewer({ initialPosts }) {
   }, [hasMore, isLoading, isValidating, setSize]);
 
   return (
-    <div className="max-w-7xl mx-auto md:px-8 py-6">
-
-
-      <div className="md:flex md:gap-8">
-        {/* Posts */}
+    <div className="max-w-7xl mx-auto md:px-8 py-8 bg-white dark:bg-[#0a0a0a00] min-h-screen transition-colors duration-500">
+      
+      {/* --- AMBIENT BACKGROUND ELEMENTS --- */}
+      <div className="fixed top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-600 to-transparent opacity-50 z-50" />
+      
+      <div className="md:flex md:gap-12">
+        
+        {/* --- MAIN CONTENT: THE DATA STREAM --- */}
         <div
           id="postsContainer"
-          className="md:flex-2 max-h-[100vh] overflow-y-auto pr-2 scrollbar-hide"
+          className="md:flex-1 max-h-screen overflow-y-auto pr-4 scrollbar-hide px-4 md:px-0"
         >
-          <h1 className="text-4xl font-bold mb-6">Anime Blog Posts</h1>
-          {uniquePosts.map((post, index) => (
-            <div key={post._id} className="break-inside-avoid mb-6">
-              <PostCard
-                post={post}
-                posts={uniquePosts}
-                setPosts={() => { }}
-                isFeed
-              />
-
-              {/* Insert ad after every 2 posts (index = 1, 3, 5...) */}
-              {index % 2 === 1 && (
-                <div className="my-6 w-full flex justify-center">
-                  {/* Use the Sync component here for the larger 468x60 format */}
-                  {/* <AdsterraBannerSync /> */}
-                </div>
-              )}
+          {/* Header with Scan-line effect */}
+          <div className="relative mb-10 pb-4 border-b-2 border-gray-100 dark:border-gray-800">
+            <div className="flex items-center gap-3 mb-1">
+               <div className="h-3 w-3 bg-blue-600 rounded-full animate-ping" />
+               <span className="text-[10px] font-black uppercase tracking-[0.5em] text-blue-600">Live Feed Active</span>
             </div>
-          ))}
+            <h1 className="text-5xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white">
+              Anime <span className="text-blue-600">Intel</span>
+            </h1>
+            <div className="absolute bottom-0 left-0 h-[2px] w-24 bg-blue-600" />
+          </div>
 
-          {(isLoading || isValidating) && (
-            <p className="text-center text-gray-500 mt-4 animate-pulse">
-              Loading more...
-            </p>
-          )}
+          <div className="flex flex-col gap-8">
+            {uniquePosts.map((post, index) => (
+              <div key={post._id} className="relative group">
+                <PostCard
+                  post={post}
+                  posts={uniquePosts}
+                  setPosts={() => { }}
+                  isFeed
+                />
 
-          {hasMore && !isLoading && !isValidating && (
-            <div className="text-center mt-6">
-              <button
-                aria-label="Load more"
-                onClick={() => setSize((prev) => prev + 1)}
-                className="px-5 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-              >
-                Load more
-              </button>
-            </div>
-          )}
+                {/* AD TERMINAL SLOT */}
+                {index % 2 === 1 && (
+                  <div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex justify-center bg-gray-50/50 dark:bg-white/5">
+                     {/* <AdsterraBannerSync /> */}
+                     <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
 
-          {!hasMore && uniquePosts.length > 0 && (
-            <p className="text-center text-gray-400 mt-4">
-              No more posts to show
-            </p>
-          )}
-
-          {!isLoading && uniquePosts.length === 0 && (
-            <p className="text-center text-gray-500 mt-4">
-              No posts available yet
-            </p>
-          )}
+          {/* LOADING & LOAD MORE STATE */}
+          <div className="py-12 border-t border-gray-100 dark:border-gray-800 mt-10">
+            {(isLoading || isValidating) ? (
+              <div className="flex flex-col items-center gap-3">
+                 <div className="w-12 h-1 bg-gray-200 dark:bg-gray-800 overflow-hidden">
+                    <div className="h-full bg-blue-600 animate-[loading_1.5s_infinite]" />
+                 </div>
+                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 animate-pulse">
+                    Synchronizing...
+                 </p>
+              </div>
+            ) : hasMore ? (
+              <div className="text-center">
+                <button
+                  aria-label="Load more"
+                  onClick={() => setSize((prev) => prev + 1)}
+                  className="group relative px-10 py-4 bg-gray-900 dark:bg-white rounded-2xl overflow-hidden transition-all hover:scale-105 active:scale-95"
+                >
+                  <div className="absolute inset-0 bg-blue-600 translate-y-full group-hover:translate-y-0 transition-transform" />
+                  <span className="relative z-10 text-white dark:text-black group-hover:text-white font-black uppercase italic tracking-widest text-xs">
+                    Expand Feed +
+                  </span>
+                </button>
+              </div>
+            ) : uniquePosts.length > 0 ? (
+              <p className="text-center text-[10px] font-black uppercase tracking-[0.5em] text-gray-400">
+                End of Transmission
+              </p>
+            ) : (
+              <div className="text-center py-20">
+                 <h2 className="text-2xl font-black uppercase italic text-gray-300">No Intel Found</h2>
+              </div>
+            )}
+          </div>
         </div>
-        {/* Sidebar */}
-        <div className="hidden md:flex flex-col gap-[15px] md:w-1/3">
-          <RecentPollsCard />
-          {/* <FooterAds /> */}
-        </div>
 
-        {/* Mini drawer */}
+        {/* --- DESKTOP SIDEBAR --- */}
+        <aside className="hidden md:flex flex-col gap-6 md:w-[350px]">
+          <div className="sticky top-8">
+             <div className="flex items-center gap-2 mb-4 ml-1">
+                <div className="h-1 w-4 bg-blue-600" />
+                <span className="text-[10px] font-black uppercase tracking-widest">Sidebar Widgets</span>
+             </div>
+             <RecentPollsCard />
+          </div>
+        </aside>
+
+        {/* --- THE TACTICAL MOBILE DRAWER --- */}
         <div className="md:hidden">
+          {/* Glowing Trigger Button */}
           <button
             aria-label="Open drawer"
             onClick={() => setDrawerOpen((prev) => !prev)}
-            className="fixed top-1/3 -right-5 transform -translate-y-1/2 z-50 w-12 h-12 rounded-full bg-blue-600 text-white flex items-center justify-center shadow-lg"
+            className={`fixed top-1/2 -right-2 transform -translate-y-1/2 z-50 w-14 h-14 rounded-l-2xl flex items-center justify-center shadow-[0_0_20px_rgba(37,99,235,0.3)] transition-all ${
+              drawerOpen ? "bg-red-600" : "bg-blue-600"
+            }`}
           >
-            <FaPoll />
+            <div className="relative">
+               {drawerOpen ? <span className="text-xl">✕</span> : <FaPoll className="text-xl text-white" />}
+               {!drawerOpen && <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-blue-600 animate-bounce" />}
+            </div>
           </button>
+
+          {/* Drawer Overlay Terminal */}
           <div
-            className={`fixed top-1/4 right-0 z-40 w-fit max-w-full bg-white dark:bg-gray-800 p-4 shadow-lg rounded-l-lg transition-transform duration-300 ${drawerOpen ? "translate-x-0" : "translate-x-full"
-              }`}
+            className={`fixed top-0 right-0 z-40 h-full w-[85%] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-xl border-l border-blue-600/20 p-6 shadow-[-20px_0_50px_rgba(0,0,0,0.2)] transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${
+              drawerOpen ? "translate-x-0" : "translate-x-full"
+            }`}
           >
-            <RecentPollsCard />
+            <div className="mt-16">
+               <div className="flex items-center justify-between mb-8">
+                  <h2 className="text-2xl font-black italic uppercase tracking-tighter">Tactical HUD</h2>
+                  <span className="text-[8px] font-mono opacity-50">v2.0.26_SYNC</span>
+               </div>
+               
+               <div className="space-y-6">
+                 <RecentPollsCard />
+               </div>
+               
+               <div className="absolute bottom-10 left-6 right-6 p-4 border border-blue-600/10 rounded-2xl">
+                  <p className="text-[9px] font-black uppercase tracking-widest text-blue-600 opacity-50">System Link: Stable</p>
+               </div>
+            </div>
           </div>
+
+          {/* Backdrop Blur */}
+          {drawerOpen && (
+            <div 
+              onClick={() => setDrawerOpen(false)}
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 animate-in fade-in duration-300" 
+            />
+          )}
         </div>
       </div>
 
       <style jsx>{`
-          .scrollbar-hide::-webkit-scrollbar {
-            width: 0px;
-          }
-          .scrollbar-hide {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-          }
-        `}</style>
+        .scrollbar-hide::-webkit-scrollbar { width: 0px; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        @keyframes loading {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(100%); }
+        }
+      `}</style>
     </div>
   );
 }

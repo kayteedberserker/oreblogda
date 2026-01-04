@@ -24,6 +24,7 @@ export default function PostCard({
 	isFeed,
 	hideComments = false,
 	hideMedia,
+	isSimilarPost = false,
 	className,
 	imgHeight
 }) {
@@ -176,7 +177,7 @@ export default function PostCard({
 				const res = await fetch(`/api/users/${post.authorId || post.authorUserId}`);
 				if (!res.ok) throw new Error("Failed to fetch author");
 				const data = await res.json();
-				
+
 				setAuthor({ name: data.name || post.authorName, image: data.user?.profilePic?.url });
 			} catch (err) {
 			}
@@ -254,7 +255,12 @@ export default function PostCard({
 
 
 	const renderMessage = () => {
-		const maxLength = 150;
+		let maxLength = 150;
+		if(isSimilarPost){
+			maxLength = 200;
+		}else {
+			maxLength = 150;
+		}
 
 		if (isFeed) {
 			// Updated the replace regex to include the source tag for the feed view
@@ -386,13 +392,13 @@ export default function PostCard({
 		// 5. Always show at least ONE ad if article is too short
 		if (!adInserted && blocks.length > 2) {
 			output.push(
-					// <AdsterraBanner
-					// 	key={`article-ad}`}
-					// 	adKey="54eb965c7aa17f4628834c16b38ef17e"
-					// />
-				);
-				wordCount = 0;
-				adInserted = true;
+				// <AdsterraBanner
+				// 	key={`article-ad}`}
+				// 	adKey="54eb965c7aa17f4628834c16b38ef17e"
+				// />
+			);
+			wordCount = 0;
+			adInserted = true;
 		}
 
 		return output;
@@ -402,300 +408,225 @@ export default function PostCard({
 
 	return (
 		<>
-			<div className={`bg-white dark:bg-gray-800 shadow-md rounded-md py-4 px-1 mb-6 relative overflow-hidden ${className}`}>
+			<div className={`group bg-white dark:bg-[#0d1117] border border-gray-100 dark:border-gray-800 shadow-sm hover:shadow-2xl hover:border-blue-500/50 rounded-2xl py-6 px-5 mb-8 relative overflow-hidden transition-all duration-300 ${className}`}>
+
+				{/* TOP DECO: Scanner Line (Appears on Hover) */}
+				<div className="absolute top-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-blue-500 to-transparent opacity-0 group-hover:opacity-100 group-hover:animate-[scan_2s_linear_infinite] transition-opacity" />
+
 				{/* Author & Views */}
-				<div className="flex justify-between items-center mb-1">
+				<div className="flex justify-between items-center mb-4">
 					<Link
 						href={`/author/${post.authorId || post.authorUserId}`}
-						className="flex items-center space-x-2 hover:underline"
+						className="flex items-center space-x-3 group/author"
 					>
 						{author.image ? (
-							<div className="w-8 h-8 relative rounded-full border border-gray-600 dark:border-gray-600 overflow-hidden">
-								<Image
-									src={author.image}
-									alt={`Author ${author.name}'s Image` || "Author"}
-									fill
-									className="object-cover"
-									loading="lazy"
-								/>
+							<div className="w-10 h-10 relative rounded-full border-2 border-blue-500/30 p-[2px] overflow-hidden group-hover/author:border-blue-500 transition-colors">
+								<div className="w-full h-full relative rounded-full overflow-hidden">
+									<Image
+										src={author.image}
+										alt={author.name || "Author"}
+										fill
+										className="object-cover transition-transform group-hover/author:scale-110"
+										loading="lazy"
+									/>
+								</div>
 							</div>
 						) : (
-							<div className="w-8 h-8 rounded-full bg-gray-300 flex items-center justify-center text-sm text-gray-600">
+							<div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-sm font-black text-blue-600">
 								?
 							</div>
 						)}
-						<span className="font-light text-2xl underline capitalize">
-							{author.name || "Unknown"}
-						</span>
+						<div className="flex flex-col">
+							<span className="font-black text-xs uppercase tracking-widest text-blue-600 dark:text-blue-400 opacity-80 group-hover/author:opacity-100 transition-opacity">
+								{author.name || "Unknown Entity"}
+							</span>
+							<span className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">Verified Author</span>
+						</div>
 					</Link>
-					<span className="text-sm text-gray-500">{totalViews} views</span>
+
+					<div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800/50 px-3 py-1 rounded-full border border-gray-100 dark:border-gray-700">
+						<div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
+						<span className="text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">{totalViews}</span>
+					</div>
 				</div>
 
+				{/* --- Post Content --- */}
+				<div className="relative mb-4">
+					<h2 className={`font-black uppercase italic tracking-tighter transition-colors group-hover:text-blue-600 ${isSimilarPost ? "text-[18px] leading-tight mb-1" : isFeed ? "text-xl leading-tight mb-2" : "text-3xl mb-3"}`}>
+						{post?.title}
+					</h2>
 
-				{/* ✅ Updated Message */}
-
-				<h2
-					className={`font-bold ${isFeed ? "text-[1.3rem] leading-[1.22rem] mb-1" : "text-2xl mb-1.5"}`}
-				>
-					{post?.title}
-				</h2>
-				<div className="text-gray-800 text-[12px] md:text-[16px] dark:text-gray-100 mb-1">
-					{isFeed ? (
-						isLongMessage && !showFullMessage ? (
-							<>
-								<Link href={`/post/${idLink}`} className="hover:underline">
+					<div className="text-gray-600 dark:text-gray-300 text-sm md:text-base leading-relaxed font-medium">
+						{isFeed ? (
+							isLongMessage && !showFullMessage ? (
+								<>
+									<Link href={`/post/${idLink}`} className="hover:text-blue-500 transition-colors">
+										{renderMessage()}
+									</Link>
+									<Link href={`/post/${idLink}`} className="ml-2 text-blue-600 font-black uppercase text-[10px] tracking-widest hover:underline">
+										[ Read Intel ]
+									</Link>
+								</>
+							) : (
+								<Link href={`/post/${idLink}`} className="hover:text-blue-500 transition-colors">
 									{renderMessage()}
 								</Link>
-								<Link href={`/post/${idLink}`} className="ml-3.5 hover:underline">
-									Read More
-								</Link>
-								<input type="hidden" value="Oreblogda - Anime blog" aria-label="Oreblogda - Anime Blog" />
-							</>
+							)
 						) : (
-							<Link href={`/post/${idLink}`} className="hover:underline">
-								{renderMessage()}
-								<input type="hidden" value="Oreblogda - Anime blog" aria-label="Oreblogda - Anime Blog" />
-							</Link>
-						)
-					) : (
-						<>
-							{renderMessageWithAds(renderMessage(), 100)}
-							<input type="hidden" value="Oreblogda - Anime blog" aria-label="Oreblogda - Anime Blog" />
-							{/* <AdsterraBannerSync /> */}
-						</>
-					)}
+							<div className="prose dark:prose-invert max-w-none">
+								{renderMessageWithAds(renderMessage(), 100)}
+							</div>
+						)}
+						<input type="hidden" value="Oreblogda - Anime blog" aria-label="Oreblogda - Anime Blog" />
+					</div>
 				</div>
 
-
-				{/* Media */}
+				{/* Media Section */}
 				{!hideMedia && post.mediaUrl && (
-					post.mediaUrl.includes("tiktok.com") ? (
-						<>
-							<blockquote
-								className="tiktok-embed"
-								cite={post.mediaUrl.split("?")[0]}
-								data-video-id={post.mediaUrl.match(/video\/(\d+)/)?.[1]}
-								style={{ maxWidth: "100%", minWidth: "325px" }}
-							>
-								<section> </section>
-							</blockquote>
-							<script async src="https://www.tiktok.com/embed.js"></script>
-						</>
-					) : post.mediaType?.startsWith("image") ? (
-						<div className="relative rounded-md mb-2 w-full h-auto cursor-pointer">
-							<Image
+					<div className="relative group/media rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-800 mb-4 shadow-inner">
+						{post.mediaUrl.includes("tiktok.com") ? (
+							<div className="flex justify-center bg-black">
+								<blockquote className="tiktok-embed" cite={post.mediaUrl.split("?")[0]} data-video-id={post.mediaUrl.match(/video\/(\d+)/)?.[1]} style={{ maxWidth: "100%", minWidth: "325px" }}>
+									<section> </section>
+								</blockquote>
+								<script async src="https://www.tiktok.com/embed.js"></script>
+							</div>
+						) : post.mediaType?.startsWith("image") ? (
+							<div className="relative w-full h-auto cursor-pointer overflow-hidden" onClick={() => openLightbox(post.mediaUrl, "image")}>
+								<Image
+									src={post.mediaUrl}
+									alt="post media"
+									loading="eager"
+									width={800}
+									height={600}
+									sizes="(max-width: 768px) 90vw, (max-width: 1200px) 80vw, 60vw"
+									className={`w-full h-auto object-cover transition-transform duration-700 group-hover/media:scale-105 ${imgHeight}`}
+								/>
+								{/* Glitch Overlay on Hover */}
+								<div className="absolute inset-0 bg-blue-600/10 opacity-0 group-hover/media:opacity-100 pointer-events-none transition-opacity mix-blend-overlay" />
+							</div>
+						) : (
+							<video
 								src={post.mediaUrl}
-								alt="post media"
-								loading="eager"
-								width={800}     // can be anything, Next.js will scale down
-								height={600}    // keeps natural ratio
-								sizes="(max-width: 768px) 90vw, (max-width: 1200px) 80vw, 60vw"
-								className={`w-full h-auto rounded-[10px] object-cover ${imgHeight}`}
-								onClick={() => openLightbox(post.mediaUrl, "image")}
+								controls
+								className="w-full max-h-[500px] object-cover cursor-pointer"
+								onClick={() => openLightbox(post.mediaUrl, "video")}
 							/>
-						</div>
-					) : (
-						<video
-							src={post.mediaUrl}
-							controls
-							className="rounded-md mb-2 max-h-80 w-full object-cover cursor-pointer"
-							onClick={() => openLightbox(post.mediaUrl, "video")}
-						/>
-					)
+						)}
+					</div>
 				)}
 
-
-
-				{/* Poll */}
+				{/* Poll Section */}
 				{post.poll && post.poll.options?.length > 0 && (
-					isFeed ? (
-						<Link href={`/post/${post._id}`}>
-							<Poll poll={post.poll} postId={post._id} setPosts={setPosts} readOnly />
-						</Link>
-					) : (
-						<Poll poll={post.poll} postId={post._id} setPosts={setPosts} readOnly={false} />
-					)
-				)}
-
-				{/* Actions */}
-				<div className="flex items-center space-x-4 mt-2 text-gray-600 dark:text-gray-300 relative">
-					<div className="relative">
-						<motion.button
-							name="Add like"
-							onClick={handleLike}
-							whileTap={{ scale: 1.3 }}
-							className={`flex items-center space-x-1 transition-transform duration-300 ${likeAnim ? "scale-125" : "scale-100"}`}
-						>
-							{liked ? <FaHeart className="text-red-500" /> : <FaRegHeart />}
-							<motion.span
-								key={totalLikes}
-								initial={{ scale: 0.8 }}
-								animate={{ scale: 1 }}
-								transition={{ type: "spring", stiffness: 500 }}
-							>
-								{totalLikes}
-							</motion.span>
-						</motion.button>
-
-						{burst && (
-							<>
-								<span className="absolute -top-3 -left-2 animate-burst text-red-400 text-lg">❤️</span>
-								<span className="absolute -top-2 left-5 animate-burst2 text-red-500 text-lg">❤️</span>
-								<span className="absolute -top-4 left-10 animate-burst3 text-red-600 text-lg">❤️</span>
-							</>
-						)}
-					</div>
-					<motion.div
-						whileHover={{ scale: 1.05 }}
-						className="flex items-center space-x-1"
-					>
-						<FaComment />
-						<motion.span
-							key={totalComments}
-							initial={{ scale: 0.8 }}
-							animate={{ scale: 1 }}
-							transition={{ type: "spring", stiffness: 500 }}
-						>
-							{totalComments}
-						</motion.span>
-					</motion.div>
-
-					<motion.button
-						name="share"
-						onClick={handleShare}
-						whileHover={{ scale: 1.05 }}
-						className="flex items-center space-x-1"
-					>
-						<FaShareAlt />
-						<motion.span
-							key={totalShares}
-							initial={{ scale: 0.8 }}
-							animate={{ scale: 1 }}
-							transition={{ type: "spring", stiffness: 500 }}
-						>
-							{totalShares}
-						</motion.span>
-					</motion.button>
-				</div>
-
-				{/* Comment Input */}
-				{showCommentInput && (
-					<motion.div
-						initial={{ opacity: 0 }}
-						animate={{ opacity: 1 }}
-						exit={{ opacity: 0 }}
-						className="mt-2 space-y-2"
-					>
-						<input
-							type="text"
-							placeholder="Your Name"
-							value={commentName}
-							onChange={(e) => setCommentName(e.target.value)}
-							className="w-full border rounded-md p-2 text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600"
-						/>
-						<textarea
-							placeholder="Write a comment..."
-							value={commentText}
-							onChange={(e) => setCommentText(e.target.value)}
-							className="w-full border rounded-md p-2 text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-gray-700 border-gray-300 dark:border-gray-600 resize-none"
-						/>
-						<button
-							aria-label="Add comment"
-							onClick={handleAddComment}
-							className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600"
-						>
-							Submit
-						</button>
-					</motion.div>
-				)}
-
-				{/* Comments */}
-				{!hideComments && (
-					<div className="mt-2 space-y-2">
-						<AnimatePresence>
-							{(isFeed ? post.comments.slice(-2) : post.comments.slice()).map((comment, idx) => (
-								<motion.div
-									key={comment._id || idx}
-									initial={{ opacity: 0, y: -10 }}
-									animate={{ opacity: 1, y: 0 }}
-									exit={{ opacity: 0, y: -10 }}
-									transition={{ duration: 0.3 }}
-									className="p-2 bg-gray-100 dark:bg-gray-700 rounded-md"
-								>
-									<span className="font-semibold text-gray-800 dark:text-gray-100">
-										{comment.name}
-									</span>
-									:
-									<span className="ml-1 text-gray-700 dark:text-gray-300">
-										{comment.text}
-									</span>
-								</motion.div>
-							))}
-						</AnimatePresence>
-
-						{isFeed && post.comments.length > 2 && (
-							<Link href={`/post/${post._id}`} className="text-blue-500 hover:underline text-sm">
-								View all comments
+					<div className="mb-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
+						{isFeed ? (
+							<Link href={`/post/${post._id}`}>
+								<Poll poll={post.poll} postId={post._id} setPosts={setPosts} readOnly />
 							</Link>
+						) : (
+							<Poll poll={post.poll} postId={post._id} setPosts={setPosts} readOnly={false} />
 						)}
 					</div>
+				)}
+
+				{/* Actions HUD */}
+				{isSimilarPost ? null : (
+					<div className="flex items-center justify-between pt-4 border-t border-gray-100 dark:border-gray-800 text-gray-500 dark:text-gray-400">
+						<div className="flex items-center space-x-6">
+							<div className="relative">
+								<motion.button
+									onClick={handleLike}
+									whileTap={{ scale: 1.4 }}
+									className={`flex items-center space-x-2 font-black text-xs transition-colors ${liked ? "text-red-500" : "hover:text-red-400"}`}
+								>
+									{liked ? <FaHeart className="text-lg" /> : <FaRegHeart className="text-lg" />}
+									<motion.span key={totalLikes} initial={{ y: 5, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>{totalLikes}</motion.span>
+								</motion.button>
+
+								{burst && (
+									<div className="pointer-events-none">
+										<span className="absolute -top-6 -left-2 animate-burst text-lg">❤️</span>
+										<span className="absolute -top-8 left-4 animate-burst2 text-lg">❤️</span>
+										<span className="absolute -top-10 left-8 animate-burst3 text-lg">❤️</span>
+									</div>
+								)}
+							</div>
+
+							<motion.button
+								onClick={() => setShowCommentInput(!showCommentInput)}
+								whileHover={{ y: -2 }}
+								className="flex items-center space-x-2 font-black text-xs hover:text-blue-500"
+							>
+								<FaComment className="text-lg" />
+								<motion.span key={totalComments} initial={{ y: 5, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>{totalComments}</motion.span>
+							</motion.button>
+
+							<motion.button
+								onClick={handleShare}
+								whileHover={{ y: -2 }}
+								className="flex items-center space-x-2 font-black text-xs hover:text-green-500"
+							>
+								<FaShareAlt className="text-lg" />
+								<motion.span key={totalShares} initial={{ y: 5, opacity: 0 }} animate={{ y: 0, opacity: 1 }}>{totalShares}</motion.span>
+							</motion.button>
+						</div>
+					</div>
+				)}
+
+				{isSimilarPost ? null : (
+					!hideComments && post.comments.length > 0 && (
+						<div className="mt-4 space-y-2">
+							<AnimatePresence>
+								{(isFeed ? post.comments.slice(-2) : post.comments.slice()).map((comment, idx) => (
+									<div key={comment._id || idx} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} className="p-3 bg-gray-50 dark:bg-gray-800/40 border-l-2 border-blue-500 rounded-r-xl">
+										<span className="text-[10px] font-black uppercase text-blue-600 dark:text-blue-400 block mb-1">{comment.name}</span>
+										<p className="text-xs font-medium text-gray-700 dark:text-gray-300 leading-tight">{comment.text}</p>
+									</div>
+								))}
+							</AnimatePresence>
+							{isFeed && post.comments.length > 2 && (
+								<Link href={`/post/${post._id}`} className="inline-block text-[10px] font-black uppercase tracking-widest text-blue-500 hover:text-blue-600 mt-2">
+									+ View All Transmissions
+								</Link>
+							)}
+						</div>
+					)
 				)}
 			</div>
 
-			{/* Lightbox */}
+			{/* Lightbox Functional Logic Untouched */}
 			{lightbox.open && (
-				<div
-					className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50 p-4"
-					onClick={closeLightbox}
-				>
-					<button
-						aria-label="close"
-						onClick={closeLightbox}
-						className="absolute top-4 right-4 text-white text-2xl z-50"
-					>
-						<FaTimes />
-					</button>
-
+				<div className="fixed inset-0 bg-black/95 backdrop-blur-md flex items-center justify-center z-[999] p-4" onClick={closeLightbox}>
+					<button onClick={closeLightbox} className="absolute top-8 right-8 text-white/50 hover:text-white transition-colors"><FaTimes size={32} /></button>
 					{lightbox.type === "image" ? (
-						<img
-							src={lightbox.src}
-							alt="Lightbox image"
-							className="max-h-[90vh] max-w-[90vw] object-contain rounded-md"
-							onClick={(e) => e.stopPropagation()}
-						/>
+						<img src={lightbox.src} alt="Lightbox" className="max-h-[85vh] max-w-[90vw] object-contain shadow-2xl animate-in zoom-in duration-300" onClick={(e) => e.stopPropagation()} />
 					) : (
-						<video
-							src={lightbox.src}
-							controls
-							autoPlay
-							className="max-h-[90vh] max-w-[90vw] rounded-md object-contain"
-							onClick={(e) => e.stopPropagation()}
-						/>
+						<video src={lightbox.src} controls autoPlay className="max-h-[85vh] max-w-[90vw] rounded-lg shadow-2xl" onClick={(e) => e.stopPropagation()} />
 					)}
 				</div>
 			)}
 
-
-
-
-			{/* Heart Animations */}
 			<style jsx>{`
+        @keyframes scan {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
         @keyframes burst {
-          0% { transform: translate(0,0) scale(1); opacity:1; }
-          100% { transform: translate(-10px,-40px) scale(1.5); opacity:0; }
+            0% { transform: translate(0,0) scale(1); opacity:1; }
+            100% { transform: translate(-15px,-50px) scale(1.8); opacity:0; }
         }
         @keyframes burst2 {
-          0% { transform: translate(0,0) scale(1); opacity:1; }
-          100% { transform: translate(10px,-50px) scale(1.7); opacity:0; }
+            0% { transform: translate(0,0) scale(1); opacity:1; }
+            100% { transform: translate(15px,-60px) scale(2); opacity:0; }
         }
         @keyframes burst3 {
-          0% { transform: translate(0,0) scale(1); opacity:1; }
-          100% { transform: translate(0,-60px) scale(2); opacity:0; }
+            0% { transform: translate(0,0) scale(1); opacity:1; }
+            100% { transform: translate(0,-70px) scale(2.2); opacity:0; }
         }
-        .animate-burst { animation: burst 0.9s forwards; }
-        .animate-burst2 { animation: burst2 0.9s forwards; }
-        .animate-burst3 { animation: burst3 0.9s forwards; }
-      `}</style>
+        .animate-burst { animation: burst 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
+        .animate-burst2 { animation: burst2 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
+        .animate-burst3 { animation: burst3 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards; }
+    `}</style>
 		</>
 	);
 }

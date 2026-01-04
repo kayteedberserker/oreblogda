@@ -191,16 +191,72 @@ export default function FullAdminDashboard() {
     // --- RENDER ---
 
     if (initialLoading) return (
-        <div className="flex h-screen items-center justify-center bg-white dark:bg-[#0a0a0a]">
-            <div className="flex flex-col items-center">
-                <div className="h-16 w-16 animate-spin rounded-full border-4 border-blue-600 border-t-transparent shadow-[0_0_20px_rgba(37,99,235,0.3)]"></div>
-                <p className="mt-6 text-[11px] font-black uppercase tracking-[0.3em] text-blue-600 animate-pulse">Initializing Systems...</p>
+        <div className="flex h-screen items-center justify-center bg-white dark:bg-gray-900 overflow-hidden relative">
+
+            {/* BACKGROUND GLOW EFFECTS */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-blue-600/10 blur-[120px] rounded-full"></div>
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-blue-500/20 blur-[60px] rounded-full animate-pulse"></div>
+
+            <div className="flex flex-col items-center z-10">
+
+                {/* TOP STATUS LINKS (HUD Style) */}
+                <div className="flex items-center gap-4 mb-8">
+                    <div className="flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse"></span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600/60">Uplink</span>
+                    </div>
+                    <div className="h-[1px] w-8 bg-gray-200 dark:bg-gray-800"></div>
+                    <div className="flex items-center gap-1.5">
+                        <span className="h-1.5 w-1.5 rounded-full bg-orange-500 animate-ping"></span>
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500/60">Auth_Secure</span>
+                    </div>
+                </div>
+
+                {/* CENTER SPINNER / LOGO */}
+                <div className="relative mb-6">
+                    {/* Outer Rotating Ring */}
+                    <div className="h-20 w-20 rounded-full border-[3px] border-blue-600/10 border-t-blue-600 animate-spin"></div>
+                    {/* Inner Counter-Rotating Ring */}
+                    <div className="absolute top-2 left-2 h-16 w-16 rounded-full border-[3px] border-transparent border-t-orange-500 animate-[spin_1.5s_linear_infinite_reverse]"></div>
+                    {/* Static Center Point */}
+                    <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-2 w-2 bg-white dark:bg-gray-900 rounded-full shadow-[0_0_10px_#2563eb]"></div>
+                </div>
+
+                {/* TEXT CONTENT */}
+                <div className="text-center">
+                    <h2 className="text-xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white mb-1">
+                        Verifying Admin Access
+                    </h2>
+
+                    {/* DYNAMIC PROGRESS BAR */}
+                    <div className="w-48 h-1 bg-gray-100 dark:bg-gray-800 rounded-full mt-4 overflow-hidden relative">
+                        <div className="absolute inset-y-0 left-0 bg-blue-600 w-1/2 animate-[loading_2s_ease-in-out_infinite] rounded-full shadow-[0_0_10px_#2563eb]"></div>
+                    </div>
+
+                    <div className="mt-4 flex flex-col gap-1">
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-[0.3em] animate-pulse">
+                            Establishing Encrypted Session...
+                        </p>
+                        <p className="text-[7px] font-mono text-gray-500/50 uppercase">
+                            Protocol: TLS_AES_256_GCM_SHA384
+                        </p>
+                    </div>
+                </div>
             </div>
+
+            {/* TAILWIND CUSTOM ANIMATION CONFIG (Add to your global CSS if needed) */}
+            <style jsx>{`
+          @keyframes loading {
+            0% { transform: translateX(-100%); }
+            50% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+          }
+        `}</style>
         </div>
     );
 
     return (
-        <div className="min-h-screen bg-gray-50 p-4 md:p-8 dark:bg-[#0a0a0a] text-gray-900 dark:text-gray-100 transition-colors duration-500">
+        <div className="min-h-screen bg-gray-50 p-4 md:p-8 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-500">
             <div className="mx-auto max-w-7xl">
 
                 {/* --- HEADER HUD --- */}

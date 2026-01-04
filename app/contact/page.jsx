@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function ContactPage() {
   const [form, setForm] = useState({ name: "", email: "", message: "", type: "General" });
@@ -21,66 +21,81 @@ export default function ContactPage() {
 
       const data = await res.json();
       if (res.ok) {
-        setStatus({ loading: false, success: "Message sent successfully!", error: "" });
+        setStatus({ loading: false, success: "Transmission successful. Intel received.", error: "" });
         setForm({ name: "", email: "", message: "", type: "General" });
       } else {
-        setStatus({ loading: false, success: "", error: data.error || "Something went wrong." });
+        setStatus({ loading: false, success: "", error: data.error || "Uplink failed. Check connection." });
       }
     } catch (err) {
-      setStatus({ loading: false, success: "", error: "Network error, try again." });
+      setStatus({ loading: false, success: "", error: "Signal lost. Network error." });
     }
   };
 
   return (
-    <div className="min-h-[75vh] flex items-center justify-center px-6 py-16 bg-linear-to-br from-blue-50 via-white to-pink-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950 transition-colors duration-500 relative overflow-hidden">
-      {/* Background Glow */}
-      <div className="absolute top-10 left-10 w-48 h-48 bg-blue-300 dark:bg-indigo-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
-      <div className="absolute bottom-10 right-10 w-56 h-56 bg-pink-300 dark:bg-pink-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
+    <div className="min-h-screen flex items-center justify-center px-6 py-20 relative overflow-hidden">
+      
+      {/* --- BACKGROUND HUD ELEMENTS --- */}
+      <div className="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/10 rounded-full blur-[140px] animate-pulse pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-600/10 rounded-full blur-[140px] animate-pulse pointer-events-none" />
 
-      <motion.div
-        initial={{ opacity: 0, y: 40 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6 }}
-        className="max-w-lg w-full bg-white/80 dark:bg-gray-900/60 backdrop-blur-md p-8 rounded-2xl shadow-xl z-10"
+      <div
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.5 }}
+        className="max-w-2xl w-full bg-white/40 dark:bg-black/60 backdrop-blur-2xl p-8 md:p-12 rounded-3xl border border-gray-200 dark:border-blue-900/30 shadow-2xl z-10 relative"
       >
-        <h1 className="text-3xl font-bold mb-6 text-center text-gray-900 dark:text-gray-100">
-          Contact Oreblogda
-        </h1>
-        <p className="text-center text-gray-600 dark:text-gray-400 mb-8">
-          Have suggestions, found a bug, or want to join our anime community?  
-          Drop a message below — we’d love to hear from you!
-        </p>
+        {/* --- DECORATIVE BRACKETS --- */}
+        <div className="absolute top-6 left-6 w-8 h-8 border-t-2 border-l-2 border-blue-600/30 rounded-tl-lg" />
+        <div className="absolute bottom-6 right-6 w-8 h-8 border-b-2 border-r-2 border-blue-600/30 rounded-br-lg" />
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium mb-1 dark:text-gray-300">Your Name</label>
-            <input
-              type="text"
-              name="name"
-              value={form.name}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-2 rounded-md border dark:border-gray-700 dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center gap-2 mb-2">
+            <span className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-ping" />
+            <span className="text-[10px] font-black uppercase tracking-[0.5em] text-blue-600">Uplink_Console</span>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1 dark:text-gray-300">Email Address</label>
-            <input
-              type="email"
-              name="email"
-              value={form.email}
-              onChange={handleChange}
-              required
-              className="w-full px-4 py-2 rounded-md border dark:border-gray-700 dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+          <h1 className="text-4xl font-black italic uppercase tracking-tighter text-gray-900 dark:text-white">
+            Establish <span className="text-blue-600 text-shadow-glow">Contact</span>
+          </h1>
+          <p className="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400 mt-2">
+            Send intel directly to our headquarters
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid md:grid-cols-2 gap-6">
+            <div className="relative">
+              <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5 text-blue-600 ml-1">Identity_Name</label>
+              <input
+                type="text"
+                name="name"
+                value={form.name}
+                onChange={handleChange}
+                required
+                placeholder="USER_NAME"
+                className="w-full px-4 py-3 rounded-xl border-2 dark:border-gray-800 dark:bg-gray-950/50 dark:text-white focus:border-blue-600 outline-none transition-all text-xs font-bold tracking-widest"
+              />
+            </div>
+            <div className="relative">
+              <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5 text-blue-600 ml-1">Comms_Link</label>
+              <input
+                type="email"
+                name="email"
+                value={form.email}
+                onChange={handleChange}
+                required
+                placeholder="USER@DOMAIN.COM"
+                className="w-full px-4 py-3 rounded-xl border-2 dark:border-gray-800 dark:bg-gray-950/50 dark:text-white focus:border-blue-600 outline-none transition-all text-xs font-bold tracking-widest"
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1 dark:text-gray-300">Category</label>
+
+          <div className="relative">
+            <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5 text-blue-600 ml-1">Transmission_Type</label>
             <select
               name="type"
               value={form.type}
               onChange={handleChange}
-              className="w-full px-4 py-2 rounded-md border dark:border-gray-700 dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-4 py-3 rounded-xl border-2 dark:border-gray-800 dark:bg-gray-950/50 dark:text-white focus:border-blue-600 outline-none transition-all text-xs font-bold tracking-widest appearance-none cursor-pointer"
             >
               <option>General</option>
               <option>Community Join Request</option>
@@ -90,16 +105,19 @@ export default function ContactPage() {
               <option>Request Account Recovery</option>
               <option>Collaboration</option>
             </select>
+            <div className="absolute right-4 bottom-3.5 pointer-events-none text-blue-600">▼</div>
           </div>
-          <div>
-            <label className="block text-sm font-medium mb-1 dark:text-gray-300">Message</label>
+
+          <div className="relative">
+            <label className="block text-[10px] font-black uppercase tracking-widest mb-1.5 text-blue-600 ml-1">Intel_Packet</label>
             <textarea
               name="message"
               value={form.message}
               onChange={handleChange}
               required
               rows={5}
-              className="w-full px-4 py-2 rounded-md border dark:border-gray-700 dark:bg-gray-800 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="ENTER MESSAGE CONTENT..."
+              className="w-full px-4 py-3 rounded-xl border-2 dark:border-gray-800 dark:bg-gray-950/50 dark:text-white focus:border-blue-600 outline-none transition-all text-xs font-bold tracking-widest resize-none"
             />
           </div>
 
@@ -107,15 +125,61 @@ export default function ContactPage() {
             aria-label="Send message"
             type="submit"
             disabled={status.loading}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded-md"
+            className="w-full relative overflow-hidden group py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-lg shadow-blue-600/20 active:scale-95"
           >
-            {status.loading ? "Sending..." : "Send Message"}
+            {/* LOADING ANIMATION per instructions */}
+            <AnimatePresence mode="wait">
+              {status.loading ? (
+                <div 
+                  key="loading"
+                  initial={{ opacity: 0 }} 
+                  animate={{ opacity: 1 }} 
+                  exit={{ opacity: 0 }}
+                  className="flex items-center justify-center gap-3"
+                >
+                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  <span className="text-xs font-black uppercase tracking-[0.2em]">Transmitting...</span>
+                </div>
+              ) : (
+                <div 
+                  key="idle"
+                  initial={{ opacity: 0 }} 
+                  animate={{ opacity: 1 }}
+                  className="font-black uppercase italic tracking-[0.2em] text-sm"
+                >
+                  Initiate Uplink
+                </div>
+              )}
+            </AnimatePresence>
+
+            {/* Hover Glitch Effect */}
+            <div className="absolute inset-0 bg-white/10 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-500 skew-x-12" />
           </button>
 
-          {status.success && <p className="text-green-500 text-center mt-2">{status.success}</p>}
-          {status.error && <p className="text-red-500 text-center mt-2">{status.error}</p>}
+          {/* STATUS MESSAGES AS TERMINAL LOGS */}
+          <AnimatePresence>
+            {(status.success || status.error) && (
+              <div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className={`p-3 rounded-lg font-mono text-[10px] border ${
+                  status.success 
+                    ? "bg-green-500/5 border-green-500/30 text-green-500" 
+                    : "bg-red-500/5 border-red-500/30 text-red-500"
+                }`}
+              >
+                &gt; {status.success || status.error}
+              </div>
+            )}
+          </AnimatePresence>
         </form>
-      </motion.div>
+      </div>
+
+      {/* Background Status Tag */}
+      <div className="absolute bottom-10 right-10 hidden md:block opacity-20">
+        <p className="text-[10px] font-mono text-gray-500 dark:text-blue-400">SESSION_ID: {Math.random().toString(16).slice(2, 10).toUpperCase()}</p>
+        <p className="text-[10px] font-mono text-gray-500 dark:text-blue-400 text-right">ENCRYPTION: AES-256</p>
+      </div>
     </div>
   );
 }

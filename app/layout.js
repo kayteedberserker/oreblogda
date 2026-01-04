@@ -79,31 +79,59 @@ export default function RootLayout({ children }) {
 				<meta name="google-site-verification" content="nEJnQtr1-BvGpKFLOPz9Asxv4iJx_-j03w-obSlaedU" />
 				<Adsense />
 			</head>
-			<body className={`antialiased ${spaceGrotesk.className} min-h-screen`}>
-				{/* ✅ Only client-side hook component */}
-				<ThemeProvider attribute="class" defaultTheme="system" enableSystem={true}>
-					<SWRConfig value={{
-						fetcher,
-						refreshInterval: 0, // default no polling globally
-						revalidateOnFocus: true,
-						shouldRetryOnError: true,
-						dedupingInterval: 2000, // cache identical requests for 2s
-					}}>
-						<Navbar />
+			<body className="antialiased min-h-screen bg-white dark:bg-[#050505] selection:bg-blue-500 selection:text-white">
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem={true}>
+          <SWRConfig 
+            value={{
+              fetcher,
+              refreshInterval: 0,
+              revalidateOnFocus: true,
+              shouldRetryOnError: true,
+              dedupingInterval: 2000,
+            }}
+          >
+            {/* Global Navigation Hardware */}
+            <Navbar />
 
-						<div className="mt-15 pt-1 bg-linear-to-br from-blue-50 via-white to-pink-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950 transition-colors relative">
-							<CategoryNav />
-							<main>
-								{children}
-							</main>
-						</div>
-						<ToastContainer />
-						<Footer postsContainerId="postsContainer" />
-					</SWRConfig>
-				</ThemeProvider>
-				<Analytics />
-				<SpeedInsights />
-			</body>
+            {/* MAIN SYSTEM CONTAINER */}
+            {/* We use a relative container with a global grid overlay */}
+            <div className="mt-16 relative min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-[#0a0a0a] dark:via-[#050505] dark:to-[#0d1117] transition-colors duration-500">
+              
+              {/* --- GLOBAL NEURAL GRID OVERLAY --- */}
+              {/* This pattern will now persist across every single page */}
+              <div 
+                className="absolute inset-0 opacity-[0.03] dark:opacity-[0.1] pointer-events-none z-0"
+                style={{ 
+                  backgroundImage: `linear-gradient(#2563eb 1px, transparent 1px), linear-gradient(90deg, #2563eb 1px, transparent 1px)`, 
+                  backgroundSize: '45px 45px' 
+                }} 
+              />
+
+              {/* Top scanning line decoration for the header area */}
+              <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-blue-500/50 to-transparent z-10" />
+
+              <CategoryNav />
+
+              {/* MAIN CONTENT ENGINE */}
+              <main className="relative z-10 flex-grow">
+                {children}
+              </main>
+
+              <Footer postsContainerId="postsContainer" />
+            </div>
+
+            <ToastContainer 
+              position="bottom-right" 
+              autoClose={3000} 
+              theme="colored"
+              // Optional: Add a custom font class if you have one globally for that "Anime" look
+            />
+          </SWRConfig>
+        </ThemeProvider>
+        
+        <Analytics />
+        <SpeedInsights />
+      </body>
 		</html>
 	);
 }

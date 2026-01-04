@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import PostCard from "./PostCard";
 import dynamic from "next/dynamic";
+import { motion } from "framer-motion";
 
 const SimilarPostAd = dynamic(() => import("./SimilarPostAd"), {
   ssr: false,
@@ -11,7 +12,6 @@ const SimilarPostAd = dynamic(() => import("./SimilarPostAd"), {
 const fetcher = (url) => fetch(url).then((res) => res.json());
 
 export default function SimilarPosts({ category, currentPostId }) {
-  // Fetch ALL posts in that category
   const { data, error, isLoading } = useSWR(
     category ? `/api/posts?category=${category}` : null,
     fetcher,
@@ -22,49 +22,63 @@ export default function SimilarPosts({ category, currentPostId }) {
 
   useEffect(() => {
     if (data) {
-      // Normalize the data array
       const list = (Array.isArray(data) ? data : data.posts || [])
         .filter((p) => p._id !== currentPostId);
 
-      // Shuffle the entire list
       const shuffled = [...list].sort(() => Math.random() - 0.5);
-
-      // Pick 6 random items
       setShuffledPosts(shuffled.slice(0, 6));
     }
   }, [data, currentPostId]);
 
-  if (isLoading) return null;
+  // Loading Protocol
+  if (isLoading) return (
+    <div className="mt-10 flex flex-col items-center gap-3 opacity-50">
+      <div className="w-full h-[1px] bg-blue-600/20 overflow-hidden">
+        <div className="h-full bg-blue-600 animate-[loading_2s_infinite] w-1/3" />
+      </div>
+      <span className="text-[10px] font-mono uppercase tracking-[0.4em]">Searching_Related_Nodes...</span>
+    </div>
+  );
+
   if (error || !shuffledPosts.length) return null;
 
-  const similarPosts = shuffledPosts;
-
   return (
-    <div className="mt-6">
-      <h3 className="text-lg font-semibold mb-4 text-gray-900 dark:text-gray-100">
-        Similar Posts
-      </h3>
+    <div className="mt-8 mb-8">
 
-      <div className="flex overflow-x-auto space-x-4 py-2 scrollbar-thin scrollbar-thumb-gray-400 dark:scrollbar-thumb-gray-600">
-        {similarPosts.flatMap((post, index) => {
+      {/* --- HORIZONTAL DATA STREAM --- */}
+      <div className="flex overflow-x-auto space-x-5 py-4 px-2 no-scrollbar scrollbar-thin scrollbar-thumb-blue-600/20 dark:scrollbar-thumb-blue-600/10">
+        {shuffledPosts.flatMap((post, index) => {
           const items = [
-            <div key={post._id} className="flex-none w-64 sm:w-72 md:w-80 lg:w-80">
-              <PostCard
-                post={post}
-                posts={similarPosts}
-                setPosts={() => {}}
-                imgHeight={"max-h-[180px]"}
-                isFeed={true}
-                className="max-h-[450px] min-h-[430px] flex flex-col justify-between"
-                hideMedia={post.category === "Polls"}
-              />
-            </div>,
+            <div 
+              key={post._id} 
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: index * 0.1 }}
+              className="flex-none w-[350px]"
+            >
+              <div className="group relative bg-white/50 dark:bg-black/40 backdrop-blur-md rounded-2xl border border-gray-100 dark:border-blue-900/20 overflow-hidden hover:border-blue-600/50 transition-all duration-300">
+                <PostCard
+                  post={post}
+                  posts={shuffledPosts}
+                  setPosts={() => {}}
+                  isFeed={true}
+                  isSimilarPost={true} // New Prop to hide actions
+                  imgHeight="min-h-[160px] max-h-[170px] md:max-h-[200px]" // Priority on Image
+                  className="flex flex-col"
+                />
+                
+                {/* Decorative UI Accent */}
+                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="w-1 h-1 bg-blue-600 rounded-full" />
+                    <div className="w-1 h-1 bg-blue-600/40 rounded-full" />
+                </div>
+              </div>
+            </div>
           ];
 
-          // Insert ad after every 2 posts
           if ((index + 1) % 3 === 0) {
             items.push(
-              <div key={`ad-${index}`} className="flex-none w-fit">
+              <div key={`ad-${index}`} className="flex-none flex items-center justify-center">
                 {/* <SimilarPostAd /> */}
               </div>
             );
@@ -75,21 +89,22 @@ export default function SimilarPosts({ category, currentPostId }) {
       </div>
 
       <style jsx>{`
-        .scrollbar-thin::-webkit-scrollbar {
-          height: 6px;
+        .no-scrollbar::-webkit-scrollbar {
+          height: 4px;
         }
-        .scrollbar-thin::-webkit-scrollbar-track {
+        .no-scrollbar::-webkit-scrollbar-track {
           background: transparent;
         }
-        .scrollbar-thin::-webkit-scrollbar-thumb {
-          background-color: rgba(107, 114, 128, 0.5);
+        .no-scrollbar::-webkit-scrollbar-thumb {
+          background-color: rgba(37, 99, 235, 0.1);
           border-radius: 10px;
         }
-        .dark .scrollbar-thin::-webkit-scrollbar-thumb {
-          background-color: rgba(156, 163, 175, 0.3);
+        .no-scrollbar::-webkit-scrollbar-thumb:hover {
+          background-color: rgba(37, 99, 235, 0.4);
         }
-        .scrollbar-thin::-webkit-scrollbar-thumb:hover {
-          background-color: rgba(107, 114, 128, 0.8);
+        @keyframes loading {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(300%); }
         }
       `}</style>
     </div>

@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import PostCard from "@/app/components/PostCard";
 import AuthorPageAd from "@/app/components/AuthorPageAd";
 import ArticleAd from "@/app/components/ArticleAd";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function AuthorPageClient({ author, initialPosts = [] }) {
   const [posts, setPosts] = useState(initialPosts);
@@ -11,7 +12,6 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
 
-  // Fetch more posts
   const fetchMorePosts = useCallback(async () => {
     if (!hasMore || loading) return;
     setLoading(true);
@@ -39,55 +39,124 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
   };
 
   return (
-    <div className="max-w-7xl mx-auto mt-6 min-h-[70vh]">
-      {/* Author Bio */}
+    <div className="max-w-7xl mx-auto px-4 mt-10 min-h-screen">
+      
+      {/* --- AUTHOR DOSSIER HEADER --- */}
       {author && (
-        <div className="mb-6 flex items-center gap-4">
-          <img
-            src={author.profilePic?.url || "/default-avatar.png"}
-            alt={author.username}
-            className="w-30 h-30 md:w-60 md:h-60 rounded-full object-cover border"
-          />
-          <div>
-            <h1 className="text-2xl font-bold">{author.username}</h1>
-            <p className="text-gray-600">
-              {author.description || "This author hasn’t added a description yet."}
-            </p>
+        <div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="relative mb-12 p-6 md:p-10 bg-white/40 dark:bg-black/40 backdrop-blur-xl border border-gray-200 dark:border-blue-900/30 rounded-[2rem] shadow-2xl overflow-hidden"
+        >
+          {/* Tactical Background Elements */}
+          <div className="absolute top-0 right-0 p-4 opacity-10 font-mono text-[40px] font-black select-none uppercase italic">
+            Operator
+          </div>
+          <div className="absolute bottom-0 left-0 w-full h-[2px] bg-gradient-to-r from-transparent via-blue-600/50 to-transparent" />
+
+          <div className="relative z-10 flex flex-col md:flex-row items-center gap-8">
+            {/* Avatar with Digital Frame */}
+            <div className="relative group">
+              <div className="absolute inset-0 bg-blue-600 rounded-full animate-pulse blur-md opacity-20 group-hover:opacity-40 transition-opacity" />
+              <div className="relative w-32 h-32 md:w-44 md:h-44 rounded-full overflow-hidden border-4 border-white dark:border-gray-900 shadow-xl">
+                <img
+                  src={author.profilePic?.url || "/default-avatar.png"}
+                  alt={author.username}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              {/* Status Indicator */}
+              <div className="absolute bottom-2 right-4 w-6 h-6 bg-green-500 border-4 border-white dark:border-gray-950 rounded-full shadow-lg" />
+            </div>
+
+            <div className="text-center md:text-left flex-1">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-600/10 border border-blue-600/20 mb-3">
+                <span className="text-[10px] font-black uppercase tracking-widest text-blue-600">Verified_Intel_Source</span>
+              </div>
+              <h1 className="text-4xl md:text-5xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white mb-3">
+                {author.username}
+              </h1>
+              <p className="text-sm md:text-base text-gray-600 dark:text-gray-400 max-w-2xl leading-relaxed font-medium">
+                {author.description || "This operator hasn’t synchronized a bio with the central network yet."}
+              </p>
+              
+              <div className="mt-6 flex flex-wrap justify-center md:justify-start gap-4 text-[10px] font-mono uppercase tracking-widest text-gray-500">
+                <span className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700">Posts: {posts.length}</span>
+                <span className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700">Rank: Elite_Writer</span>
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* Optional Ad under author bio */}
-      {/* <div className="mb-8"><ArticleAd /></div> */}
+      {/* --- FEED SECTION --- */}
+      <div className="relative">
+        <div className="flex items-center gap-4 mb-8">
+          <h2 className="text-xl font-black italic uppercase tracking-tighter text-gray-900 dark:text-white">
+            Intel <span className="text-blue-600">Archives</span>
+          </h2>
+          <div className="h-[1px] flex-1 bg-gradient-to-r from-blue-600/30 to-transparent" />
+        </div>
 
-      {/* Posts Feed */}
-      <div className="relative lg:flex lg:gap-6">
-        <div className="flex-1">
-          {posts.map((post, index) => (
-            <div key={post._id} className="mb-12">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          {posts.map((post) => (
+            <div 
+              initial={{ opacity: 0 }}
+              whileInView={{ opacity: 1 }}
+              viewport={{ once: true }}
+              key={post._id}
+            >
               <PostCard post={post} isFeed />
-              {/* Optionally add ads every 2 posts */}
             </div>
           ))}
-
-          {/* Load More Button */}
-          {hasMore && (
-            <div className="flex justify-center my-8">
-              <button
-                onClick={handleLoadMore}
-                disabled={loading}
-                className="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
-              >
-                {loading ? "Loading..." : "Load More"}
-              </button>
-            </div>
-          )}
-
-          {!hasMore && posts.length > 0 && (
-            <p className="text-center text-gray-500 mt-6">No more posts.</p>
-          )}
         </div>
+
+        {/* --- LOAD MORE WITH ANIMATION --- */}
+        {hasMore && (
+          <div className="flex flex-col items-center justify-center my-16 gap-4">
+            <button
+              onClick={handleLoadMore}
+              disabled={loading}
+              className="group relative px-12 py-4 bg-gray-900 dark:bg-white text-white dark:text-black rounded-xl overflow-hidden shadow-2xl transition-all active:scale-95 disabled:opacity-70"
+            >
+              <div className="relative z-10 flex items-center gap-3">
+                {loading ? (
+                  <>
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs font-black uppercase tracking-[0.2em]">Syncing_Data...</span>
+                  </>
+                ) : (
+                  <span className="text-xs font-black uppercase tracking-[0.2em]">Fetch_More_Intel</span>
+                )}
+              </div>
+              
+              {/* Inner Loading Bar (per instructions) */}
+              <div className={`absolute bottom-0 left-0 h-1 bg-blue-600 transition-all duration-300 ${loading ? 'w-full animate-[loading_2s_infinite]' : 'w-0'}`} />
+            </button>
+            
+            {loading && (
+              <p className="text-[10px] font-mono text-blue-500 animate-pulse uppercase tracking-widest">
+                Accessing Central Server Archives...
+              </p>
+            )}
+          </div>
+        )}
+
+        {!hasMore && posts.length > 0 && (
+          <div className="text-center py-10 opacity-30">
+            <div className="h-[1px] w-24 bg-gray-500 mx-auto mb-4" />
+            <p className="text-[10px] font-mono uppercase tracking-[0.4em]">End_Of_Transmission</p>
+          </div>
+        )}
       </div>
+
+      <style jsx>{`
+        @keyframes loading {
+          0% { transform: translateX(-100%); }
+          50% { transform: translateX(0); }
+          100% { transform: translateX(100%); }
+        }
+      `}</style>
     </div>
   );
 }

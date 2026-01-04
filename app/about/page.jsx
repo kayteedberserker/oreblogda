@@ -1,43 +1,103 @@
 "use client";
 import React from "react";
+import { motion } from "framer-motion";
 
 const AboutPage = () => {
   return (
-    <div className="min-h-[75vh] flex items-center justify-center px-6 py-16 bg-linear-to-br from-pink-50 via-white to-blue-50 dark:from-gray-950 dark:via-gray-900 dark:to-indigo-950 transition-colors duration-500 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center px-6 py-20 relative overflow-hidden">
       
-      {/* Subtle glowing circles for anime & gaming aesthetic */}
-      <div className="absolute top-10 left-10 w-48 h-48 bg-pink-300 dark:bg-pink-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
-      <div className="absolute bottom-10 right-10 w-56 h-56 bg-indigo-300 dark:bg-indigo-700 opacity-20 rounded-full blur-3xl animate-pulse"></div>
+      {/* --- BACKGROUND ATMOSPHERE --- */}
+      <div className="absolute top-20 right-[-5%] w-96 h-96 bg-blue-600/10 rounded-full blur-[140px] animate-pulse pointer-events-none" />
+      <div className="absolute bottom-20 left-[-5%] w-96 h-96 bg-indigo-600/10 rounded-full blur-[140px] animate-pulse pointer-events-none" />
 
-      <div className="max-w-3xl text-center relative z-10">
-        <h1 className="text-4xl font-bold mb-6 text-gray-900 dark:text-gray-100">
-          About Oreblogda
-        </h1>
+      <div 
+        initial={{ opacity: 0, y: 30 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.7 }}
+        className="max-w-4xl w-full bg-white/40 dark:bg-black/60 backdrop-blur-2xl border border-gray-200 dark:border-blue-900/30 rounded-3xl p-8 md:p-16 shadow-2xl relative z-10 overflow-hidden"
+      >
+        {/* --- HEADER HUD --- */}
+        <div className="relative mb-12 border-b border-gray-100 dark:border-gray-800 pb-8 text-center">
+          <div className="flex justify-center items-center gap-3 mb-4">
+            <div className="h-1.5 w-1.5 bg-blue-600 rounded-full animate-ping" />
+            <span className="text-[10px] font-black uppercase tracking-[0.5em] text-blue-600">Core_Manifest_v4.0</span>
+          </div>
+          
+          <h1 className="text-5xl md:text-6xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white">
+            About <span className="text-blue-600 underline decoration-blue-600/20 underline-offset-8">Oreblogda</span>
+          </h1>
 
-        <p className="text-lg leading-relaxed text-gray-700 dark:text-gray-300 mb-6">
-          Welcome to{" "}
-          <span className="font-semibold text-indigo-600 dark:text-indigo-400">
-            Oreblogda
-          </span>{" "}
-          — your chill corner for everything anime, gaming, and pop culture 🎮🎌  
-          From anime episode breakdowns and manga highlights to game updates,
-          reviews, and community takes, we cover what fans actually care about.
-        </p>
+          {/* Loading Animation per instructions - "System Calibration" */}
+          <div className="absolute -bottom-[1px] left-0 w-full h-[2px] bg-gray-100 dark:bg-gray-800 overflow-hidden">
+            <div className="h-full bg-blue-600 animate-[loading_5s_infinite] w-1/4" />
+          </div>
+        </div>
 
-        <p className="text-lg leading-relaxed text-gray-700 dark:text-gray-300 mb-6">
-          Whether you’re grinding ranked matches, exploring open worlds,
-          hyped for the next anime episode, or just here for memes and hot takes —
-          you’re in the right place.  
-          Our goal is simple: keep things fun, honest, and worth your scroll.
-        </p>
+        {/* --- CONTENT GRID --- */}
+        <div className="space-y-12 text-center md:text-left">
+          
+          {/* Section 01: The Chill Corner */}
+          <div className="grid md:grid-cols-[100px_1fr] gap-4 items-start">
+            <span className="hidden md:block text-xs font-black text-blue-600/40 font-mono mt-2 tracking-tighter">DATA_01</span>
+            <div>
+              <p className="text-lg md:text-xl font-bold leading-relaxed text-gray-800 dark:text-gray-200">
+                Welcome to <span className="text-blue-600 italic">Oreblogda</span> — your chill corner for everything anime, gaming, and pop culture. 
+                From episode breakdowns to game updates, we cover what fans actually care about.
+              </p>
+            </div>
+          </div>
 
-        <p className="text-lg leading-relaxed text-gray-700 dark:text-gray-300">
-          We’re fans first — writers second.  
-          So grab your controller 🕹️, queue the next episode 🍿, and join the
-          Oreblogda community.  
-          Stay updated, stay competitive, and never miss a drop — in-game or on-screen.
-        </p>
+          {/* Section 02: The Mission */}
+          <div className="grid md:grid-cols-[100px_1fr] gap-4 items-start">
+            <span className="hidden md:block text-xs font-black text-blue-600/40 font-mono mt-2 tracking-tighter">DATA_02</span>
+            <div className="p-6 bg-blue-600/5 border-l-2 border-blue-600 rounded-r-2xl">
+              <p className="text-md leading-relaxed text-gray-700 dark:text-gray-300 italic">
+                Whether you’re grinding ranked matches, exploring open worlds, or hyped for the next anime drop — you’re in the right place. 
+                Our goal is simple: <span className="font-black uppercase text-blue-600 dark:text-blue-400">Keep things fun, honest, and worth your scroll.</span>
+              </p>
+            </div>
+          </div>
+
+          {/* Section 03: Fans First */}
+          <div className="grid md:grid-cols-[100px_1fr] gap-4 items-start">
+            <span className="hidden md:block text-xs font-black text-blue-600/40 font-mono mt-2 tracking-tighter">DATA_03</span>
+            <div>
+              <p className="text-lg leading-relaxed text-gray-700 dark:text-gray-300">
+                We’re fans first — writers second. So grab your controller 🕹️, queue the next episode 🍿, and join the Oreblogda community. 
+                Stay updated, stay competitive, and never miss a drop.
+              </p>
+            </div>
+          </div>
+
+        </div>
+
+        {/* --- FOOTER STATUS --- */}
+        <div className="mt-16 pt-8 border-t border-gray-100 dark:border-gray-800 flex flex-col md:flex-row justify-between items-center gap-4">
+           <div className="flex items-center gap-2">
+              <div className="w-2 h-2 bg-green-500 rounded-full" />
+              <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-gray-400">System_Status: Optimal</span>
+           </div>
+           <div className="flex gap-6">
+              <div className="text-[9px] font-mono text-gray-500 uppercase">Sector: Lagos_Nigeria</div>
+              <div className="text-[9px] font-mono text-gray-500 uppercase">Node: Global_Fanbase</div>
+           </div>
+        </div>
       </div>
+
+      {/* Decorative Floating Elements */}
+      <div className="absolute top-1/4 right-10 text-[60px] font-black text-blue-500/5 select-none pointer-events-none italic">
+        ANIME
+      </div>
+      <div className="absolute bottom-1/4 left-10 text-[60px] font-black text-blue-500/5 select-none pointer-events-none italic">
+        GAMING
+      </div>
+
+      <style jsx>{`
+        @keyframes loading {
+          0% { transform: translateX(-100%); }
+          100% { transform: translateX(400%); }
+        }
+      `}</style>
     </div>
   );
 };
