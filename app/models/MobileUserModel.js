@@ -14,6 +14,7 @@ const mobileUserSchema = new mongoose.Schema(
     country: { type: String, default: 'Unknown' },
     lastActive: { type: Date, default: Date.now }, // 👈 Added: Good for engagement timing
     appOpens: { type: Number, default: 0 },
+    activityLog: [{ type: Date, default: Date.now }] // The new history array
   },
   { timestamps: true }
 );

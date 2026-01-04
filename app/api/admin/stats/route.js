@@ -5,71 +5,109 @@ import Post from "@/app/models/PostModel";
 
 export async function GET(req) {
   try {
+    // --- Loading State Animation ---
+    console.log("Fetching Analytics Data... [ ⌛ ]");
+    /* [ . ]
+       [ .. ]
+       [ ... ]
+    */
+
     await connectDB();
     const { searchParams } = new URL(req.url);
     const range = searchParams.get("range") || "7days";
 
+    const now = new Date();
     let startDate = new Date();
-    let prevStartDate = new Date(); 
-    let groupByFormat = "%Y-%m-%d"; 
+    let endDate = new Date();
+    let prevStartDate = new Date();
+    let prevEndDate = new Date();
+    let groupByFormat = "%Y-%m-%d";
     let steps = 7;
 
-    // --- 1. SET TIME WINDOWS ---
-    if (range === "24h") {
-      startDate.setHours(startDate.getHours() - 24);
-      prevStartDate.setHours(prevStartDate.getHours() - 48); 
-      groupByFormat = "%H:00"; 
+    if (range === "today") {
+      // Current Day: 12:00 AM to 11:59 PM
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
+      
+      // Comparison: Yesterday 12:00 AM to 11:59 PM
+      prevStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
+      prevEndDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
+      
+      groupByFormat = "%H:00";
+      steps = 24; 
+
+    } else if (range === "yesterday") {
+      // Yesterday: 12:00 AM to 11:59 PM
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
+      endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
+      
+      // Comparison: Day before yesterday
+      prevStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2, 0, 0, 0);
+      prevEndDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2, 23, 59, 59);
+      
+      groupByFormat = "%H:00";
+      steps = 24;
+
+    } else if (range === "24h") {
+      startDate.setHours(now.getHours() - 24);
+      prevStartDate.setHours(now.getHours() - 48);
+      prevEndDate.setHours(now.getHours() - 24);
+      groupByFormat = "%H:00";
       steps = 24;
     } else if (range === "30days") {
-      startDate.setDate(startDate.getDate() - 30);
-      prevStartDate.setDate(prevStartDate.setDate() - 60);
+      startDate.setDate(now.getDate() - 30);
+      prevStartDate.setDate(now.getDate() - 60);
+      prevEndDate.setDate(now.getDate() - 30);
       steps = 30;
+    } else if (range === "thisMonth") {
+      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      prevStartDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      prevEndDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+      steps = now.getDate();
+    } else if (range === "lastMonth") {
+      startDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      endDate = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59);
+      prevStartDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+      prevEndDate = new Date(now.getFullYear(), now.getMonth() - 1, 0, 23, 59, 59);
+      steps = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
     } else {
-      startDate.setDate(startDate.getDate() - 7);
-      prevStartDate.setDate(prevStartDate.setDate() - 14);
+      startDate.setDate(now.getDate() - 7);
+      prevStartDate.setDate(now.getDate() - 14);
+      prevEndDate.setDate(now.getDate() - 7);
       steps = 7;
     }
 
     const [postStatsArray, totalUsers, countries, rawActivity, currentPeriodOpens, prevPeriodOpens] = await Promise.all([
-      // 1. Post Status Distribution
       Post.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
-      
-      // 2. Global User Count
       MobileUser.countDocuments(),
-      
-      // 3. Geographic Distribution
       MobileUser.aggregate([
         { $group: { _id: "$country", count: { $sum: 1 } } },
         { $sort: { count: -1 } },
         { $limit: 10 }
       ]),
-      
-      // 4. Activity Flow (Chart Data) - CHANGED TO SUM OPENS, NOT PEOPLE
       MobileUser.aggregate([
-        { $match: { lastActive: { $gte: startDate } } },
+        { $unwind: "$activityLog" },
+        { $match: { activityLog: { $gte: startDate, $lte: endDate } } },
         { 
           $group: { 
-            _id: { $dateToString: { format: groupByFormat, date: "$lastActive" } }, 
-            count: { $sum: "$appOpens" } // Now chart shows total clicks
+            _id: { $dateToString: { format: groupByFormat, date: "$activityLog" } }, 
+            count: { $sum: 1 }
           } 
         },
         { $sort: { "_id": 1 } }
       ]),
-      
-      // 5. Current Window App Opens
       MobileUser.aggregate([
-        { $match: { lastActive: { $gte: startDate } } },
-        { $group: { _id: null, total: { $sum: "$appOpens" } } }
+        { $unwind: "$activityLog" },
+        { $match: { activityLog: { $gte: startDate, $lte: endDate } } },
+        { $group: { _id: null, total: { $sum: 1 } } }
       ]),
-
-      // 6. Previous Window App Opens
       MobileUser.aggregate([
-        { $match: { lastActive: { $gte: prevStartDate, $lt: startDate } } },
-        { $group: { _id: null, total: { $sum: "$appOpens" } } }
+        { $unwind: "$activityLog" },
+        { $match: { activityLog: { $gte: prevStartDate, $lte: prevEndDate } } },
+        { $group: { _id: null, total: { $sum: 1 } } }
       ])
     ]);
 
-    // --- 2. TREND CALCULATION ---
     const currentTotal = currentPeriodOpens[0]?.total || 0;
     const prevTotal = prevPeriodOpens[0]?.total || 0;
     
@@ -80,14 +118,16 @@ export async function GET(req) {
       activityTrend = currentTotal > 0 ? 100 : 0;
     }
 
-    // --- 3. GAP FILLING LOGIC ---
     const activityMap = new Map(rawActivity.map(i => [i._id, i.count]));
     const dailyActivity = [];
     
+    // Create the chart labels and data
     for (let i = 0; i < steps; i++) {
         let label;
-        const d = new Date();
-        if (range === "24h") {
+        const d = new Date(endDate); 
+        
+        // Handle hourly formats for 24h, today, and yesterday
+        if (["24h", "today", "yesterday"].includes(range)) {
             d.setHours(d.getHours() - i);
             const h = d.getHours();
             label = `${h < 10 ? '0'+h : h}:00`;
@@ -103,6 +143,8 @@ export async function GET(req) {
       return acc;
     }, { pending: 0, rejected: 0, approved: 0 });
 
+    console.log("Data processing complete [ ✅ ]");
+
     return NextResponse.json({
       success: true,
       data: { 
@@ -115,6 +157,7 @@ export async function GET(req) {
       }
     });
   } catch (err) {
+    console.error("Error in Analytics API [ ❌ ]", err.message);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }
