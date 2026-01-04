@@ -11,6 +11,7 @@ const mobileUserSchema = new mongoose.Schema(
       url: { type: String, default: "" },
       public_id: { type: String, default: "" },
     },
+    country: { type: String, default: 'Unknown' },
     lastActive: { type: Date, default: Date.now }, // 👈 Added: Good for engagement timing
   },
   { timestamps: true }

@@ -3,6 +3,9 @@ const nextConfig = {
   images: {
     domains: ["res.cloudinary.com"], // allow Cloudinary images
   },
+  experimental: {
+    serverComponentsExternalPackages: ["geoip-lite"],
+  },
   async redirects() {
     console.log("🚀 Someone tried to install app...");
     return [

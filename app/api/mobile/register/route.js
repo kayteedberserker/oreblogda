@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/app/lib/mongodb";
 import MobileUser from "@/app/models/MobileUserModel";
+import geoip from "geoip-lite";
 
 export async function POST(req) {
   try {
@@ -10,26 +11,42 @@ export async function POST(req) {
     if (!deviceId || !username || username.trim() === "") {
       return NextResponse.json({ message: "Username is required" }, { status: 400 });
     }
+    if (username.trim().startsWith("Admin")) {
+      return NextResponse.json({ message: "Cannot start username with Admin" }, { status: 400 });
+    }
 
-    // 1. Check if this device already exists in our system
+    // 1. Get Client IP Address
+    // If you are on Vercel, use 'x-vercel-ip-country' for a free speed boost.
+    // Otherwise, we use the standard 'x-forwarded-for'.
+    const forwarded = req.headers.get("x-forwarded-for");
+    const ip = forwarded ? forwarded.split(/, /)[0] : "127.0.0.1";
+
+    // 2. Detect Country
+    const geo = geoip.lookup(ip);
+    const detectedCountry = geo ? geo.country : "Unknown"; // e.g., "NG", "US"
+
+    // 3. Find or Update User
     let user = await MobileUser.findOne({ deviceId });
 
     if (!user) {
-      // 2. NEW USER: Create record with username and push token
+      // NEW USER
       user = await MobileUser.create({ 
         deviceId, 
         username, 
-        pushToken // Save the "address" for notifications
+        pushToken,
+        country: detectedCountry // Save detected country on first signup
       });
     } else {
-      // 3. EXISTING USER: Update their info
-      // We update the pushToken every time they register/login 
-      // because tokens can expire or change.
+      // EXISTING USER
       user.username = username;
-      if (pushToken) {
-        user.pushToken = pushToken;
+      if (pushToken) user.pushToken = pushToken;
+      
+      // Update country if it was previously unknown
+      if (!user.country || user.country === "Unknown") {
+        user.country = detectedCountry;
       }
-      user.lastActive = new Date(); // Keep track of when they last opened the app
+
+      user.lastActive = new Date();
       await user.save();
     }
 
