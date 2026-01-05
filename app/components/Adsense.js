@@ -42,7 +42,11 @@ export default function Adsense() {
       async
       src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-8021671365048667"
       crossOrigin="anonymous"
-      strategy="afterInteractive"
+      /* OPTIMIZATION: strategy="lazyOnload" is key. 
+         It moves the massive JS execution work of Google Ads 
+         to a point where it no longer blocks your initial page score.
+      */
+      strategy="lazyOnload"
     />
   );
 }
