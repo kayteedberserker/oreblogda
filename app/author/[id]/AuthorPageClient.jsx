@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import PostCard from "@/app/components/PostCard";
 // import AuthorPageAd from "@/app/components/AuthorPageAd";
 // import ArticleAd from "@/app/components/ArticleAd";
 import { motion, AnimatePresence } from "framer-motion";
-import Image from "next/image"; // IMPORTED NEXT IMAGE
+import Image from "next/image";
 
 export default function AuthorPageClient({ author, initialPosts = [] }) {
   const [posts, setPosts] = useState(initialPosts);
@@ -39,15 +39,23 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
     fetchMorePosts();
   };
 
-  /**
-   * Helper to optimize Cloudinary URLs.
-   * Transforms giant images into small, compressed WebP/AVIF versions.
-   */
   const getOptimizedCloudinaryUrl = (url) => {
     if (!url || !url.includes("cloudinary.com")) return url || "/default-avatar.png";
-    // Inserts transformation params: width 300, fill, face detection, auto format, auto quality
     return url.replace("/upload/", "/upload/w_300,c_fill,g_face,f_auto,q_auto/");
   };
+
+  // --- ANIME RANKING LOGIC ---
+  const rankData = useMemo(() => {
+    const count = posts.length;
+    if (count > 150) return { title: "Master_Writer", icon: "👑", next: 200, color: "bg-yellow-500" };
+    if (count > 120) return { title: "Elite_Writer", icon: "💎", next: 150, color: "bg-purple-500" };
+    if (count > 100) return { title: "Senior_Writer", icon: "🔥", next: 120, color: "bg-red-500" };
+    if (count > 50)  return { title: "Novice_Writer", icon: "⚔️", next: 100, color: "bg-blue-500" };
+    if (count > 25)  return { title: "Senior_Researcher", icon: "📜", next: 50, color: "bg-green-500" };
+    return { title: "Novice_Researcher", icon: "🛡️", next: 25, color: "bg-gray-500" };
+  }, [posts.length]);
+
+  const progress = Math.min((posts.length / rankData.next) * 100, 100);
 
   return (
     <div className="max-w-7xl mx-auto px-4 mt-10 min-h-screen">
@@ -74,7 +82,7 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
                   src={getOptimizedCloudinaryUrl(author.profilePic?.url)}
                   alt={author.username}
                   fill
-                  priority // FIX: Helps LCP Discovery score
+                  priority 
                   sizes="(max-width: 768px) 128px, 176px"
                   className="object-cover"
                 />
@@ -83,7 +91,7 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
               <div className="absolute bottom-2 right-4 w-6 h-6 bg-green-500 border-4 border-white dark:border-gray-950 rounded-full shadow-lg" />
             </div>
 
-            <div className="text-center md:text-left flex-1">
+            <div className="text-center md:text-left flex-1 w-full">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-blue-600/10 border border-blue-600/20 mb-3">
                 <span className="text-[10px] font-black uppercase tracking-widest text-blue-600">Verified_Intel_Source</span>
               </div>
@@ -94,9 +102,41 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
                 {author.description || "This operator hasn’t synchronized a bio with the central network yet."}
               </p>
               
-              <div className="mt-6 flex flex-wrap justify-center md:justify-start gap-4 text-[10px] font-mono uppercase tracking-widest text-gray-500">
-                <span className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700">Posts: {posts.length}</span>
-                <span className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700">Rank: {posts.length > 50 ? "Elite_Writer" : posts.length > 10 ? "Senior_Author" : "Novice_Author"}</span>
+              {/* --- ANIME RPG HUD RANKING --- */}
+              <div className="mt-8 max-w-md mx-auto md:mx-0">
+                <div className="flex justify-between items-end mb-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{rankData.icon}</span>
+                    <div className="flex flex-col">
+                      <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-blue-500/60 leading-none mb-1">Current_Class</span>
+                      <span className="text-sm font-black uppercase tracking-tight dark:text-white">
+                        {rankData.title}
+                      </span>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold text-gray-500">
+                    EXP: {posts.length} / {posts.length > 150 ? "MAX" : rankData.next}
+                  </span>
+                </div>
+
+                {/* Tactical Progress Bar */}
+                <div className="h-2 w-full bg-gray-200 dark:bg-gray-800 rounded-full overflow-hidden border border-gray-300 dark:border-white/10 shadow-inner">
+                  <motion.div 
+                    initial={{ width: 0 }}
+                    animate={{ width: `${progress}%` }}
+                    transition={{ duration: 1.5, ease: "circOut" }}
+                    className={`h-full ${rankData.color} shadow-[0_0_10px_rgba(37,99,235,0.5)]`}
+                  />
+                </div>
+
+                <div className="flex justify-between mt-2">
+                   <span className="text-[8px] font-mono uppercase tracking-widest opacity-50 dark:text-gray-400">
+                    Status: {posts.length > 100 ? "Limit_Breaker" : "Online"}
+                  </span>
+                  <span className="text-[8px] font-mono uppercase tracking-widest opacity-50 dark:text-gray-400">
+                    Posts_Total: {posts.length}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -144,7 +184,6 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
                 )}
               </div>
               
-              {/* Inner Loading Bar per instructions */}
               <div className={`absolute bottom-0 left-0 h-1 bg-blue-600 transition-all duration-300 ${loading ? 'w-full animate-[loading_2s_infinite]' : 'w-0'}`} />
             </button>
             
