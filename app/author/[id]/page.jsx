@@ -67,24 +67,25 @@ export async function generateMetadata({ params }) {
 	};
 }
 export default async function AuthorPage({ params }) {
-	const awaitParams = await params;
-	const { id } = awaitParams;
+    const awaitParams = await params;
+    const { id } = awaitParams;
 
-	// Pre-fetch first 6 posts server-side (optional)
-	const [userRes, postRes] = await Promise.all([
-		fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/users/${id}`),
-		fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/posts?author=${id}&page=1&limit=6`),
-	]);
+    // Pre-fetch first 6 posts server-side
+    const [userRes, postRes] = await Promise.all([
+        fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/users/${id}`),
+        fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/posts?author=${id}&page=1&limit=6`),
+    ]);
 
-	if (!userRes.ok || !postRes.ok) return notFound();
+    if (!userRes.ok || !postRes.ok) return notFound();
 
-	const userData = await userRes.json();
-	const postData = await postRes.json();
+    const userData = await userRes.json();
+    const postData = await postRes.json();
 
-	return (
-		<AuthorPageClient
-			author={userData.user}
-			initialPosts={postData.posts}
-		/>
-	);
+    return (
+        <AuthorPageClient
+            author={userData.user}
+            initialPosts={postData.posts}
+            total={postData.total} // <--- ADD THIS LINE
+        />
+    );
 }

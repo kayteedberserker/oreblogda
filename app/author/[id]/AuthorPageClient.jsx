@@ -2,13 +2,12 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import PostCard from "@/app/components/PostCard";
-// import AuthorPageAd from "@/app/components/AuthorPageAd";
-// import ArticleAd from "@/app/components/ArticleAd";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
 
-export default function AuthorPageClient({ author, initialPosts = [] }) {
+export default function AuthorPageClient({ author, initialPosts = [], total: initialTotal = 0 }) {
   const [posts, setPosts] = useState(initialPosts);
+  const [totalPosts, setTotalPosts] = useState(initialTotal); // Use total from API
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -25,6 +24,7 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
 
       if (res.ok) {
         setPosts((prev) => [...prev, ...data.posts]);
+        setTotalPosts(data.total); // Update total count from backend response
         setPage((prev) => prev + 1);
         if (data.posts.length < 6) setHasMore(false);
       }
@@ -44,18 +44,18 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
     return url.replace("/upload/", "/upload/w_300,c_fill,g_face,f_auto,q_auto/");
   };
 
-  // --- ANIME RANKING LOGIC ---
+  // --- ANIME RANKING LOGIC (Using lifetime totalPosts from API) ---
   const rankData = useMemo(() => {
-    const count = posts.length;
+    const count = totalPosts;
     if (count > 150) return { title: "Master_Writer", icon: "👑", next: 200, color: "bg-yellow-500" };
     if (count > 120) return { title: "Elite_Writer", icon: "💎", next: 150, color: "bg-purple-500" };
     if (count > 100) return { title: "Senior_Writer", icon: "🔥", next: 120, color: "bg-red-500" };
     if (count > 50)  return { title: "Novice_Writer", icon: "⚔️", next: 100, color: "bg-blue-500" };
     if (count > 25)  return { title: "Senior_Researcher", icon: "📜", next: 50, color: "bg-green-500" };
     return { title: "Novice_Researcher", icon: "🛡️", next: 25, color: "bg-gray-500" };
-  }, [posts.length]);
+  }, [totalPosts]);
 
-  const progress = Math.min((posts.length / rankData.next) * 100, 100);
+  const progress = Math.min((totalPosts / rankData.next) * 100, 100);
 
   return (
     <div className="max-w-7xl mx-auto px-4 mt-10 min-h-screen">
@@ -87,7 +87,6 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
                   className="object-cover"
                 />
               </div>
-              {/* Status Indicator */}
               <div className="absolute bottom-2 right-4 w-6 h-6 bg-green-500 border-4 border-white dark:border-gray-950 rounded-full shadow-lg" />
             </div>
 
@@ -108,14 +107,14 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">{rankData.icon}</span>
                     <div className="flex flex-col">
-                      <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-blue-500/60 leading-none mb-1">Current_Class</span>
+                      <span className="text-[9px] font-mono uppercase tracking-[0.2em] text-blue-500 leading-none mb-1">Current_Class</span>
                       <span className="text-sm font-black uppercase tracking-tight dark:text-white">
                         {rankData.title}
                       </span>
                     </div>
                   </div>
                   <span className="text-[10px] font-mono font-bold text-gray-500">
-                    EXP: {posts.length} / {posts.length > 150 ? "MAX" : rankData.next}
+                    EXP: {totalPosts} / {totalPosts > 150 ? "MAX" : rankData.next}
                   </span>
                 </div>
 
@@ -125,16 +124,16 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
                     initial={{ width: 0 }}
                     animate={{ width: `${progress}%` }}
                     transition={{ duration: 1.5, ease: "circOut" }}
-                    className={`h-full ${rankData.color} shadow-[0_0_10px_rgba(37,99,235,0.5)]`}
+                    className={`h-full ${rankData.color} shadow-[0_0_10px_rgba(37,99,235,0.4)]`}
                   />
                 </div>
 
                 <div className="flex justify-between mt-2">
                    <span className="text-[8px] font-mono uppercase tracking-widest opacity-50 dark:text-gray-400">
-                    Status: {posts.length > 100 ? "Limit_Breaker" : "Online"}
+                    Status: {totalPosts > 100 ? "Limit_Breaker" : "Online"}
                   </span>
                   <span className="text-[8px] font-mono uppercase tracking-widest opacity-50 dark:text-gray-400">
-                    Posts_Total: {posts.length}
+                    Lifetime_Contributions: {totalPosts}
                   </span>
                 </div>
               </div>
@@ -165,7 +164,7 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
           ))}
         </div>
 
-        {/* --- LOAD MORE WITH ANIMATION --- */}
+        {/* --- LOAD MORE --- */}
         {hasMore && (
           <div className="flex flex-col items-center justify-center my-16 gap-4">
             <button
@@ -183,15 +182,8 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
                   <span className="text-xs font-black uppercase tracking-[0.2em]">Fetch_More_Intel</span>
                 )}
               </div>
-              
               <div className={`absolute bottom-0 left-0 h-1 bg-blue-600 transition-all duration-300 ${loading ? 'w-full animate-[loading_2s_infinite]' : 'w-0'}`} />
             </button>
-            
-            {loading && (
-              <p className="text-[10px] font-mono text-blue-500 animate-pulse uppercase tracking-widest">
-                Accessing Central Server Archives...
-              </p>
-            )}
           </div>
         )}
 
