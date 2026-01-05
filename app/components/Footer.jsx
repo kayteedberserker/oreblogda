@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { useTheme } from "next-themes";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 
 const FooterAds = dynamic(() => import("./FooterAds"), {
   ssr: false,
@@ -218,7 +219,7 @@ export default function Footer({ postsContainerId }) {
         className="fixed bottom-18 right-4 md:right-8 group z-40 transition-transform active:scale-90"
       >
         <div className="relative w-12 h-12 flex items-center justify-center bg-white dark:bg-gray-900 rounded-full shadow-2xl border border-gray-100 dark:border-gray-800">
-          <img src="/whatsapp.png" alt="WA" className="w-10 h-10 rounded-full" />
+          <Image fill priority src="/whatsapp.png" alt="WA" className="w-10 h-10 rounded-full" />
           <div className="absolute -inset-1 bg-green-500/20 rounded-full animate-ping pointer-events-none" />
         </div>
       </a>

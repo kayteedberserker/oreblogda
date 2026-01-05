@@ -2,9 +2,10 @@
 
 import { useState, useEffect, useCallback } from "react";
 import PostCard from "@/app/components/PostCard";
-import AuthorPageAd from "@/app/components/AuthorPageAd";
-import ArticleAd from "@/app/components/ArticleAd";
+// import AuthorPageAd from "@/app/components/AuthorPageAd";
+// import ArticleAd from "@/app/components/ArticleAd";
 import { motion, AnimatePresence } from "framer-motion";
+import Image from "next/image"; // IMPORTED NEXT IMAGE
 
 export default function AuthorPageClient({ author, initialPosts = [] }) {
   const [posts, setPosts] = useState(initialPosts);
@@ -38,12 +39,22 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
     fetchMorePosts();
   };
 
+  /**
+   * Helper to optimize Cloudinary URLs.
+   * Transforms giant images into small, compressed WebP/AVIF versions.
+   */
+  const getOptimizedCloudinaryUrl = (url) => {
+    if (!url || !url.includes("cloudinary.com")) return url || "/default-avatar.png";
+    // Inserts transformation params: width 300, fill, face detection, auto format, auto quality
+    return url.replace("/upload/", "/upload/w_300,c_fill,g_face,f_auto,q_auto/");
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 mt-10 min-h-screen">
       
       {/* --- AUTHOR DOSSIER HEADER --- */}
       {author && (
-        <div 
+        <motion.div 
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           className="relative mb-12 p-6 md:p-10 bg-white/40 dark:bg-black/40 backdrop-blur-xl border border-gray-200 dark:border-blue-900/30 rounded-[2rem] shadow-2xl overflow-hidden"
@@ -58,11 +69,14 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
             {/* Avatar with Digital Frame */}
             <div className="relative group">
               <div className="absolute inset-0 bg-blue-600 rounded-full animate-pulse blur-md opacity-20 group-hover:opacity-40 transition-opacity" />
-              <div className="relative w-32 h-32 md:w-44 md:h-44 rounded-full overflow-hidden border-4 border-white dark:border-gray-900 shadow-xl">
-                <img
-                  src={author.profilePic?.url || "/default-avatar.png"}
+              <div className="relative w-32 h-32 md:w-44 md:h-44 rounded-full overflow-hidden border-4 border-white dark:border-gray-900 shadow-xl bg-gray-100 dark:bg-gray-800">
+                <Image
+                  src={getOptimizedCloudinaryUrl(author.profilePic?.url)}
                   alt={author.username}
-                  className="w-full h-full object-cover"
+                  fill
+                  priority // FIX: Helps LCP Discovery score
+                  sizes="(max-width: 768px) 128px, 176px"
+                  className="object-cover"
                 />
               </div>
               {/* Status Indicator */}
@@ -86,7 +100,7 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* --- FEED SECTION --- */}
@@ -100,14 +114,14 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {posts.map((post) => (
-            <div 
+            <motion.div 
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
               viewport={{ once: true }}
               key={post._id}
             >
               <PostCard post={post} isFeed />
-            </div>
+            </motion.div>
           ))}
         </div>
 
@@ -130,7 +144,7 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
                 )}
               </div>
               
-              {/* Inner Loading Bar (per instructions) */}
+              {/* Inner Loading Bar per instructions */}
               <div className={`absolute bottom-0 left-0 h-1 bg-blue-600 transition-all duration-300 ${loading ? 'w-full animate-[loading_2s_infinite]' : 'w-0'}`} />
             </button>
             

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { toast } from "react-toastify";
+import Image from "next/image";
 
 // --- HELPERS ---
 
@@ -13,7 +14,7 @@ const getFlagEmoji = (countryCode, size = "w40") => {
     }
     const code = countryCode.toLowerCase();
     return (
-        <img
+        <Image
             src={`https://flagcdn.com/${size}/${code}.png`}
             alt={countryCode}
             className="inline-block w-6 h-auto rounded-sm shadow-sm"
@@ -42,7 +43,11 @@ const MetricCard = ({ title, value, color, loading, trend }) => (
 );
 
 // --- MAIN COMPONENT ---
-
+const getOptimizedCloudinaryUrl = (url) => {
+    if (!url || !url.includes("cloudinary.com")) return url || "/default-avatar.png";
+    // Inserts transformation params: width 300, fill, face detection, auto format, auto quality
+    return url.replace("/upload/", "/upload/w_300,c_fill,g_face,f_auto,q_auto/");
+  };
 export default function FullAdminDashboard() {
     const [stats, setStats] = useState(null);
     const [userList, setUserList] = useState([]);
@@ -503,8 +508,8 @@ export default function FullAdminDashboard() {
                                     >
                                         <td className="px-8 py-4">
                                             <div className="flex items-center gap-4">
-                                                <img
-                                                    src={u.profilePic?.url || u.image || u.avatar || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'}
+                                                <Image
+                                                    src={getOptimizedCloudinaryUrl(u.profilePic?.url || u.image || u.avatar) || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'}
                                                     className="h-10 w-10 rounded-2xl object-cover border border-gray-200 dark:border-gray-700 bg-gray-100 shadow-sm"
                                                     alt="pfp"
                                                 />
@@ -573,8 +578,8 @@ export default function FullAdminDashboard() {
                         <div className="flex flex-col lg:flex-row gap-10">
                             {/* Profile Part */}
                             <div className="flex flex-col items-center lg:items-start shrink-0">
-                                <img
-                                    src={selectedUser.profilePic?.url || selectedUser.image || selectedUser.avatar || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'}
+                                <Image
+                                    src={getOptimizedCloudinaryUrl(selectedUser.profilePic?.url || selectedUser.image || selectedUser.avatar) || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'}
                                     className="h-44 w-44 rounded-[3rem] object-cover border-4 border-white dark:border-gray-700 shadow-2xl mb-6 bg-gray-100"
                                     alt="Avatar"
                                 />

@@ -3,6 +3,7 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
+import Image from "next/image";
 
 const ProfilePage = () => {
   const [user, setUser] = useState(null);
@@ -247,7 +248,7 @@ const ProfilePage = () => {
               <div className="absolute -inset-1 border-2 border-blue-600 rounded-full opacity-50" />
 
               <div className="w-40 h-40 rounded-full overflow-hidden border-4 border-white dark:border-[#0a0a0a] relative shadow-2xl">
-                <img
+                <Image
                   src={preview || user?.profilePic?.url || "/default-avatar.png"}
                   alt="Profile"
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"

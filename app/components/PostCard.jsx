@@ -16,7 +16,11 @@ const ArticleAd = dynamic(() => import("./ArticleAd"), {
 	ssr: false,
 });
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
-
+const getOptimizedCloudinaryUrl = (url) => {
+    if (!url || !url.includes("cloudinary.com")) return url || "/default-avatar.png";
+    // Using w_600 for sharpness and q_90 for high quality
+    return url.replace("/upload/", "/upload/w_500,c_fill,g_face,f_auto,q_100/");
+  };
 export default function PostCard({
 	post,
 	posts,
@@ -494,8 +498,9 @@ export default function PostCard({
 						) : post.mediaType?.startsWith("image") ? (
 							<div className="relative w-full h-auto cursor-pointer overflow-hidden" onClick={() => openLightbox(post.mediaUrl, "image")}>
 								<Image
-									src={post.mediaUrl}
+									src={getOptimizedCloudinaryUrl(post.mediaUrl)}
 									alt="post media"
+									priority
 									loading="eager"
 									width={800}
 									height={600}
