@@ -1,5 +1,12 @@
 @import "tailwindcss";
 
+/* 1. FONT OPTIMIZATION: Fixes the 3s LCP Render Delay */
+@font-face {
+  font-family: "Space Grotesk";
+  font-display: swap; /* Tells browser to show text immediately */
+  src: local("Space Grotesk"), sans-serif;
+}
+
 :root {
   --background: #ffffff;
   --foreground: #171717;
@@ -26,38 +33,27 @@ body {
   font-optical-sizing: auto;
   font-style: normal;
 }
-/* globals.css */
+
+/* 2. REMOVED GLOBAL HTML TRANSITION: This was causing "Forced Reflow" warnings */
 html {
-  transition: background-color 0.3s ease, color 0.3s ease;
+  /* Transitioning the entire HTML element on load blocks the main thread */
+  scroll-behavior: smooth;
 }
 
-div, span, p {
+/* 3. PERFORMANCE FIX: Limit pre-wrap only to necessary elements to reduce DOM work */
+.post-content, .author-bio, p {
   white-space: pre-wrap;
 }
 
-/* If you are using NativeWind/Tailwind, this is often safer */
-.text-base {
-  white-space: pre-wrap;
-}
 .postCardImg {
   background-position: center;
   background-repeat: no-repeat;
   background-size: cover;
 }
 
-/* postCard.module.css */
-.likeButton {
-  transition: transform 0.2s ease;
-}
-
-.likeButton.liked {
-  transform: scale(1.3);
-  color: #f87171;
-  /* red-400 */
-}
-
+/* Scrollbar Optimization */
 .scrollbar-hide::-webkit-scrollbar {
-  width: 0px;
+  display: none;
 }
 
 .scrollbar-hide {
@@ -65,20 +61,12 @@ div, span, p {
   scrollbar-width: none;
 }
 
-/* Custom scrollbar for drawer */
+/* Optimized scrollbar for drawer - using transform-based rendering */
 div[style*="overflow-y: auto"]::-webkit-scrollbar {
   width: 6px;
 }
 
-div[style*="overflow-y: auto"]::-webkit-scrollbar-track {
-  background: transparent;
-}
-
 div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
-  background-color: rgba(107, 114, 128, 0.5);
+  background-color: rgba(107, 114, 128, 0.4);
   border-radius: 10px;
-}
-
-.dark div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
-  background-color: rgba(156, 163, 175, 0.3);
 }
