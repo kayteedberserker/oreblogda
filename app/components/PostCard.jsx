@@ -502,6 +502,7 @@ export default function PostCard({
 									alt="post media"
 									priority
 									loading="eager"
+									fetchPriority="high"
 									width={800}
 									height={600}
 									sizes="(max-width: 768px) 90vw, (max-width: 1200px) 80vw, 60vw"

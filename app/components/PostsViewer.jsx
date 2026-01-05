@@ -38,7 +38,7 @@ export default function PostsViewer({ initialPosts }) {
   useEffect(() => {
     const handleScroll = () => {
       if (
-        window.innerHeight + window.scrollY >= document.body.offsetHeight - 200 &&
+        window.innerHeight + window.scrollY >= document.body.offsetHeight - 500 &&
         hasMore &&
         !isLoading &&
         !isValidating
@@ -59,15 +59,16 @@ export default function PostsViewer({ initialPosts }) {
       <div className="md:flex md:gap-12">
         
         {/* --- MAIN CONTENT: THE DATA STREAM --- */}
+        {/* PERFORMANCE FIX: Removed max-h-screen and overflow-y-auto to stop Forced Reflows and Layout Shifts */}
         <div
           id="postsContainer"
-          className="md:flex-1 max-h-screen overflow-y-auto pr-4 scrollbar-hide px-4 md:px-0"
+          className="md:flex-1 pr-4 scrollbar-hide px-4 md:px-0"
         >
           {/* Header with Scan-line effect */}
           <div className="relative mb-10 pb-4 border-b-2 border-gray-100 dark:border-gray-800">
             <div className="flex items-center gap-3 mb-1">
-               <div className="h-3 w-3 bg-blue-600 rounded-full animate-ping" />
-               <span className="text-[10px] font-black uppercase tracking-[0.5em] text-blue-600">Live Feed Active</span>
+                <div className="h-3 w-3 bg-blue-600 rounded-full animate-ping" />
+                <span className="text-[10px] font-black uppercase tracking-[0.5em] text-blue-600">Live Feed Active</span>
             </div>
             <h1 className="text-5xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white">
               Anime <span className="text-blue-600">Intel</span>
@@ -83,13 +84,15 @@ export default function PostsViewer({ initialPosts }) {
                   posts={uniquePosts}
                   setPosts={() => { }}
                   isFeed
+                  /* Optimization: Give priority to the first two images in the viewport */
+                  isPriority={index < 2}
                 />
 
                 {/* AD TERMINAL SLOT */}
                 {index % 2 === 1 && (
                   <div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex justify-center bg-gray-50/50 dark:bg-white/5">
-                     {/* <AdsterraBannerSync /> */}
-                     <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
+                      {/* <AdsterraBannerSync /> */}
+                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
                   </div>
                 )}
               </div>
@@ -97,15 +100,16 @@ export default function PostsViewer({ initialPosts }) {
           </div>
 
           {/* LOADING & LOAD MORE STATE */}
-          <div className="py-12 border-t border-gray-100 dark:border-gray-800 mt-10">
+          {/* FIX: Added min-h-[140px] to keep the container stable during loading (Fixes CLS) */}
+          <div className="py-12 border-t border-gray-100 dark:border-gray-800 mt-10 min-h-[140px] flex flex-col items-center justify-center">
             {(isLoading || isValidating) ? (
               <div className="flex flex-col items-center gap-3">
-                 <div className="w-12 h-1 bg-gray-200 dark:bg-gray-800 overflow-hidden">
-                    <div className="h-full bg-blue-600 animate-[loading_1.5s_infinite]" />
-                 </div>
-                 <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 animate-pulse">
+                  <div className="w-12 h-1 bg-gray-200 dark:bg-gray-800 overflow-hidden">
+                     <div className="h-full bg-blue-600 animate-[loading_1.5s_infinite]" />
+                  </div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 animate-pulse">
                     Synchronizing...
-                 </p>
+                  </p>
               </div>
             ) : hasMore ? (
               <div className="text-center">
@@ -126,7 +130,7 @@ export default function PostsViewer({ initialPosts }) {
               </p>
             ) : (
               <div className="text-center py-20">
-                 <h2 className="text-2xl font-black uppercase italic text-gray-300">No Intel Found</h2>
+                  <h2 className="text-2xl font-black uppercase italic text-gray-300">No Intel Found</h2>
               </div>
             )}
           </div>
