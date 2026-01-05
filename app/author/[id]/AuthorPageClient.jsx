@@ -96,7 +96,7 @@ export default function AuthorPageClient({ author, initialPosts = [] }) {
               
               <div className="mt-6 flex flex-wrap justify-center md:justify-start gap-4 text-[10px] font-mono uppercase tracking-widest text-gray-500">
                 <span className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700">Posts: {posts.length}</span>
-                <span className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700">Rank: Elite_Writer</span>
+                <span className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded-md border border-gray-200 dark:border-gray-700">Rank: {posts.length > 50 ? "Elite_Writer" : posts.length > 10 ? "Senior_Author" : "Novice_Author"}</span>
               </div>
             </div>
           </div>
