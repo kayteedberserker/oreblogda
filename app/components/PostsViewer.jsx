@@ -56,7 +56,11 @@ export default function PostsViewer({ initialPosts }) {
       {/* --- AMBIENT BACKGROUND ELEMENTS --- */}
       <div className="fixed top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-600 to-transparent opacity-50 z-50" />
       
-      <div className="md:flex md:gap-12">
+      {/* STRICT FIX FOR STICKY: 
+          1. items-start prevents the sidebar from growing to match the Post height.
+          2. The parent MUST NOT have overflow-hidden or overflow-auto.
+      */}
+      <div className="md:flex md:gap-12 items-start overflow-visible">
         
         {/* --- MAIN CONTENT: THE DATA STREAM --- */}
         {/* PERFORMANCE FIX: Removed max-h-screen and overflow-y-auto to stop Forced Reflows and Layout Shifts */}
@@ -137,14 +141,17 @@ export default function PostsViewer({ initialPosts }) {
         </div>
 
         {/* --- DESKTOP SIDEBAR --- */}
-        <aside className="hidden md:flex flex-col gap-6 md:w-[350px]">
-          <div className="sticky top-8">
-             <div className="flex items-center gap-2 mb-4 ml-1">
-                <div className="h-1 w-4 bg-blue-600" />
-                <span className="text-[10px] font-black uppercase tracking-widest">Sidebar Widgets</span>
-             </div>
-             <RecentPollsCard />
+        {/* SIDEBAR REPAIR: 
+            'h-fit' ensures the sidebar only takes up as much room as the poll card.
+            'top-24' needs to be adjusted based on your navbar height.
+        */}
+        <aside className="hidden md:flex flex-col gap-6 md:w-[350px] lg:w-[450px] sticky top-20 h-fit">
+          <div className="flex items-center gap-2 mb-4 ml-1">
+            <div className="h-1 w-4 bg-blue-600" />
+            <span className="text-[10px] font-black uppercase tracking-widest">Sidebar Widgets</span>
           </div>
+          <RecentPollsCard />
+          {/* You can add FooterAds here if you want them to stick as well */}
         </aside>
 
         {/* --- THE TACTICAL MOBILE DRAWER --- */}

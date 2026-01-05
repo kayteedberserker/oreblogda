@@ -24,10 +24,13 @@ export default async function HomePage() {
     : initialData.posts || [];
 
   return (
-    <div className="min-h-[75vh] relative overflow-hidden bg-white dark:bg-[#050505]">
+    /* FIX: Changed 'overflow-hidden' to 'overflow-clip'. 
+       'overflow-clip' allows position: sticky to work while still 
+       hiding the absolute glows that bleed off the screen.
+    */
+    <div className="min-h-[75vh] relative overflow-clip bg-white dark:bg-[#050505]">
       
       {/* --- LAYER 1: NEURAL GRID OVERLAY --- */}
-      {/* Handled via inline style for the pattern, opacity via Tailwind */}
       <div 
         className="absolute inset-0 opacity-[0.03] dark:opacity-[0.05] pointer-events-none" 
         style={{ 
@@ -37,15 +40,8 @@ export default async function HomePage() {
       />
 
       {/* --- LAYER 2: DYNAMIC ATMOSPHERIC GLOWS --- */}
-      {/* Using Tailwind's built-in animate-pulse for SSR compatibility */}
-      
-      {/* Top Left - Deep Blue Command Glow */}
       <div className="absolute top-[-5%] left-[-5%] w-[40%] h-[40%] bg-blue-500/10 dark:bg-indigo-600/10 blur-[120px] rounded-full animate-pulse" />
-      
-      {/* Bottom Right - Specialized Energy Glow */}
       <div className="absolute bottom-[-10%] right-[-5%] w-[50%] h-[50%] bg-blue-400/5 dark:bg-blue-900/10 blur-[150px] rounded-full animate-pulse [animation-duration:8s]" />
-      
-      {/* Center Background Detail - A faint vertical "Data Beam" */}
       <div className="absolute left-1/2 top-0 w-[1px] h-full bg-gradient-to-b from-transparent via-blue-500/10 to-transparent pointer-events-none" />
 
       {/* --- LAYER 3: THE CONTENT ENGINE --- */}
@@ -66,7 +62,6 @@ export default async function HomePage() {
         </span>
       </div>
 
-      {/* ToastContainer must stay here to catch events from the Client Components inside */}
       <ToastContainer 
         position="bottom-right" 
         autoClose={3000} 

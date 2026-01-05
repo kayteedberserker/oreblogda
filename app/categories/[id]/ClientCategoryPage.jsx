@@ -36,7 +36,7 @@ export default function ClientCategoryPage({ category, initialPosts }) {
   useEffect(() => {
     const handleScroll = () => {
       if (
-        window.innerHeight + window.scrollY >= document.body.offsetHeight - 200 &&
+        window.innerHeight + window.scrollY >= document.body.offsetHeight - 500 &&
         hasMore &&
         !isLoading &&
         !isValidating
@@ -62,11 +62,14 @@ export default function ClientCategoryPage({ category, initialPosts }) {
         <div className="absolute top-10 left-10 w-48 h-48 bg-blue-400 dark:bg-indigo-900 opacity-10 rounded-full blur-[100px] animate-pulse pointer-events-none" />
         <div className="absolute bottom-10 right-10 w-56 h-56 bg-blue-300 dark:bg-blue-700 opacity-10 rounded-full blur-[120px] animate-pulse pointer-events-none" />
 
-        <div className="md:flex md:gap-12">
+        {/* FIX: added items-start and overflow-visible to support sticky sidebar */}
+        <div className="md:flex md:gap-12 items-start overflow-visible">
+          
           {/* --- MAIN CONTENT AREA --- */}
+          {/* PERFORMANCE FIX: Removed max-h and overflow-y to stop Forced Reflows and enable sticky sidebar */}
           <div
             id="postsContainer"
-            className="md:flex-1 max-h-[100vh] overflow-y-auto pr-2 scrollbar-hide"
+            className="md:flex-1 pr-2 scrollbar-hide"
           >
             {/* Category HUD Header */}
             <div className="relative mb-10 pb-4 border-b-2 border-gray-100 dark:border-gray-800">
@@ -83,7 +86,13 @@ export default function ClientCategoryPage({ category, initialPosts }) {
             <div className="flex flex-col gap-6">
               {uniquePosts.map((post, index) => (
                 <div key={post._id} className="break-inside-avoid">
-                  <PostCard post={post} posts={uniquePosts} setPosts={() => { }} isFeed />
+                  <PostCard 
+                    post={post} 
+                    posts={uniquePosts} 
+                    setPosts={() => { }} 
+                    isFeed 
+                    isPriority={index < 2} // Optimization for LCP
+                  />
                   
                   {/* Ad Placeholder logic kept consistent */}
                   {/* {(index + 1) % 2 === 0 && <ArticleAd />} */}
@@ -92,7 +101,8 @@ export default function ClientCategoryPage({ category, initialPosts }) {
             </div>
 
             {/* --- LOADING & FEEDBACK --- */}
-            <div className="py-12">
+            {/* FIX: Added min-h-[140px] to stabilize layout during loading (Fixes CLS) */}
+            <div className="py-12 min-h-[140px] flex flex-col items-center justify-center">
               {(isLoading || isValidating) ? (
                 <div className="flex flex-col items-center gap-3">
                    {/* Custom Loading Animation per instructions */}
@@ -121,7 +131,7 @@ export default function ClientCategoryPage({ category, initialPosts }) {
                   END OF ARCHIVE
                 </p>
               ) : (
-                <div className="text-center py-20 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-3xl">
+                <div className="text-center py-20 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-3xl w-full">
                   <p className="text-gray-500 font-black uppercase italic tracking-widest">
                     No posts found in <span className="text-blue-600">{category}</span>
                   </p>
@@ -131,14 +141,13 @@ export default function ClientCategoryPage({ category, initialPosts }) {
           </div>
 
           {/* --- DESKTOP SIDEBAR --- */}
-          <aside className="hidden md:flex flex-col gap-6 md:w-[350px]">
-            <div className="sticky top-6">
-               <div className="flex items-center gap-2 mb-4">
-                  <div className="h-1 w-4 bg-blue-600" />
-                  <span className="text-[10px] font-black uppercase tracking-widest">Related Intel</span>
-               </div>
-               <RecentPollsCard />
+          {/* FIX: h-fit and top-24 ensure the sidebar sticks correctly */}
+          <aside className="hidden md:flex flex-col gap-6 md:w-[350px] lg:w-[450px] sticky top-24 h-fit">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="h-1 w-4 bg-blue-600" />
+              <span className="text-[10px] font-black uppercase tracking-widest">Sidebar Widgets</span>
             </div>
+            <RecentPollsCard />
           </aside>
 
           {/* --- TACTICAL MINI DRAWER (Mobile Only) --- */}
