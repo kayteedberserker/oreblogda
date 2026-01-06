@@ -228,19 +228,26 @@ export async function GET(req, { params }) {
 	try {
 		await connectDB();
 
-		const resolvedParams = await params;  // ✅ unwrap the Promise
+		const resolvedParams = await params;  // unwrap the Promise
 		const { id } = resolvedParams;
-		if (!id) return NextResponse.json({ message: "Post Slug is required" }, { status: 400 });
+		if (!id) 
+			return NextResponse.json({ message: "Post Slug is required" }, { status: 400 });
 
+		let post;
 		if (id.includes("-")) {
-			const post = await Post.findOne({ slug: id });
-			if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
-			return NextResponse.json(post);
+			post = await Post.findOne({ slug: id });
 		} else {
-			const post = await Post.findById(id);
-			if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
-			return NextResponse.json(post);
+			post = await Post.findById(id);
 		}
+
+		if (!post) 
+			return NextResponse.json({ message: "Post not found" }, { status: 404 });
+
+		// Get the full post count of the author
+		const postCount = await Post.countDocuments({ authorId: post.authorId });
+
+		// Return post + author's total post count
+		return NextResponse.json({ ...post.toObject(), authorPostCount: postCount });
 
 	} catch (err) {
 		console.error(err);

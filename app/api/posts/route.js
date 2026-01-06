@@ -37,13 +37,13 @@ export async function GET(req) {
         const page = parseInt(searchParams.get("page")) || 1;
         const limit = parseInt(searchParams.get("limit")) || 30;
         const author = searchParams.get("author");
-        const authorId = searchParams.get("authorId"); // Support both param names just in case
+        const authorId = searchParams.get("authorId");
         const category = searchParams.get("category");
+        const last24Hours = searchParams.get("last24Hours") === "true"; // new param
         const skip = (page - 1) * limit;
 
         const query = {};
 
-        // 1. Filter by Author if requested (Dashboard logic)
         if (author || authorId) {
             const available = await Post.find({ authorId: author });
             if (available.length > 0) {
@@ -51,14 +51,17 @@ export async function GET(req) {
             } else {
                 query.authorUserId = author || authorId;
             }
-            // When checking a specific author's history, we look for ALL statuses
-            // so the dashboard can show "Pending" or "Rejected" states.
         } else {
-            // 2. Public Feed logic: ONLY show approved posts
             query.status = "approved";
         }
 
         if (category) query.category = category;
+
+        // 🔹 Filter posts from last 24 hours if requested
+        if (last24Hours) {
+            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            query.createdAt = { $gte: yesterday };
+        }
 
         const posts = await Post.find(query)
             .sort({ createdAt: -1 })
@@ -84,6 +87,7 @@ export async function GET(req) {
         return addCorsHeaders(res);
     }
 }
+
 
 // ----------------------
 // TikTok resolver
