@@ -62,8 +62,8 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
         setPosts((prev) =>
           Array.isArray(prev)
             ? prev.map((p) =>
-                p._id === postId ? { ...p, ...(data.post || data) } : p
-              )
+              p._id === postId ? { ...p, ...(data.post || data) } : p
+            )
             : prev
         );
         setSubmitted(true);
@@ -80,7 +80,7 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
 
   return (
     <div className="mt-6 p-5 md:p-6 bg-white/50 dark:bg-black/40 backdrop-blur-xl border border-gray-100 dark:border-blue-900/30 rounded-3xl shadow-xl overflow-hidden relative">
-      
+
       {/* HUD Header */}
       <div className="flex items-center justify-between mb-5">
         <div className="flex items-center gap-2">
@@ -100,15 +100,14 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
           const isSelected = selectedOptions.includes(i);
 
           return (
-            <motion.div 
-              key={i} 
+            <motion.div
+              key={i}
               whileHover={!submitted && !readOnly ? { scale: 1.02 } : {}}
               onClick={() => handleOptionChange(i)}
-              className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer overflow-hidden ${
-                isSelected 
-                ? "border-blue-600 bg-blue-600/5 dark:bg-blue-600/10" 
-                : "border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 hover:border-gray-300 dark:hover:border-gray-700"
-              }`}
+              className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer overflow-hidden ${isSelected
+                  ? "border-blue-600 bg-blue-600/5 dark:bg-blue-600/10"
+                  : "border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50 hover:border-gray-300 dark:hover:border-gray-700"
+                }`}
             >
               <div className="flex justify-between items-start mb-2 relative z-10">
                 <div className="flex items-center gap-2">
@@ -125,13 +124,11 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
               {/* Progress Bar Background */}
               <div className="w-full bg-gray-200 dark:bg-gray-800 h-1.5 rounded-full mt-3 overflow-hidden">
                 <div
-                  initial={{ width: 0 }}
-                  animate={{ width: `${percentage}%` }}
-                  transition={{ duration: 1, ease: "easeOut" }}
-                  className="h-full bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.5)]"
+                  style={{ width: `${percentage}%` }}
+                  className="h-full bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.5)] transition-all duration-1000 ease-out"
                 />
               </div>
-              
+
               <div className="mt-2 flex justify-between items-center text-[9px] font-mono text-gray-400 relative z-10">
                 <span>Votes: {opt.votes}</span>
                 {isSelected && <span className="text-blue-600 animate-pulse">SELECTED</span>}
@@ -164,7 +161,7 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
       )}
 
       {submitted && (
-        <div 
+        <div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className="mt-6 p-3 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center justify-center gap-2"
