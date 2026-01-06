@@ -17,10 +17,10 @@ const ArticleAd = dynamic(() => import("./ArticleAd"), {
 });
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
 const getOptimizedCloudinaryUrl = (url) => {
-    if (!url || !url.includes("cloudinary.com")) return url || "/default-avatar.png";
-    // Using w_600 for sharpness and q_90 for high quality
-    return url.replace("/upload/", "/upload/w_500,c_fill,g_face,f_auto,q_100/");
-  };
+	if (!url || !url.includes("cloudinary.com")) return url || "/default-avatar.png";
+	// Using w_600 for sharpness and q_90 for high quality
+	return url.replace("/upload/", "/upload/w_500,c_fill,g_face,f_auto,q_100/");
+};
 export default function PostCard({
 	post,
 	posts,
@@ -199,24 +199,27 @@ export default function PostCard({
 	const openLightbox = (src, type) => setLightbox({ open: true, src, type });
 	const closeLightbox = () => setLightbox({ open: false, src: null, type: null });
 
-	// ✅ Optimized TikTok embed handler
 	useEffect(() => {
-		if (!post?.mediaUrl || !post.mediaUrl.includes("tiktok.com")) return;
+		if (!post?.mediaUrl) return;
 
-		if (!window.__tiktokScriptLoaded) {
-			const script = document.createElement("script");
-			script.src = "https://www.tiktok.com/embed.js";
-			script.async = true;
-			document.body.appendChild(script);
-			window.__tiktokScriptLoaded = true;
-		} else if (window.tiktokEmbedder?.processEmbeds) {
-			window.tiktokEmbedder.processEmbeds();
-		} else {
-			setTimeout(() => {
-				if (window.tiktokEmbedder?.processEmbeds) window.tiktokEmbedder.processEmbeds();
-			}, 800);
+		// TikTok script loader
+		if (post.mediaUrl.includes("tiktok.com")) {
+			if (!window.__tiktokScriptLoaded) {
+				const script = document.createElement("script");
+				script.src = "https://www.tiktok.com/embed.js";
+				script.async = true;
+				document.body.appendChild(script);
+				window.__tiktokScriptLoaded = true;
+			} else if (window.tiktokEmbedder?.processEmbeds) {
+				window.tiktokEmbedder.processEmbeds();
+			} else {
+				setTimeout(() => {
+					if (window.tiktokEmbedder?.processEmbeds) window.tiktokEmbedder.processEmbeds();
+				}, 800);
+			}
 		}
-	}, [post.mediaUrl]);
+	}, [post?.mediaUrl]);
+
 
 
 	// ✅ --- UPDATED MESSAGE SECTION ---
@@ -260,9 +263,9 @@ export default function PostCard({
 
 	const renderMessage = () => {
 		let maxLength = 150;
-		if(isSimilarPost){
+		if (isSimilarPost) {
 			maxLength = 200;
-		}else {
+		} else {
 			maxLength = 150;
 		}
 
@@ -488,15 +491,33 @@ export default function PostCard({
 				{/* Media Section */}
 				{!hideMedia && post.mediaUrl && (
 					<div className="relative group/media rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-800 mb-4 shadow-inner">
+						{/* TikTok Embed */}
 						{post.mediaUrl.includes("tiktok.com") ? (
 							<div className="flex justify-center bg-black">
-								<blockquote className="tiktok-embed" cite={post.mediaUrl.split("?")[0]} data-video-id={post.mediaUrl.match(/video\/(\d+)/)?.[1]} style={{ maxWidth: "100%", minWidth: "325px" }}>
+								<blockquote
+									className="tiktok-embed"
+									cite={post.mediaUrl.split("?")[0]}
+									data-video-id={post.mediaUrl.match(/video\/(\d+)/)?.[1]}
+									style={{ maxWidth: "100%", minWidth: "325px" }}
+								>
 									<section> </section>
 								</blockquote>
-								<script async src="https://www.tiktok.com/embed.js"></script>
+							</div>
+						) : post.mediaUrl.includes("youtube.com") || post.mediaUrl.includes("youtu.be") ? (
+							<div className="relative w-full h-0 pb-[56.25%]"> {/* 16:9 aspect ratio */}
+								<iframe
+									src={`https://www.youtube.com/embed/${post.mediaUrl.match(/(?:v=|youtu\.be\/)([\w-]+)/)?.[1]}`}
+									title="YouTube video"
+									allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+									allowFullScreen
+									className="absolute top-0 left-0 w-full h-full"
+								/>
 							</div>
 						) : post.mediaType?.startsWith("image") ? (
-							<div className="relative w-full h-auto cursor-pointer overflow-hidden" onClick={() => openLightbox(post.mediaUrl, "image")}>
+							<div
+								className="relative w-full h-auto cursor-pointer overflow-hidden"
+								onClick={() => openLightbox(post.mediaUrl, "image")}
+							>
 								<Image
 									src={getOptimizedCloudinaryUrl(post.mediaUrl)}
 									alt="post media"
@@ -521,6 +542,8 @@ export default function PostCard({
 						)}
 					</div>
 				)}
+
+
 
 				{/* Poll Section */}
 				{post.poll && post.poll.options?.length > 0 && (
