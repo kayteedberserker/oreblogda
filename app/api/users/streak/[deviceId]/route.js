@@ -7,7 +7,6 @@ import MobileUser from "@/app/models/MobileUserModel";
 export async function GET(req, { params }) {
     await connectDB();
     const resolvedParams = await params;
-    console.log(resolvedParams);
     
     const { deviceId } = resolvedParams;
     
@@ -15,13 +14,15 @@ export async function GET(req, { params }) {
 
     try {
         const user = await MobileUser.findOne({ deviceId });
-        const streakDoc = await UserStreak.findOne({ userId: user?._id });
-        
         if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
+
+        const streakDoc = await UserStreak.findOne({ userId: user._id });
 
         return NextResponse.json({
             streak: streakDoc?.streak || 0,
             lastPostDate: streakDoc?.lastPostDate || null,
+            canRestore: !streakDoc && (user.lastStreak > 0), // Logic to tell frontend restore is possible
+            recoverableStreak: user.lastStreak || 0
         }, { status: 200 });
     } catch (err) {
         console.error(err);
