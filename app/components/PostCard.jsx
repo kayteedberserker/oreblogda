@@ -21,6 +21,42 @@ const getOptimizedCloudinaryUrl = (url) => {
 	// Using w_600 for sharpness and q_90 for high quality
 	return url.replace("/upload/", "/upload/w_500,c_fill,g_face,f_auto,q_100/");
 };
+/**
+ * Formats view counts into a gamey/short-hand string.
+ * Examples: 85 -> 85, 125 -> 100+, 1150 -> 1.1k+, 12550 -> 12.5k+
+ */
+const formatViews = (views) => {
+  if (!views || views < 0) return "0";
+
+  // Case 1: Less than 100 - Show exact number
+  if (views < 100) {
+    return views.toString();
+  }
+
+  // Case 2: 100 to 999 - Show 100+, 200+, etc. (Hiding last two digits)
+  if (views < 1000) {
+    return `${Math.floor(views / 100) * 100}+`;
+  }
+
+  // Case 3: 1,000 to 999,999 - Show 1k+, 1.1k+, 10k+, etc.
+  if (views < 1000000) {
+    const kValue = views / 1000;
+    // We use .toFixed(1) to get one decimal, but remove it if it's .0
+    const formattedK = kValue % 1 === 0 
+      ? kValue.toFixed(0) 
+      : kValue.toFixed(1);
+    
+    return `${formattedK}k+`;
+  }
+
+  // Case 4: Millions (Bonus)
+  const mValue = views / 1000000;
+  const formattedM = mValue % 1 === 0 
+    ? mValue.toFixed(0) 
+    : mValue.toFixed(1);
+    
+  return `${formattedM}m+`;
+};
 export default function PostCard({
 	post,
 	posts,
@@ -453,7 +489,7 @@ export default function PostCard({
 
 					<div className="flex items-center gap-2 bg-gray-50 dark:bg-gray-800/50 px-3 py-1 rounded-full border border-gray-100 dark:border-gray-700">
 						<div className="w-1.5 h-1.5 bg-green-500 rounded-full animate-pulse" />
-						<span className="text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">{totalViews}</span>
+						<span className="text-[10px] font-black text-gray-500 dark:text-gray-400 uppercase tracking-widest">{formatViews(totalViews)}</span>
 					</div>
 				</div>
 
