@@ -31,16 +31,15 @@ export async function GET() {
       )
       .join("");
     const mobileUserUrls = mobileUsers
-      .map(
-        (user) => {
-          if (user.lastStreak) {
-            `
-            <url>
-              <loc>${baseUrl}/author/${user.deviceId || user._id}</loc>
-              <lastmod>${new Date(user.updatedAt).toISOString()}</lastmod>
-            </url>`
-          }
-        })
+      .filter((user) => user.lastStreak) // Only include users with a streak
+      .map((user) => {
+        // Explicitly return the string
+        return `
+    <url>
+      <loc>${baseUrl}/author/${user.deviceId || user._id}</loc>
+      <lastmod>${new Date(user.updatedAt).toISOString()}</lastmod>
+    </url>`;
+      })
       .join("");
     const categories = ["memes", "videos-edits", "news", "polls", "review", "gaming"]
     const otherUrls = categories
