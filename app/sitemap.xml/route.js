@@ -1,12 +1,15 @@
 import connectDB from "@/app/lib/mongodb";
 import Post from "@/app/models/PostModel";
-
+import User from "@/app/models/UserModel";
+import MobileUser from "@/app/models/MobileUserModel";
 
 
 export async function GET() {
   try {
     await connectDB();
     const posts = await Post.find().sort({ createdAt: -1 });
+    const authors = await User.find().sort({ createdAt: -1 });
+    const mobileUsers = await MobileUser.find().sort({ createdAt: -1 });
     const baseUrl = "https://oreblogda.com";
 
     const urls = posts
@@ -18,8 +21,29 @@ export async function GET() {
       </url>`
       )
       .join("");
-      const categories = ["memes", "videos-edits", "news", "polls", "review", "gaming"]
-      const otherUrls = categories
+    const authorUrls = authors
+      .map(
+        (author) => `
+      <url>
+        <loc>${baseUrl}/author/${author.deviceId || author._id}</loc>
+        <lastmod>${new Date(author.updatedAt).toISOString()}</lastmod>
+      </url>`
+      )
+      .join("");
+    const mobileUserUrls = mobileUsers
+      .map(
+        (user) => {
+          if (user.lastStreak) {
+            `
+            <url>
+              <loc>${baseUrl}/author/${user.deviceId || user._id}</loc>
+              <lastmod>${new Date(user.updatedAt).toISOString()}</lastmod>
+            </url>`
+          }
+        })
+      .join("");
+    const categories = ["memes", "videos-edits", "news", "polls", "review", "gaming"]
+    const otherUrls = categories
       .map(
         (category) => `
       <url>
