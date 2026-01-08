@@ -156,6 +156,12 @@ function normalizePostContent(content) {
 
   return cleaned.trim();
 }
+function removeEmptyLines(text) {
+  return text
+    .split('\n')
+    .filter(line => line.trim() !== '')
+    .join('\n');
+}
 
 export async function POST(req) {
     await connectDB();
@@ -171,7 +177,7 @@ export async function POST(req) {
 
         let user = null;
         let isMobile = false;
-        const newMessage = normalizePostContent(message);
+        const newMessage = removeEmptyLines(normalizePostContent(message));
         // --- STEP 1: AUTHENTICATION ---
         if (token) {
             try { user = verifyToken(token); } catch (err) { }
