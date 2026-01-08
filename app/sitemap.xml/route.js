@@ -57,6 +57,8 @@ export async function GET() {
         <loc>${baseUrl}</loc>
         <lastmod>${new Date().toISOString()}</lastmod>
       </url>
+      ${authorUrls}
+      ${mobileUserUrls}
       ${urls}
       ${otherUrls}
     </urlset>`;
