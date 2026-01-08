@@ -6,16 +6,6 @@ const nextConfig = {
   experimental: {
     serverComponentsExternalPackages: ["geoip-lite"],
   },
-  async redirects() {
-    console.log("🚀 Someone tried to install app...");
-    return [
-      {
-        source: '/download',
-        destination: 'https://d.apkpure.com/b/APK/com.kaytee.oreblogda?version=latest',
-        permanent: false,
-      },
-    ];
-  },
 };
 
 export default nextConfig;
