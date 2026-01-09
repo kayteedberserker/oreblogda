@@ -1,67 +1,53 @@
 "use client";
 import React from "react";
 import { motion } from "framer-motion";
-export async function generateMetadata() {
-	const title = "About Oreblogda – Anime, Gaming & Pop Culture Hub";
-	const description =
-		"Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture. Episode breakdowns, game updates, and fan-first content.";
+export const metadata = {
+	title: "About Oreblogda – Anime, Gaming & Pop Culture Hub",
+	description:
+		"Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture. Episode breakdowns, game updates, and fan-first content.",
 
-	const pageUrl = "https://oreblogda.com/about";
-	const previewImage = "https://oreblogda.com/ogimage.png"; // replace with your real OG image
+	keywords:
+		"about oreblogda, anime blog, gaming blog, anime news, gaming updates, pop culture, oreblogda",
 
-	return {
-		title,
-		description,
-		openGraph: {
-			title,
-			description,
-			url: pageUrl,
-			siteName: "Oreblogda",
-			images: [
-				{
-					url: previewImage,
-					width: 1200,
-					height: 630,
-					alt: "About Oreblogda",
-				},
-			],
-			type: "website",
-		},
-		twitter: {
-			card: "summary_large_image",
-			title,
-			description,
-			images: [previewImage],
-			creator: "@oreblogda",
-		},
-		alternates: {
-			canonical: pageUrl,
-		},
-		authors: [
+	authors: [
+		{ name: "Kaytee", url: "https://oreblogda.com" }
+	],
+
+	creator: "Kaytee",
+
+	robots: "index, follow",
+
+	openGraph: {
+		title: "About Oreblogda – Anime, Gaming & Pop Culture Hub",
+		description:
+			"Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture.",
+		url: "https://oreblogda.com/about",
+		siteName: "Oreblogda",
+		images: [
 			{
-				name: "Oreblogda Team",
-				url: "https://oreblogda.com",
+				url: "https://oreblogda.com/ogimage.png",
+				width: 1200,
+				height: 630,
+				alt: "About Oreblogda",
 			},
 		],
-		other: {
-			"application/ld+json": {
-				"@context": "https://schema.org",
-				"@type": "WebSite",
-				name: "Oreblogda",
-				url: "https://oreblogda.com",
-				description,
-				publisher: {
-					"@type": "Organization",
-					name: "Oreblogda",
-					logo: {
-						"@type": "ImageObject",
-						url: "https://oreblogda.com/logowhite.png",
-					},
-				},
-			},
-		},
-	};
-}
+		type: "website",
+	},
+
+	twitter: {
+		card: "summary_large_image",
+		title: "About Oreblogda – Anime, Gaming & Pop Culture Hub",
+		description:
+			"Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture.",
+		images: ["https://oreblogda.com/ogimage.png"],
+		creator: "@oreblogda",
+	},
+
+	alternates: {
+		canonical: "https://oreblogda.com/about",
+	},
+};
+
 
 const AboutPage = () => {
   return (

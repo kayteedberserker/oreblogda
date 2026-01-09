@@ -2,6 +2,54 @@
 import React from "react";
 import { motion } from "framer-motion";
 
+export const metadata = {
+	title: "Terms & Conditions – Oreblogda",
+	description:
+		"Read Oreblogda’s Terms & Conditions covering content usage, user conduct, and platform rules.",
+
+	keywords:
+		"oreblogda terms and conditions, anime blog terms, gaming blog terms",
+
+	authors: [
+		{ name: "Kaytee", url: "https://oreblogda.com" }
+	],
+
+	creator: "Kaytee",
+
+	robots: "index, follow",
+
+	openGraph: {
+		title: "Terms & Conditions – Oreblogda",
+		description:
+			"Understand the rules and conditions governing the use of Oreblogda.",
+		url: "https://oreblogda.com/terms",
+		siteName: "Oreblogda",
+		images: [
+			{
+				url: "https://oreblogda.com/ogimage.png",
+				width: 1200,
+				height: 630,
+				alt: "Oreblogda Terms and Conditions",
+			},
+		],
+		type: "article",
+	},
+
+	twitter: {
+		card: "summary_large_image",
+		title: "Terms & Conditions – Oreblogda",
+		description:
+			"Understand the rules and conditions governing the use of Oreblogda.",
+		images: ["https://oreblogda.com/ogimage.png"],
+		creator: "@oreblogda",
+	},
+
+	alternates: {
+		canonical: "https://oreblogda.com/terms",
+	},
+};
+
+
 const TermsAndConditions = () => {
   return (
     <div className="min-h-screen flex items-center justify-center px-6 py-20 relative overflow-hidden">

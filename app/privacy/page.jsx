@@ -3,73 +3,53 @@ import React from "react";
 import { motion } from "framer-motion";
 
 
-export async function generateMetadata() {
-	const title = "Privacy Policy – Oreblogda";
-	const description =
-		"Read Oreblogda’s Privacy Policy to understand how we collect, use, protect, and manage user data across our web and Android platforms.";
+export const metadata = {
+	title: "Privacy Policy – Oreblogda",
+	description:
+		"Read Oreblogda’s Privacy Policy to understand how we collect, use, and protect user data.",
 
-	const pageUrl = "https://oreblogda.com/privacy-policy";
-	const previewImage = "https://oreblogda.com/ogimage.png"; // optional OG image
+	keywords:
+		"oreblogda privacy policy, anime blog privacy, gaming blog privacy",
 
-	return {
-		title,
-		description,
-		openGraph: {
-			title,
-			description,
-			url: pageUrl,
-			siteName: "Oreblogda",
-			images: [
-				{
-					url: previewImage,
-					width: 1200,
-					height: 630,
-					alt: "Oreblogda Privacy Policy",
-				},
-			],
-			type: "article",
-		},
-		twitter: {
-			card: "summary_large_image",
-			title,
-			description,
-			images: [previewImage],
-			creator: "@oreblogda",
-		},
-		alternates: {
-			canonical: pageUrl,
-		},
-		robots: {
-			index: true,
-			follow: true,
-		},
-		authors: [
+	authors: [
+		{ name: "Kaytee", url: "https://oreblogda.com" }
+	],
+
+	creator: "Kaytee",
+
+	robots: "index, follow",
+
+	openGraph: {
+		title: "Privacy Policy – Oreblogda",
+		description:
+			"Learn how Oreblogda collects, uses, and protects your personal data.",
+		url: "https://oreblogda.com/privacy",
+		siteName: "Oreblogda",
+		images: [
 			{
-				name: "Oreblogda",
-				url: "https://oreblogda.com",
+				url: "https://oreblogda.com/ogimage.png",
+				width: 1200,
+				height: 630,
+				alt: "Oreblogda Privacy Policy",
 			},
 		],
-		other: {
-			"application/ld+json": {
-				"@context": "https://schema.org",
-				"@type": "PrivacyPolicy",
-				name: "Oreblogda Privacy Policy",
-				url: pageUrl,
-				description,
-				publisher: {
-					"@type": "Organization",
-					name: "Oreblogda",
-					url: "https://oreblogda.com",
-					logo: {
-						"@type": "ImageObject",
-						url: "https://oreblogda.com/logowhite.png",
-					},
-				},
-				dateModified: "2026-01-01",
-			},
-		},
-	};
-}
+		type: "article",
+	},
+
+	twitter: {
+		card: "summary_large_image",
+		title: "Privacy Policy – Oreblogda",
+		description:
+			"Learn how Oreblogda collects, uses, and protects your personal data.",
+		images: ["https://oreblogda.com/ogimage.png"],
+		creator: "@oreblogda",
+	},
+
+	alternates: {
+		canonical: "https://oreblogda.com/privacy",
+	},
+};
+
 
 const PrivacyPolicy = () => {
   return (
