@@ -3,52 +3,52 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
 
-export const metadata = {
-	title: "Contact Oreblogda – Get in Touch",
-	description:
-		"Contact Oreblogda to send feedback, bug reports, collaboration requests, or general inquiries.",
+// export const metadata = {
+// 	title: "Contact Oreblogda – Get in Touch",
+// 	description:
+// 		"Contact Oreblogda to send feedback, bug reports, collaboration requests, or general inquiries.",
 
-	keywords:
-		"contact oreblogda, anime blog contact, gaming blog contact, oreblogda support",
+// 	keywords:
+// 		"contact oreblogda, anime blog contact, gaming blog contact, oreblogda support",
 
-	authors: [
-		{ name: "Kaytee", url: "https://oreblogda.com" }
-	],
+// 	authors: [
+// 		{ name: "Kaytee", url: "https://oreblogda.com" }
+// 	],
 
-	creator: "Kaytee",
+// 	creator: "Kaytee",
 
-	robots: "index, follow",
+// 	robots: "index, follow",
 
-	openGraph: {
-		title: "Contact Oreblogda – Get in Touch",
-		description:
-			"Send feedback, bug reports, collaboration requests, or general messages to Oreblogda.",
-		url: "https://oreblogda.com/contact",
-		siteName: "Oreblogda",
-		images: [
-			{
-				url: "https://oreblogda.com/ogimage.png",
-				width: 1200,
-				height: 630,
-				alt: "Contact Oreblogda",
-			},
-		],
-		type: "website",
-	},
+// 	openGraph: {
+// 		title: "Contact Oreblogda – Get in Touch",
+// 		description:
+// 			"Send feedback, bug reports, collaboration requests, or general messages to Oreblogda.",
+// 		url: "https://oreblogda.com/contact",
+// 		siteName: "Oreblogda",
+// 		images: [
+// 			{
+// 				url: "https://oreblogda.com/ogimage.png",
+// 				width: 1200,
+// 				height: 630,
+// 				alt: "Contact Oreblogda",
+// 			},
+// 		],
+// 		type: "website",
+// 	},
 
-	twitter: {
-		card: "summary_large_image",
-		title: "Contact Oreblogda – Get in Touch",
-		description:
-			"Send feedback, bug reports, collaboration requests, or general messages to Oreblogda.",
-		images: ["https://oreblogda.com/ogimage.png"],
-		creator: "@oreblogda",
-	},
+// 	twitter: {
+// 		card: "summary_large_image",
+// 		title: "Contact Oreblogda – Get in Touch",
+// 		description:
+// 			"Send feedback, bug reports, collaboration requests, or general messages to Oreblogda.",
+// 		images: ["https://oreblogda.com/ogimage.png"],
+// 		creator: "@oreblogda",
+// 	},
 
-	alternates: {
-		canonical: "https://oreblogda.com/contact",
-	},
-};
+// 	alternates: {
+// 		canonical: "https://oreblogda.com/contact",
+// 	},
+// };
 
 
 export default function ContactPage() {

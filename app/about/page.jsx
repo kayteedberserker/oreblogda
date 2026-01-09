@@ -1,52 +1,52 @@
 "use client";
 import React from "react";
 import { motion } from "framer-motion";
-export const metadata = {
-	title: "About Oreblogda – Anime, Gaming & Pop Culture Hub",
-	description:
-		"Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture. Episode breakdowns, game updates, and fan-first content.",
+// export const metadata = {
+// 	title: "About Oreblogda – Anime, Gaming & Pop Culture Hub",
+// 	description:
+// 		"Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture. Episode breakdowns, game updates, and fan-first content.",
 
-	keywords:
-		"about oreblogda, anime blog, gaming blog, anime news, gaming updates, pop culture, oreblogda",
+// 	keywords:
+// 		"about oreblogda, anime blog, gaming blog, anime news, gaming updates, pop culture, oreblogda",
 
-	authors: [
-		{ name: "Kaytee", url: "https://oreblogda.com" }
-	],
+// 	authors: [
+// 		{ name: "Kaytee", url: "https://oreblogda.com" }
+// 	],
 
-	creator: "Kaytee",
+// 	creator: "Kaytee",
 
-	robots: "index, follow",
+// 	robots: "index, follow",
 
-	openGraph: {
-		title: "About Oreblogda – Anime, Gaming & Pop Culture Hub",
-		description:
-			"Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture.",
-		url: "https://oreblogda.com/about",
-		siteName: "Oreblogda",
-		images: [
-			{
-				url: "https://oreblogda.com/ogimage.png",
-				width: 1200,
-				height: 630,
-				alt: "About Oreblogda",
-			},
-		],
-		type: "website",
-	},
+// 	openGraph: {
+// 		title: "About Oreblogda – Anime, Gaming & Pop Culture Hub",
+// 		description:
+// 			"Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture.",
+// 		url: "https://oreblogda.com/about",
+// 		siteName: "Oreblogda",
+// 		images: [
+// 			{
+// 				url: "https://oreblogda.com/ogimage.png",
+// 				width: 1200,
+// 				height: 630,
+// 				alt: "About Oreblogda",
+// 			},
+// 		],
+// 		type: "website",
+// 	},
 
-	twitter: {
-		card: "summary_large_image",
-		title: "About Oreblogda – Anime, Gaming & Pop Culture Hub",
-		description:
-			"Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture.",
-		images: ["https://oreblogda.com/ogimage.png"],
-		creator: "@oreblogda",
-	},
+// 	twitter: {
+// 		card: "summary_large_image",
+// 		title: "About Oreblogda – Anime, Gaming & Pop Culture Hub",
+// 		description:
+// 			"Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture.",
+// 		images: ["https://oreblogda.com/ogimage.png"],
+// 		creator: "@oreblogda",
+// 	},
 
-	alternates: {
-		canonical: "https://oreblogda.com/about",
-	},
-};
+// 	alternates: {
+// 		canonical: "https://oreblogda.com/about",
+// 	},
+// };
 
 
 const AboutPage = () => {

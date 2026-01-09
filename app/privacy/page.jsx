@@ -3,52 +3,52 @@ import React from "react";
 import { motion } from "framer-motion";
 
 
-export const metadata = {
-	title: "Privacy Policy – Oreblogda",
-	description:
-		"Read Oreblogda’s Privacy Policy to understand how we collect, use, and protect user data.",
+// export const metadata = {
+// 	title: "Privacy Policy – Oreblogda",
+// 	description:
+// 		"Read Oreblogda’s Privacy Policy to understand how we collect, use, and protect user data.",
 
-	keywords:
-		"oreblogda privacy policy, anime blog privacy, gaming blog privacy",
+// 	keywords:
+// 		"oreblogda privacy policy, anime blog privacy, gaming blog privacy",
 
-	authors: [
-		{ name: "Kaytee", url: "https://oreblogda.com" }
-	],
+// 	authors: [
+// 		{ name: "Kaytee", url: "https://oreblogda.com" }
+// 	],
 
-	creator: "Kaytee",
+// 	creator: "Kaytee",
 
-	robots: "index, follow",
+// 	robots: "index, follow",
 
-	openGraph: {
-		title: "Privacy Policy – Oreblogda",
-		description:
-			"Learn how Oreblogda collects, uses, and protects your personal data.",
-		url: "https://oreblogda.com/privacy",
-		siteName: "Oreblogda",
-		images: [
-			{
-				url: "https://oreblogda.com/ogimage.png",
-				width: 1200,
-				height: 630,
-				alt: "Oreblogda Privacy Policy",
-			},
-		],
-		type: "article",
-	},
+// 	openGraph: {
+// 		title: "Privacy Policy – Oreblogda",
+// 		description:
+// 			"Learn how Oreblogda collects, uses, and protects your personal data.",
+// 		url: "https://oreblogda.com/privacy",
+// 		siteName: "Oreblogda",
+// 		images: [
+// 			{
+// 				url: "https://oreblogda.com/ogimage.png",
+// 				width: 1200,
+// 				height: 630,
+// 				alt: "Oreblogda Privacy Policy",
+// 			},
+// 		],
+// 		type: "article",
+// 	},
 
-	twitter: {
-		card: "summary_large_image",
-		title: "Privacy Policy – Oreblogda",
-		description:
-			"Learn how Oreblogda collects, uses, and protects your personal data.",
-		images: ["https://oreblogda.com/ogimage.png"],
-		creator: "@oreblogda",
-	},
+// 	twitter: {
+// 		card: "summary_large_image",
+// 		title: "Privacy Policy – Oreblogda",
+// 		description:
+// 			"Learn how Oreblogda collects, uses, and protects your personal data.",
+// 		images: ["https://oreblogda.com/ogimage.png"],
+// 		creator: "@oreblogda",
+// 	},
 
-	alternates: {
-		canonical: "https://oreblogda.com/privacy",
-	},
-};
+// 	alternates: {
+// 		canonical: "https://oreblogda.com/privacy",
+// 	},
+// };
 
 
 const PrivacyPolicy = () => {
