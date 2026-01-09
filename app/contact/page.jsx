@@ -2,6 +2,70 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 
+
+export async function generateMetadata() {
+	const title = "Contact Oreblogda – Get in Touch";
+	const description =
+		"Establish contact with Oreblogda. Send feedback, bug reports, collaboration requests, or general messages directly to our team.";
+
+	const pageUrl = "https://oreblogda.com/contact";
+	const previewImage = "https://oreblogda.com/ogimage.png"; // replace with your OG image
+
+	return {
+		title,
+		description,
+		openGraph: {
+			title,
+			description,
+			url: pageUrl,
+			siteName: "Oreblogda",
+			images: [
+				{
+					url: previewImage,
+					width: 1200,
+					height: 630,
+					alt: "Contact Oreblogda",
+				},
+			],
+			type: "website",
+		},
+		twitter: {
+			card: "summary_large_image",
+			title,
+			description,
+			images: [previewImage],
+			creator: "@oreblogda",
+		},
+		alternates: {
+			canonical: pageUrl,
+		},
+		authors: [
+			{
+				name: "Oreblogda Team",
+				url: "https://oreblogda.com",
+			},
+		],
+		other: {
+			"application/ld+json": {
+				"@context": "https://schema.org",
+				"@type": "ContactPage",
+				name: "Contact Oreblogda",
+				url: pageUrl,
+				description,
+				publisher: {
+					"@type": "Organization",
+					name: "Oreblogda",
+					url: "https://oreblogda.com",
+					logo: {
+						"@type": "ImageObject",
+						url: "https://oreblogda.com/logowhite.png",
+					},
+				},
+			},
+		},
+	};
+}
+
 export default function ContactPage() {
   const [form, setForm] = useState({ name: "", email: "", message: "", type: "General" });
   const [status, setStatus] = useState({ loading: false, success: "", error: "" });

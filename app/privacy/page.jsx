@@ -2,6 +2,75 @@
 import React from "react";
 import { motion } from "framer-motion";
 
+
+export async function generateMetadata() {
+	const title = "Privacy Policy – Oreblogda";
+	const description =
+		"Read Oreblogda’s Privacy Policy to understand how we collect, use, protect, and manage user data across our web and Android platforms.";
+
+	const pageUrl = "https://oreblogda.com/privacy-policy";
+	const previewImage = "https://oreblogda.com/ogimage.png"; // optional OG image
+
+	return {
+		title,
+		description,
+		openGraph: {
+			title,
+			description,
+			url: pageUrl,
+			siteName: "Oreblogda",
+			images: [
+				{
+					url: previewImage,
+					width: 1200,
+					height: 630,
+					alt: "Oreblogda Privacy Policy",
+				},
+			],
+			type: "article",
+		},
+		twitter: {
+			card: "summary_large_image",
+			title,
+			description,
+			images: [previewImage],
+			creator: "@oreblogda",
+		},
+		alternates: {
+			canonical: pageUrl,
+		},
+		robots: {
+			index: true,
+			follow: true,
+		},
+		authors: [
+			{
+				name: "Oreblogda",
+				url: "https://oreblogda.com",
+			},
+		],
+		other: {
+			"application/ld+json": {
+				"@context": "https://schema.org",
+				"@type": "PrivacyPolicy",
+				name: "Oreblogda Privacy Policy",
+				url: pageUrl,
+				description,
+				publisher: {
+					"@type": "Organization",
+					name: "Oreblogda",
+					url: "https://oreblogda.com",
+					logo: {
+						"@type": "ImageObject",
+						url: "https://oreblogda.com/logowhite.png",
+					},
+				},
+				dateModified: "2026-01-01",
+			},
+		},
+	};
+}
+
 const PrivacyPolicy = () => {
   return (
     <div className="min-h-screen flex items-center justify-center px-6 py-20 relative overflow-hidden">

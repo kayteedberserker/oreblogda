@@ -1,6 +1,67 @@
 "use client";
 import React from "react";
 import { motion } from "framer-motion";
+export async function generateMetadata() {
+	const title = "About Oreblogda – Anime, Gaming & Pop Culture Hub";
+	const description =
+		"Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture. Episode breakdowns, game updates, and fan-first content.";
+
+	const pageUrl = "https://oreblogda.com/about";
+	const previewImage = "https://oreblogda.com/ogimage.png"; // replace with your real OG image
+
+	return {
+		title,
+		description,
+		openGraph: {
+			title,
+			description,
+			url: pageUrl,
+			siteName: "Oreblogda",
+			images: [
+				{
+					url: previewImage,
+					width: 1200,
+					height: 630,
+					alt: "About Oreblogda",
+				},
+			],
+			type: "website",
+		},
+		twitter: {
+			card: "summary_large_image",
+			title,
+			description,
+			images: [previewImage],
+			creator: "@oreblogda",
+		},
+		alternates: {
+			canonical: pageUrl,
+		},
+		authors: [
+			{
+				name: "Oreblogda Team",
+				url: "https://oreblogda.com",
+			},
+		],
+		other: {
+			"application/ld+json": {
+				"@context": "https://schema.org",
+				"@type": "WebSite",
+				name: "Oreblogda",
+				url: "https://oreblogda.com",
+				description,
+				publisher: {
+					"@type": "Organization",
+					name: "Oreblogda",
+					logo: {
+						"@type": "ImageObject",
+						url: "https://oreblogda.com/logowhite.png",
+					},
+				},
+			},
+		},
+	};
+}
 
 const AboutPage = () => {
   return (

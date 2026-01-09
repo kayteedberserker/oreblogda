@@ -16,7 +16,7 @@ export async function generateMetadata({ params }) {
 
   const description = post.message?.slice(0, 150) || "Read this post on Oreblogda";
   const postUrl = `https://oreblogda.com/post/${post.slug || post._id}`;
-  const postImage = post.mediaUrl || "https://oreblogda.com/ogimage.png";
+  const postImage = post.mediaUrl.includes("res.cloudinary.com") ? post.mediaUrl : "https://oreblogda.com/ogimage.png"
 
   return {
     authors: [
