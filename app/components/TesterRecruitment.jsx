@@ -42,6 +42,7 @@ const features = [
 
 const TesterRecruitment = () => {
     const [email, setEmail] = useState('');
+    const [number, setNumber] = useState('');
     const [loading, setLoading] = useState(false);
     const [message, setMessage] = useState(null);
     const [featureIndex, setFeatureIndex] = useState(0);
@@ -58,17 +59,22 @@ const TesterRecruitment = () => {
             const res = await fetch('/api/testers', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email }),
+                body: JSON.stringify({ email, number }),
             });
             const data = await res.json();
-            
+            let responseText = "";
             // System-style response
-            const responseText = res.ok 
-                ? "ACCESS GRANTED. THE SYSTEM HAS RECORDED YOUR INTEL." 
-                : (data.message || "SYSTEM ERROR. RETRY SUBMISSION.");
-
+            if (number !== "") {
+                responseText = res.ok 
+                ? "ACCESS GRANTED. THE SYSTEM HAS RECORDED YOUR INTEL. YOU WILL RECEIVE A MESSAGE INCLUDING THE PLAY STORE DOWNLOAD LINK." 
+                : (data.message || "SYSTEM ERROR. RETRY SUBMISSION.");  
+            }else{
+                responseText = res.ok 
+                ? "ACCESS GRANTED. THE SYSTEM HAS RECORDED YOUR INTEL. YOU WILL RECEIVE A MAIL INCLUDING THE PLAY STORE DOWNLOAD LINK. PLEASE NOTE THAT PROVIDING A PHONE NUMBER ENHANCES YOUR OPERATIONAL CAPABILITIES." 
+                : (data.message || "SYSTEM ERROR. RETRY SUBMISSION.");  
+            }
             setMessage({ type: res.ok ? 'success' : 'error', text: responseText });
-            if (res.ok) setEmail('');
+            if (res.ok) setEmail(''); setNumber('');
         } catch (err) {
             setMessage({ type: 'error', text: "SYSTEM_OFFLINE. CONNECTION TO THE SYSTEM LOST." });
         } finally {
@@ -142,6 +148,13 @@ const TesterRecruitment = () => {
                                 className="flex-grow bg-slate-950 border-2 border-slate-700 px-5 py-4 rounded-xl text-lg text-white placeholder:text-slate-600 focus:border-blue-500 outline-none transition-all"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
+                            />
+                            <input
+                                type="text"
+                                placeholder="Enter WhatsApp Phone Number(Optional)..."
+                                className="flex-grow bg-slate-950 border-2 border-slate-700 px-5 py-4 rounded-xl text-lg text-white placeholder:text-slate-600 focus:border-blue-500 outline-none transition-all"
+                                value={number}
+                                onChange={(e) => setNumber(e.target.value)}
                             />
                             <button
                                 type="submit"
