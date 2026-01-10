@@ -45,7 +45,7 @@ export async function PATCH(req, { params }) {
         const ip = getClientIp(req);
 
         /* ===========================
-           BOT CHECK FUNCTION
+            BOT CHECK FUNCTION
         =========================== */
         const isBotRequest = async (req, ip) => {
             if (!ip) return false;
@@ -70,7 +70,7 @@ export async function PATCH(req, { params }) {
         const isBot = await isBotRequest(req, ip);
 
         /* ===========================
-           VOTE LOGIC
+            VOTE LOGIC
         =========================== */
         if (action === "vote") {
             const { selectedOptions } = payload;
@@ -103,9 +103,13 @@ export async function PATCH(req, { params }) {
                     message
                 });
 
-                const author = await MobileUser.findOne({ _id: post.authorUserId });
+                const author = await MobileUser.findOne({ deviceId: post.authorId });
                 if (author?.pushToken) {
-                    await sendPushNotification(author.pushToken, "New Vote! ✅", message, { postId: post._id.toString() });
+                    // Added type: "post_detail" to ensure frontend routes correctly
+                    await sendPushNotification(author.pushToken, "New Vote! ✅", message, { 
+                        postId: post._id.toString(),
+                        type: "post_detail" 
+                    });
                 }
             }
 
@@ -114,7 +118,7 @@ export async function PATCH(req, { params }) {
         }
 
         /* ===========================
-           LIKE LOGIC
+            LIKE LOGIC
         =========================== */
         if (action === "like") {
             const alreadyLiked = post.likes.some(l => l.fingerprint === fingerprint);
@@ -140,7 +144,11 @@ export async function PATCH(req, { params }) {
 
                 const author = await MobileUser.findOne({ deviceId: post.authorId });
                 if (author?.pushToken) {
-                    await sendPushNotification(author.pushToken, "New Like! ❤️", message, { postId: post._id.toString() });
+                    // Added type: "post_detail" to ensure frontend routes correctly
+                    await sendPushNotification(author.pushToken, "New Like! ❤️", message, { 
+                        postId: post._id.toString(),
+                        type: "post_detail"
+                    });
                 }
             }
 
@@ -159,7 +167,10 @@ export async function PATCH(req, { params }) {
 
                 const author = await MobileUser.findOne({ deviceId: post.authorId });
                 if (author?.pushToken) {
-                    await sendPushNotification(author.pushToken, "Going Viral!", milestoneMsg, { postId: post._id.toString() });
+                    await sendPushNotification(author.pushToken, "Going Viral!", milestoneMsg, { 
+                        postId: post._id.toString(),
+                        type: "post_detail"
+                    });
                 }
             }
 
@@ -167,7 +178,7 @@ export async function PATCH(req, { params }) {
         }
 
         /* ===========================
-           SHARE LOGIC
+            SHARE LOGIC
         =========================== */
         if (action === "share") {
             post.shares += 1;
@@ -176,7 +187,7 @@ export async function PATCH(req, { params }) {
         }
 
         /* ===========================
-           VIEW LOGIC
+            VIEW LOGIC
         =========================== */
         if (action === "view") {
             post.viewsIPs = post.viewsIPs || [];
