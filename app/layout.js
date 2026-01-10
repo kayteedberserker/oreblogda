@@ -10,6 +10,7 @@ import { Analytics } from "@vercel/analytics/react"
 import { SWRConfig } from "swr";
 import { ToastContainer } from "react-toastify";
 import Adsense from "./components/Adsense";
+import TesterRecruitment from "./components/TesterRecruitment";
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"] });
 
 export const metadata = {
@@ -80,58 +81,61 @@ export default function RootLayout({ children }) {
 				<Adsense />
 			</head>
 			<body className="antialiased min-h-screen bg-white dark:bg-[#050505] selection:bg-blue-500 selection:text-white">
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem={true}>
-          <SWRConfig 
-            value={{
-              fetcher,
-              refreshInterval: 0,
-              revalidateOnFocus: true,
-              shouldRetryOnError: true,
-              dedupingInterval: 2000,
-            }}
-          >
-            {/* Global Navigation Hardware */}
-            <Navbar />
+				<ThemeProvider attribute="class" defaultTheme="system" enableSystem={true}>
+					<SWRConfig
+						value={{
+							fetcher,
+							refreshInterval: 0,
+							revalidateOnFocus: true,
+							shouldRetryOnError: true,
+							dedupingInterval: 2000,
+						}}
+					>
+						{/* Global Navigation Hardware */}
+						<Navbar />
 
-            {/* MAIN SYSTEM CONTAINER */}
-            {/* We use a relative container with a global grid overlay */}
-            <div className="mt-16 relative min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-[#0a0a0a] dark:via-[#050505] dark:to-[#0d1117] transition-colors duration-500">
-              
-              {/* --- GLOBAL NEURAL GRID OVERLAY --- */}
-              {/* This pattern will now persist across every single page */}
-              <div 
-                className="absolute inset-0 opacity-[0.03] dark:opacity-[0.1] pointer-events-none z-0"
-                style={{ 
-                  backgroundImage: `linear-gradient(#2563eb 1px, transparent 1px), linear-gradient(90deg, #2563eb 1px, transparent 1px)`, 
-                  backgroundSize: '45px 45px' 
-                }} 
-              />
+						{/* MAIN SYSTEM CONTAINER */}
+						{/* We use a relative container with a global grid overlay */}
+						<div className="mt-16 relative min-h-screen flex flex-col bg-gradient-to-br from-slate-50 via-white to-blue-50 dark:from-[#0a0a0a] dark:via-[#050505] dark:to-[#0d1117] transition-colors duration-500">
 
-              {/* Top scanning line decoration for the header area */}
-              <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-blue-500/50 to-transparent z-10" />
+							{/* --- GLOBAL NEURAL GRID OVERLAY --- */}
+							{/* This pattern will now persist across every single page */}
+							<div
+								className="absolute inset-0 opacity-[0.03] dark:opacity-[0.1] pointer-events-none z-0"
+								style={{
+									backgroundImage: `linear-gradient(#2563eb 1px, transparent 1px), linear-gradient(90deg, #2563eb 1px, transparent 1px)`,
+									backgroundSize: '45px 45px'
+								}}
+							/>
 
-              <CategoryNav />
+							{/* Top scanning line decoration for the header area */}
+							<div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-blue-500/50 to-transparent z-10" />
 
-              {/* MAIN CONTENT ENGINE */}
-              <main className="relative z-10 flex-grow">
-                {children}
-              </main>
+							<CategoryNav />
+							{/* 2. THE RECRUITMENT BLOCK (Integrated directly into the feed) */}
+							<section className="px-4 py-8">
+								<TesterRecruitment />
+							</section>
+							{/* MAIN CONTENT ENGINE */}
+							<main className="relative z-10 flex-grow">
+								{children}
+							</main>
 
-              <Footer postsContainerId="postsContainer" />
-            </div>
+							<Footer postsContainerId="postsContainer" />
+						</div>
 
-            <ToastContainer 
-              position="bottom-right" 
-              autoClose={3000} 
-              theme="colored"
-              // Optional: Add a custom font class if you have one globally for that "Anime" look
-            />
-          </SWRConfig>
-        </ThemeProvider>
-        
-        <Analytics />
-        <SpeedInsights />
-      </body>
+						<ToastContainer
+							position="bottom-right"
+							autoClose={3000}
+							theme="colored"
+						// Optional: Add a custom font class if you have one globally for that "Anime" look
+						/>
+					</SWRConfig>
+				</ThemeProvider>
+
+				<Analytics />
+				<SpeedInsights />
+			</body>
 		</html>
 	);
 }
