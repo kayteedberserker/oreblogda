@@ -66,7 +66,7 @@ const TesterRecruitment = () => {
             // System-style response
             if (number !== "") {
                 responseText = res.ok 
-                ? "ACCESS GRANTED. THE SYSTEM HAS RECORDED YOUR INTEL. YOU WILL RECEIVE A MESSAGE INCLUDING THE PLAY STORE DOWNLOAD LINK." 
+                ? "ACCESS GRANTED. THE SYSTEM HAS RECORDED YOUR INTEL. YOU WILL RECEIVE A WHATSAPP MESSAGE INCLUDING THE PLAY STORE DOWNLOAD LINK." 
                 : (data.message || "SYSTEM ERROR. RETRY SUBMISSION.");  
             }else{
                 responseText = res.ok 
