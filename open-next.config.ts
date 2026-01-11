@@ -1,15 +1,5 @@
-/**
- * OpenNext Cloudflare Configuration
- * This manual export bypasses strict type checking to ensure
- * the bundle is minified and split to stay under the 3MB limit.
- */
-const config = {
-  default: {
-    minify: true,
-  },
-  dangerous: {
-    splitNextJsBundle: true,
-  },
-};
+import { defineCloudflareConfig } from "@opennextjs/cloudflare";
 
-export default config;
+export default defineCloudflareConfig({
+  // Leave this empty for now to avoid the schema errors
+});
