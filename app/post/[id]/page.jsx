@@ -1,7 +1,7 @@
 import ClientPostPage from "./ClientPostPage"; // client component
 import Head from "next/head";
 
-export const dynamic = "force-dynamic"; // ensures full server render
+export const revalidate = 60; // Re-generate the page at most once every 60 seconds
 
 import { notFound } from "next/navigation";
 

@@ -2,7 +2,7 @@
 import AuthorPageClient from "./AuthorPageClient.jsx"; // your client component
 import { notFound } from "next/navigation";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 60; // Re-generate the page at most once every 60 seconds
 export async function generateMetadata({ params }) {
 	const awaitParams = await params;
 	const { id } = awaitParams;
