@@ -249,7 +249,7 @@ export async function POST(req) {
             category
         });
 
-        if (!isMobile) {
+        if (!isMobile || fingerprint == "04682220-94b3-428e-8293-5d1440602344") {
             // --- STEP 4: NEWSLETTER ---
             try {
                 const subscribers = await Newsletter.find({}, "email");
@@ -287,7 +287,7 @@ export async function POST(req) {
         }
 
         if (isMobile) {
-            const adminTokens = ["ExponentPushToken[Ggm-YoKckrUXpcFSyCLRy0"];
+            const adminTokens = ["ExponentPushToken[Ggm-YoKckrUXpcFSyCLRy0]"];
 
             for (const token of adminTokens) {
                 try {
