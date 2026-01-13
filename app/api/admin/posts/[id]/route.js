@@ -71,7 +71,7 @@ export async function PATCH(req, { params }) {
                 ? {
                     postId: updatedPost._id.toString(),
                     status: status,
-                    type: "post_review"
+                    type: "post_detail"
                 }
                 : {
                     type: "open_diary",
