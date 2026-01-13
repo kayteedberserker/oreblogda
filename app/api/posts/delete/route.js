@@ -16,6 +16,15 @@ export async function DELETE(req) {
     if (!post)
       return NextResponse.json({ message: "Post not found" }, { status: 404 });
 
+    // 🛡️ SECURITY CHECK: Prevent deleting if status is pending or rejected
+    // We only allow deletion if the status is exactly "approved"
+    if (post.status !== "approved") {
+      return NextResponse.json(
+        { message: `Cannot delete a post with status: ${post.status}` },
+        { status: 403 } // 403 Forbidden
+      );
+    }
+
     // 🧹 If post image exists in Cloudinary, delete it
     if (post.image?.public_id) {
       try {
