@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import PostCard from "@/app/components/PostCard";
 import { motion, AnimatePresence } from "framer-motion";
 import Image from "next/image";
-
+import FeedAd from "@/app/components/FeedAd";
 export default function AuthorPageClient({ author, initialPosts = [], total: initialTotal = 0 }) {
   const [posts, setPosts] = useState(initialPosts);
   const [totalPosts, setTotalPosts] = useState(initialTotal); // Use total from API
@@ -160,6 +160,12 @@ export default function AuthorPageClient({ author, initialPosts = [], total: ini
               key={post._id}
             >
               <PostCard post={post} isFeed />
+              {(index + 1) % 2 === 0 (
+                     <div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex flex-col align-center justify-center bg-gray-50/50 dark:bg-white/5">
+                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
+                       <FeedAd /> 
+                  </div>
+                  )}
             </motion.div>
           ))}
         </div>
