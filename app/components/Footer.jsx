@@ -103,7 +103,7 @@ export default function Footer({ postsContainerId }) {
       <div className="absolute top-0 right-1/4 w-[1px] h-full bg-blue-500/5 pointer-events-none" />
 
       <div className="max-w-7xl mx-auto px-4 grow sm:px-6 lg:px-8 relative z-10">
-        <div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex justify-center bg-gray-50/50 dark:bg-white/5">
+        <div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex flex-row justify-center bg-gray-50/50 dark:bg-white/5">
                       <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
                        <FeedAd /> 
                   </div>
@@ -173,7 +173,7 @@ export default function Footer({ postsContainerId }) {
             </motion.p>
           )}
         </div>
-<div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex justify-center bg-gray-50/50 dark:bg-white/5">
+<div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex flex-row justify-center bg-gray-50/50 dark:bg-white/5">
                       <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
                        <FeedAd /> 
                   </div>
