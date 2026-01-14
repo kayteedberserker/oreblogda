@@ -83,8 +83,20 @@ export default function AdminPendingPosts() {
     const [user, setUser] = useState(null);
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [btnLoading, setbtnLoading] = useState(false);
-    const [previewingId, setPreviewingId] = useState(null); // Track which post is showing full preview
+    
+    // UI Loading states
+    const [btnLoading, setbtnLoading] = useState(null); 
+    const [versionLoading, setVersionLoading] = useState(false);
+    
+    // Confirmation State
+    const [rejectConfirmId, setRejectConfirmId] = useState(null);
+    
+    // Version Control states
+    const [currentVer, setCurrentVer] = useState("Checking...");
+    const [newVer, setNewVer] = useState("");
+    const [isCritical, setIsCritical] = useState(false);
+
+    const [previewingId, setPreviewingId] = useState(null);
     const router = useRouter();
 
     useEffect(() => {
@@ -106,11 +118,44 @@ export default function AdminPendingPosts() {
             }
         };
         fetchUser();
+        fetchCurrentVersion();
     }, [router]);
 
     useEffect(() => {
         if (user) fetchPendingPosts();
     }, [user]);
+
+    const fetchCurrentVersion = async () => {
+        try {
+            const res = await fetch("/api/version");
+            const data = await res.json();
+            if (data.version) setCurrentVer(data.version);
+        } catch (err) {
+            console.error("Version fetch failed");
+        }
+    };
+
+    const handleUpdateVersion = async (e) => {
+        e.preventDefault();
+        if (!newVer) return toast.warning("Enter a version number");
+        setVersionLoading(true);
+        try {
+            const res = await fetch("/api/version", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ version: newVer, critical: isCritical }),
+            });
+            if (res.ok) {
+                toast.success("System version updated!");
+                setCurrentVer(newVer);
+                setNewVer("");
+            }
+        } catch (err) {
+            toast.error("Version update failed");
+        } finally {
+            setVersionLoading(false);
+        }
+    };
 
     const fetchPendingPosts = async () => {
         try {
@@ -125,7 +170,13 @@ export default function AdminPendingPosts() {
     };
 
     const handleAction = async (postId, status) => {
-        setbtnLoading(true);
+        // Rejection Confirmation Logic
+        if (status === "rejected" && rejectConfirmId !== postId) {
+            setRejectConfirmId(postId);
+            return;
+        }
+
+        setbtnLoading(`${status}-${postId}`); 
         try {
             const res = await fetch(`/api/admin/posts/${postId}`, {
                 method: "PATCH",
@@ -136,25 +187,21 @@ export default function AdminPendingPosts() {
             if (res.ok) {
                 setPosts(posts.filter(p => p._id !== postId));
                 toast.success(`Post has been ${status}`);
+                setRejectConfirmId(null);
             }
         } catch (err) {
             toast.error("Action failed");
         } finally {
-            setbtnLoading(false);
+            setbtnLoading(null);
         }
     };
 
     if (loading) {
         return (
             <div className="flex h-screen items-center justify-center bg-white dark:bg-gray-900 overflow-hidden relative">
-
-                {/* BACKGROUND GLOW EFFECTS */}
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-blue-600/10 blur-[120px] rounded-full"></div>
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-blue-500/20 blur-[60px] rounded-full animate-pulse"></div>
-
                 <div className="flex flex-col items-center z-10">
-
-                    {/* TOP STATUS LINKS (HUD Style) */}
                     <div className="flex items-center gap-4 mb-8">
                         <div className="flex items-center gap-1.5">
                             <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse"></span>
@@ -166,58 +213,80 @@ export default function AdminPendingPosts() {
                             <span className="text-[10px] font-black uppercase tracking-[0.2em] text-orange-500/60">Auth_Secure</span>
                         </div>
                     </div>
-
-                    {/* CENTER SPINNER / LOGO */}
                     <div className="relative mb-6">
-                        {/* Outer Rotating Ring */}
                         <div className="h-20 w-20 rounded-full border-[3px] border-blue-600/10 border-t-blue-600 animate-spin"></div>
-                        {/* Inner Counter-Rotating Ring */}
                         <div className="absolute top-2 left-2 h-16 w-16 rounded-full border-[3px] border-transparent border-t-orange-500 animate-[spin_1.5s_linear_infinite_reverse]"></div>
-                        {/* Static Center Point */}
                         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-2 w-2 bg-white dark:bg-gray-900 rounded-full shadow-[0_0_10px_#2563eb]"></div>
                     </div>
-
-                    {/* TEXT CONTENT */}
                     <div className="text-center">
                         <h2 className="text-xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white mb-1">
                             Verifying Admin Access
                         </h2>
-
-                        {/* DYNAMIC PROGRESS BAR */}
                         <div className="w-48 h-1 bg-gray-100 dark:bg-gray-800 rounded-full mt-4 overflow-hidden relative">
                             <div className="absolute inset-y-0 left-0 bg-blue-600 w-1/2 animate-[loading_2s_ease-in-out_infinite] rounded-full shadow-[0_0_10px_#2563eb]"></div>
                         </div>
-
-                        <div className="mt-4 flex flex-col gap-1">
-                            <p className="text-[8px] font-bold text-gray-400 uppercase tracking-[0.3em] animate-pulse">
-                                Establishing Encrypted Session...
-                            </p>
-                            <p className="text-[7px] font-mono text-gray-500/50 uppercase">
-                                Protocol: TLS_AES_256_GCM_SHA384
-                            </p>
-                        </div>
                     </div>
                 </div>
-
-                {/* TAILWIND CUSTOM ANIMATION CONFIG (Add to your global CSS if needed) */}
                 <style jsx>{`
-              @keyframes loading {
-                0% { transform: translateX(-100%); }
-                50% { transform: translateX(100%); }
-                100% { transform: translateX(-100%); }
-              }
-            `}</style>
+                    @keyframes loading {
+                        0% { transform: translateX(-100%); }
+                        50% { transform: translateX(100%); }
+                        100% { transform: translateX(-100%); }
+                    }
+                `}</style>
             </div>
         );
     }
 
     return (
         <div className="min-h-screen bg-white p-6 dark:bg-[#0a0a0a] relative overflow-hidden">
-
-            {/* AMBIENT HUD DECORATION */}
             <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-blue-600/5 blur-[120px] rounded-full pointer-events-none" />
 
             <div className="mx-auto max-w-5xl relative z-10">
+                {/* --- VERSION CONTROL SECTION --- */}
+                <section className="mb-12 p-6 rounded-[32px] bg-gray-50 dark:bg-gray-900/40 border-2 border-gray-100 dark:border-gray-800">
+                    <div className="flex items-center gap-2 mb-6">
+                        <div className="h-2 w-2 bg-blue-600 rounded-full shadow-[0_0_8px_#2563eb]" />
+                        <h2 className="text-sm font-black uppercase tracking-[0.3em] text-gray-400">System OTA Controller</h2>
+                    </div>
+
+                    <div className="flex flex-col md:flex-row gap-8 items-center justify-between">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-blue-500 uppercase tracking-widest mb-1">Active Build</span>
+                            <span className="text-4xl font-black italic tracking-tighter text-gray-900 dark:text-white uppercase">
+                                v{currentVer}
+                            </span>
+                        </div>
+
+                        <form onSubmit={handleUpdateVersion} className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+                            <input 
+                                type="text"
+                                placeholder="New Version"
+                                value={newVer}
+                                onChange={(e) => setNewVer(e.target.value)}
+                                className="bg-white dark:bg-black border-2 border-gray-200 dark:border-gray-800 rounded-xl px-4 py-2 text-sm font-bold text-gray-900 dark:text-white focus:border-blue-600 outline-none w-full md:w-48"
+                            />
+                            
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input 
+                                    type="checkbox" 
+                                    checked={isCritical}
+                                    onChange={(e) => setIsCritical(e.target.checked)}
+                                    className="accent-blue-600 h-4 w-4"
+                                />
+                                <span className="text-[10px] font-black uppercase text-gray-500">Critical</span>
+                            </label>
+
+                            <button 
+                                type="submit"
+                                disabled={versionLoading}
+                                className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20"
+                            >
+                                {versionLoading ? "DEPLOYING..." : "DEPLOY VERSION"}
+                            </button>
+                        </form>
+                    </div>
+                </section>
 
                 {/* --- TERMINAL HEADER --- */}
                 <header className="mb-10 flex flex-col md:flex-row md:items-end justify-between gap-4 border-b border-gray-100 dark:border-gray-800 pb-8">
@@ -245,7 +314,6 @@ export default function AdminPendingPosts() {
                     <div className="grid gap-10">
                         {posts.map((post) => (
                             <div key={post._id} className="group overflow-hidden rounded-3xl bg-white dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 hover:border-blue-600/50 transition-all shadow-xl shadow-black/5">
-
                                 <div className="p-6 md:p-8">
                                     <div className="flex flex-wrap justify-between items-start mb-6 gap-4">
                                         <div className="flex-1 min-w-[200px]">
@@ -316,26 +384,57 @@ export default function AdminPendingPosts() {
                                 {/* --- ACTION CONTROLS --- */}
                                 <div className="flex border-t-2 border-gray-100 dark:border-gray-800">
                                     <button
-                                        disabled={btnLoading}
-                                        onClick={() => handleAction(post._id, "approved")}
+                                        disabled={!!btnLoading && btnLoading.includes(post._id)}
+                                        onClick={() => {
+                                            handleAction(post._id, "approved");
+                                            setRejectConfirmId(null); 
+                                        }}
                                         className="flex-1 group/btn py-6 flex items-center justify-center gap-3 bg-transparent hover:bg-green-600 transition-all border-r-2 border-gray-100 dark:border-gray-800 disabled:opacity-50"
                                     >
                                         <span className="w-2 h-2 rounded-full bg-green-500 group-hover/btn:bg-white animate-pulse" />
                                         <span className="font-black italic uppercase tracking-[0.3em] text-green-600 group-hover/btn:text-white text-sm">
-                                            {btnLoading ? "PROCESSING..." : "AUTHORIZE"}
+                                            {btnLoading === `approved-${post._id}` ? "PROCESSING..." : "AUTHORIZE"}
                                         </span>
                                     </button>
 
-                                    <button
-                                        disabled={btnLoading}
-                                        onClick={() => handleAction(post._id, "rejected")}
-                                        className="flex-1 group/btn py-6 flex items-center justify-center gap-3 bg-transparent hover:bg-red-600 transition-all disabled:opacity-50"
-                                    >
-                                        <span className="w-2 h-2 rounded-full bg-red-500 group-hover/btn:bg-white" />
-                                        <span className="font-black italic uppercase tracking-[0.3em] text-red-600 group-hover/btn:text-white text-sm">
-                                            {btnLoading ? "TERMINATING..." : "REJECT"}
-                                        </span>
-                                    </button>
+                                    {/* REJECT SECTION WITH CANCEL BUTTON */}
+                                    <div className="flex-1 flex overflow-hidden">
+                                        {rejectConfirmId === post._id && (
+                                            <button
+                                                disabled={!!btnLoading}
+                                                onClick={() => setRejectConfirmId(null)}
+                                                className="flex-1 py-6 flex items-center justify-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all border-r-2 border-gray-200 dark:border-gray-700 animate-in slide-in-from-left duration-200"
+                                            >
+                                                <span className="font-black italic uppercase tracking-[0.3em] text-gray-500 text-[10px]">
+                                                    DECLINE CANCEL
+                                                </span>
+                                            </button>
+                                        )}
+                                        
+                                        <button
+                                            disabled={!!btnLoading && btnLoading.includes(post._id)}
+                                            onClick={() => handleAction(post._id, "rejected")}
+                                            className={`flex-1 group/btn py-6 flex items-center justify-center gap-3 transition-all disabled:opacity-50 ${
+                                                rejectConfirmId === post._id 
+                                                ? "bg-red-600 animate-pulse" 
+                                                : "bg-transparent hover:bg-red-600"
+                                            }`}
+                                        >
+                                            <span className={`w-2 h-2 rounded-full group-hover/btn:bg-white ${rejectConfirmId === post._id ? "bg-white" : "bg-red-500"}`} />
+                                            <span className={`font-black italic uppercase tracking-[0.3em] text-sm ${
+                                                rejectConfirmId === post._id 
+                                                ? "text-white" 
+                                                : "text-red-600 group-hover/btn:text-white"
+                                            }`}>
+                                                {btnLoading === `rejected-${post._id}` 
+                                                    ? "TERMINATING..." 
+                                                    : rejectConfirmId === post._id 
+                                                        ? "CONFIRM REJECT?" 
+                                                        : "REJECT"
+                                                }
+                                            </span>
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         ))}
