@@ -6,10 +6,7 @@ import RecentPollsCard from "./RecentPollsCard";
 import { FaPoll } from "react-icons/fa";
 import { useScrollAnimation } from "./useScrollAnimation";
 import dynamic from "next/dynamic";
-const ArticleAd = dynamic(() => import("./ArticleAd"), {
-  ssr: false,
-});
-const FooterAds = dynamic(() => import("./FooterAds"), {
+const FeedAd = dynamic(() => import("./FeedAd"), {
   ssr: false,
 });
 
@@ -95,8 +92,8 @@ export default function PostsViewer({ initialPosts }) {
                 {/* AD TERMINAL SLOT */}
                 {index % 2 === 1 && (
                   <div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex justify-center bg-gray-50/50 dark:bg-white/5">
-                      {/* <AdsterraBannerSync /> */}
                       <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
+                       <FeedAd /> 
                   </div>
                 )}
               </div>
