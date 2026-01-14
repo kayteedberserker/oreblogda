@@ -1,45 +1,90 @@
 import { NextResponse } from 'next/server';
 import mongoose from 'mongoose';
-import connectDB from '@/app/lib/mongodb'; // Adjust path to your DB connect file
+import connectDB from '@/app/lib/mongodb';
+import MobileUser from '@/app/models/MobileUserModel';
+import { sendPushNotification } from '@/app/lib/pushNotifications';
 
-// Define a minimal schema right here to avoid separate file clutter
+// Define the Schema
 const VersionSchema = new mongoose.Schema({
-  key: { type: String, default: 'latest_app_version' }, // Unique key to find the record
+  key: { type: String, default: 'latest_app_version' },
   version: { type: String, required: true },
   critical: { type: Boolean, default: false },
 }, { timestamps: true });
 
-// Prevent "OverwriteModelError" in Next.js hot-reloading
 const VersionModel = mongoose.models.Version || mongoose.model('Version', VersionSchema);
 
-// GET: Fetch the version for the Mobile App
-export async function GET() {
-  try {
-    await connectDB();
-    // Find the single version record
-    const config = await VersionModel.findOne({ key: 'latest_app_version' });
-    
-    return NextResponse.json(config || { version: "1.0.0", critical: false });
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to fetch version" }, { status: 500 });
-  }
+// Helper for CORS compatibility
+function addCorsHeaders(response) {
+    response.headers.set("Access-Control-Allow-Origin", "*");
+    response.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    response.headers.set("Access-Control-Allow-Headers", "Content-Type,Authorization");
+    return response;
 }
 
-// POST: Update the version from your Admin Page
-export async function POST(request) {
-  try {
-    const { version, critical } = await request.json();
+export async function OPTIONS() {
+    return addCorsHeaders(new NextResponse(null, { status: 204 }));
+}
+
+// GET: Fetch current version for the app
+export async function GET() {
     await connectDB();
+    try {
+        const config = await VersionModel.findOne({ key: 'latest_app_version' });
+        const res = NextResponse.json(config || { version: "1.0.0", critical: false });
+        return addCorsHeaders(res);
+    } catch (error) {
+        return addCorsHeaders(NextResponse.json({ error: "Failed to fetch version" }, { status: 500 }));
+    }
+}
 
-    // Use upsert: update if exists, create if not
-    const updated = await VersionModel.findOneAndUpdate(
-      { key: 'latest_app_version' },
-      { version, critical },
-      { upsert: true, new: true }
-    );
+// POST: Update version and notify all users
+export async function POST(req) {
+    await connectDB();
+    try {
+        const body = await req.json();
+        const { version, critical } = body;
 
-    return NextResponse.json({ success: true, data: updated });
-  } catch (error) {
-    return NextResponse.json({ error: "Failed to update version" }, { status: 500 });
-  }
+        // 1. Update/Create the version record
+        const updated = await VersionModel.findOneAndUpdate(
+            { key: 'latest_app_version' },
+            { version, critical },
+            { upsert: true, new: true }
+        );
+
+        // 2. Fetch all mobile users with a push token
+        const mobileUsers = await MobileUser.find(
+            { pushToken: { $exists: true, $ne: null } },
+            "pushToken"
+        );
+
+        // 3. Notify them using your established loop pattern
+        if (mobileUsers.length > 0) {
+            const title = critical ? "🚀 Critical System Update" : "✨ New Update Available";
+            const message = `Version ${version} is now available. Please update to ensure system stability.`;
+
+            for (const user of mobileUsers) {
+                try {
+                    await sendPushNotification(
+                        user.pushToken,
+                        title,
+                        message,
+                        { type: "version_update", version: version }
+                    );
+                } catch (err) {
+                    console.error("Push notify user failed during version update:", err);
+                }
+            }
+        }
+
+        const res = NextResponse.json({ 
+            success: true, 
+            data: updated, 
+            notifiedCount: mobileUsers.length 
+        });
+        return addCorsHeaders(res);
+
+    } catch (err) {
+        console.error("Version POST error:", err);
+        return addCorsHeaders(NextResponse.json({ message: "Server error" }, { status: 500 }));
+    }
 }
