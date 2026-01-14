@@ -6,8 +6,7 @@ import RecentPollsCard from "@/app/components/RecentPollsCard";
 import { FaPoll } from "react-icons/fa";
 import { useScrollAnimation } from "@/app/components/useScrollAnimation";
 import { motion } from "framer-motion";
-import FooterAds from "@/app/components/FooterAds";
-import ArticleAd from "@/app/components/ArticleAd";
+import FeedAd from "@/app/components/FeedAd";
 
 const limit = 5;
 const fetcher = (url) => fetch(url, { cache: "no-store" }).then((res) => res.json());
@@ -95,7 +94,12 @@ export default function ClientCategoryPage({ category, initialPosts }) {
                   />
                   
                   {/* Ad Placeholder logic kept consistent */}
-                  {/* {(index + 1) % 2 === 0 && <ArticleAd />} */}
+                  {(index + 1) % 2 === 0 (
+                     <div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex flex-col align-center justify-center bg-gray-50/50 dark:bg-white/5">
+                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
+                       <FeedAd /> 
+                  </div>
+                  )}
                 </div>
               ))}
             </div>
