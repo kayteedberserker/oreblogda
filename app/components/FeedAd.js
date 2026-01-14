@@ -24,11 +24,10 @@ export default function FeedAd() {
       <ins
         ref={adRef}
         className="adsbygoogle"
-        style={{ display: "block" }}
+        style={{ display: "inline-block", width: "300px", height: "90px"}}
         data-ad-format="fluid"
-        data-ad-layout-key="-fl+5w+4e-db+86"
         data-ad-client="ca-pub-8021671365048667"
-        data-ad-slot="9691605458"
+        data-ad-slot="1288851657"
       ></ins>
     </div>
   );
