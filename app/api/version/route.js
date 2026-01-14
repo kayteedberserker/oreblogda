@@ -53,11 +53,7 @@ export async function POST(req) {
 
         
         // 2. Fetch all mobile users with a push token
-        const mobileUsers = await MobileUser.find(
-            { pushToken: { $exists: true, $ne: null } },
-            "pushToken"
-        );
-
+        
         // 3. Notify them using your established loop pattern
         if (mobileUsers.length > 0) {
             const title = critical ? "🚀 Critical System Update" : "✨ New Update Available";
