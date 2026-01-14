@@ -433,7 +433,7 @@ export default function PostCard({
 		});
 
 		// 5. Always show at least ONE ad if article is too short
-		if (!adInserted && blocks.length > 2) {
+		if (!adInserted && blocks.length > 1) {
 			output.push(
 					<div className="my-10 w-full p-4 p-2 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex flex-col items-center gap-1 justify-center bg-gray-50/50 dark:bg-white/5">
                       <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
