@@ -51,30 +51,7 @@ export async function POST(req) {
             { upsert: true, new: true }
         );
 
-        // 2. Fetch all mobile users with a push token
-        const mobileUsers = await MobileUser.find(
-            { pushToken: { $exists: true, $ne: null } },
-            "pushToken"
-        );
-
-        // 3. Notify them using your established loop pattern
-        if (mobileUsers.length > 0) {
-            const title = critical ? "🚀 Critical System Update" : "✨ New Update Available";
-            const message = `Version ${version} is now available. Please update to ensure system stability.`;
-
-            for (const user of mobileUsers) {
-                try {
-                    await sendPushNotification(
-                        user.pushToken,
-                        title,
-                        message,
-                        { type: "version_update", version: version }
-                    );
-                } catch (err) {
-                    console.error("Push notify user failed during version update:", err);
-                }
-            }
-        }
+        
 
         const res = NextResponse.json({ 
             success: true, 
