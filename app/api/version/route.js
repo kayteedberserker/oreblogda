@@ -26,7 +26,7 @@ export async function GET() {
 }
 
 // POST: Update the version from your Admin Page
-export async function POST(request: Request) {
+export async function POST(request) {
   try {
     const { version, critical } = await request.json();
     await connectDB();
