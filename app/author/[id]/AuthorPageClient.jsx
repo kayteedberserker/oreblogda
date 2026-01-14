@@ -152,7 +152,7 @@ export default function AuthorPageClient({ author, initialPosts = [], total: ini
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {posts.map((post) => (
+          {posts.map((post, index) => (
             <motion.div 
               initial={{ opacity: 0 }}
               whileInView={{ opacity: 1 }}
