@@ -17,11 +17,12 @@ export async function PUT(req) {
     const userId = formData.get("userId");
     const fingerprint = formData.get("fingerprint");
     const description = formData.get("description");
+    const username = formData.get("username"); // 👈 Catch the name change
     const file = formData.get("file");
 
     console.log("--- Profile Update Start ---");
     console.log("User ID:", userId);
-    console.log("Fingerprint:", fingerprint);
+    console.log("New Alias:", username);
 
     let user = null;
     let SelectedModel = null;
@@ -43,30 +44,25 @@ export async function PUT(req) {
     }
 
     if (!user || !SelectedModel) {
-      console.log("❌ Error: User not found in either model.");
+      console.log("❌ Error: User not found.");
       return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
-    // 2. Cloudinary Processing
+    // 2. Cloudinary Processing (Images)
     let profilePicUpdate = null;
-
-    // IMPROVED CHECK: Check if file exists and has data
     const hasValidFile = file && typeof file === 'object' && (file.size > 0 || file.name);
 
     if (hasValidFile) {
       console.log("📸 Image detected, starting Cloudinary upload...");
 
-      // Cleanup: Delete old pic if exists
       if (user.profilePic?.public_id) {
         try {
           await cloudinary.uploader.destroy(user.profilePic.public_id);
-          console.log("🗑️ Old image deleted from Cloudinary");
         } catch (cErr) {
           console.error("Cloudinary Delete Error:", cErr);
         }
       }
 
-      // Convert File to Buffer
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
 
@@ -74,41 +70,34 @@ export async function PUT(req) {
         cloudinary.uploader.upload_stream(
           { folder: "author_profiles" },
           (err, result) => {
-            if (err) {
-              console.error("Cloudinary Upload Error:", err);
-              reject(err);
-            } else {
-              resolve(result);
-            }
+            if (err) reject(err);
+            else resolve(result);
           }
         ).end(buffer);
       });
-
-      console.log("✅ Cloudinary Upload Success:", uploadRes.secure_url);
 
       profilePicUpdate = {
         url: uploadRes.secure_url,
         public_id: uploadRes.public_id,
       };
-    } else {
-      console.log("ℹ️ No new image file provided in request.");
     }
 
     // 3. Unified Update
     const updatedUser = await SelectedModel.findByIdAndUpdate(
       user._id,
       {
+        username: username || user.username, // 👈 Directly update without uniqueness check
         description: description ?? user.description,
         ...(profilePicUpdate && { profilePic: profilePicUpdate }),
       },
       { new: true }
     );
 
-    console.log("💾 Database updated successfully.");
+    console.log("💾 Database updated: Name and Lore synced.");
     console.log("--- Profile Update End ---");
 
     return NextResponse.json({ 
-      message: "Profile updated", 
+      message: "Character Data Synced", 
       user: updatedUser 
     }, { status: 200 });
 
