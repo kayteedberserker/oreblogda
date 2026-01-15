@@ -218,7 +218,7 @@ export default function PostCard({
 				if (!res.ok) throw new Error("Failed to fetch author");
 				const data = await res.json();
 
-				setAuthor({ name: data.name || post.authorName, image: data.user?.profilePic?.url });
+				setAuthor({ name: data.user?.username || post.authorName, image: data.user?.profilePic?.url });
 			} catch (err) {
 			}
 		};
