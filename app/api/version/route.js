@@ -54,7 +54,7 @@ export async function POST(req) {
         
         // 2. Fetch all mobile users with a push token
 
-
+          if(critical) {
          const mobileUsers = await MobileUser.find(
             { pushToken: { $exists: true, $ne: null } },
             "pushToken"
@@ -81,7 +81,7 @@ export async function POST(req) {
             }
         }
 
-
+          }
       
         const res = NextResponse.json({ 
             success: true, 
