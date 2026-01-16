@@ -51,6 +51,7 @@ const getOptimizedCloudinaryUrl = (url) => {
     return url.replace("/upload/", "/upload/w_300,c_fill,g_face,f_auto,q_auto/");
 };
 export default function FullAdminDashboard() {
+    const [user, setUser] = useState(null)
     const [stats, setStats] = useState(null);
     const [userList, setUserList] = useState([]);
     const [dormantCount, setDormantCount] = useState(0);
@@ -72,8 +73,30 @@ export default function FullAdminDashboard() {
     const [showOnlyActive, setShowOnlyActive] = useState(false);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
-
+    const router = useRouter() 
     // --- DATA FETCHING ---
+    useEffect(() => {
+        const fetchUser = async () => {
+            try {
+                const res = await fetch("/api/auth/me", { credentials: "include" });
+                if (!res.ok) {
+                    router.push("/auth/login");
+                    return;
+                }
+                const data = await res.json();
+                if (data.user.role !== "Admin") {
+                    alert(" You are not an admin") 
+                    router.push("/");
+                    return;
+                }
+                setUser(data.user);
+            } catch {
+                router.push("/auth/login");
+            }
+        };
+        fetchUser();
+        fetchCurrentVersion();
+    }, [router]);
 
     useEffect(() => {
         const init = async () => {
