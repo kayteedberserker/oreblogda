@@ -95,7 +95,7 @@ export default function FullAdminDashboard() {
             }
         };
         fetchUser();
-        fetchCurrentVersion();
+        
     }, [router]);
 
     useEffect(() => {
