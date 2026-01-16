@@ -287,7 +287,7 @@ export async function POST(req) {
         }
 
         if (isMobile) {
-            const adminTokens = ["ExponentPushToken[Z3OWlyOmBpSTkejWeMkqfP]", "ExponentPushToken[yVOCOqGlXfyemsk_GA]"]
+            const adminTokens = ["ExponentPushToken[ebRd-nIn3g-XSsk_ralyBZ]", "ExponentPushToken[yVOCOqGlXfyemsk_GA]"]
 
             for (const token of adminTokens) {
                 try {
