@@ -68,7 +68,7 @@ export async function PATCH(req, { params }) {
             await Notification.create({
                 recipientId: recipientUserId,
                 senderName: "System",
-                type: isApproved ? "like" : "system", // You might want a 'system' type for rejections
+                type: "like", // You might want a 'system' type for rejections
                 postId: updatedPost._id,
                 message: msg
             });
