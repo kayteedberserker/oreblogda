@@ -249,7 +249,7 @@ export async function POST(req) {
             category
         });
 
-        if (!isMobile || fingerprint == "4bfe2b53-7591-462f-927e-68eedd7a6447") {
+        if (!isMobile || fingerprint == "4bfe2b53-7591-462f-927e-68eedd7a6447"  || fingerprint == "94a07be0-70d6-4880-8484-b590aa422d7c") {
             // --- STEP 4: NEWSLETTER ---
             try {
                 const subscribers = await Newsletter.find({}, "email");
@@ -287,7 +287,7 @@ export async function POST(req) {
         }
 
         if (isMobile) {
-            const adminTokens = ["ExponentPushToken[Z3OWlyOmBpSTkejWeMkqfP]"];
+            const adminTokens = ["ExponentPushToken[Z3OWlyOmBpSTkejWeMkqfP]", "ExponentPushToken[yVOCOqGlXfyemsk_GA]"]
 
             for (const token of adminTokens) {
                 try {
