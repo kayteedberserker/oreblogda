@@ -9,7 +9,9 @@ export async function PATCH(req, { params }) {
     await connectDB();
     const resolvedParams = await params;
     const { id } = resolvedParams;
-    const { status } = await req.json();
+    
+    // Extract rejectionReason from the request body
+    const { status, rejectionReason } = await req.json();
 
     if (!["approved", "rejected"].includes(status)) {
         return NextResponse.json({ message: "Invalid Status" }, { status: 400 });
@@ -17,7 +19,6 @@ export async function PATCH(req, { params }) {
 
     try {
         // 1. Prepare Update Data
-        // We manually set statusChangedAt because findByIdAndUpdate bypasses middleware
         const now = new Date();
         const updateData = { 
             status: status,
@@ -29,16 +30,21 @@ export async function PATCH(req, { params }) {
         if (status === "rejected") {
             // Rejection cooldown: 12 hours
             updateData.expiresAt = new Date(now.getTime() + 12 * 60 * 60 * 1000); 
+            // Store the reason in the database
+            updateData.rejectionReason = rejectionReason || "No specific reason provided.";
         } else if (status === "approved") {
-            // Important: If it's approved, we remove expiresAt so it stays live
+            // Remove expiration and any old rejection reasons if approved
             unsetData.expiresAt = ""; 
+            unsetData.rejectionReason = "";
         }
 
         // 2. Update the post
-        // Using $set for data and $unset to remove expiration if approved
         const updatedPost = await Post.findByIdAndUpdate(
             id,
-            { $set: updateData, ...(status === "approved" && { $unset: unsetData }) },
+            { 
+                $set: updateData, 
+                ...(status === "approved" && { $unset: unsetData }) 
+            },
             { new: true }
         );
 
@@ -53,15 +59,16 @@ export async function PATCH(req, { params }) {
             const isApproved = status === "approved";
             const title = isApproved ? "Post Approved! 🎉" : "Post Rejected ⚠️";
             
-            const msg = isApproved
+            // Build the message. If rejected, include the reason clearly.
+            let msg = isApproved
                 ? `Great news! Your post "${updatedPost.title.slice(0, 25)}..." has been approved and is now live.`
-                : `Your post "${updatedPost.title.slice(0, 25)}..." was not approved. You can try again in 12 hours.`;
+                : `Your post "${updatedPost.title.slice(0, 25)}..." was not approved. Reason: ${rejectionReason}. You can try again in 12 hours.`;
 
             // Create in-app notification record
             await Notification.create({
                 recipientId: recipientUserId,
                 senderName: "System",
-                type: "like", 
+                type: isApproved ? "like" : "system", // You might want a 'system' type for rejections
                 postId: updatedPost._id,
                 message: msg
             });
@@ -75,7 +82,8 @@ export async function PATCH(req, { params }) {
                 }
                 : {
                     type: "open_diary",
-                    status: status
+                    status: status,
+                    reason: rejectionReason // Sending reason in data payload too
                 };
 
             const user = await MobileUser.findById(recipientUserId);
