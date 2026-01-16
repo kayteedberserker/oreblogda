@@ -169,6 +169,7 @@ const postSchema = new mongoose.Schema(
       type: Date, 
       default: Date.now 
     },
+     rejectionReason: { type: String, default:""}, 
 
     expiresAt: { 
     type: Date, 
