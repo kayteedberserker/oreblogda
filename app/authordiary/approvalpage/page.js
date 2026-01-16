@@ -88,8 +88,20 @@ export default function AdminPendingPosts() {
     const [btnLoading, setbtnLoading] = useState(null); 
     const [versionLoading, setVersionLoading] = useState(false);
     
-    // Confirmation State
-    const [rejectConfirmId, setRejectConfirmId] = useState(null);
+    // Rejection Logic State
+    const [rejectingPost, setRejectingPost] = useState(null); // Holds the full post object being rejected
+    const [selectedReason, setSelectedReason] = useState("");
+    const [customReason, setCustomReason] = useState("");
+
+    const generalReasons = [
+        "Spam", 
+        "Too short", 
+        "Improper language", 
+        "Abuse", 
+        "Racist", 
+        "Inaccurate news", 
+        "Wrong category"
+    ];
     
     // Version Control states
     const [currentVer, setCurrentVer] = useState("Checking...");
@@ -170,9 +182,10 @@ export default function AdminPendingPosts() {
     };
 
     const handleAction = async (postId, status) => {
-        // Rejection Confirmation Logic
-        if (status === "rejected" && rejectConfirmId !== postId) {
-            setRejectConfirmId(postId);
+        const reasonToSubmit = customReason || selectedReason;
+
+        if (status === "rejected" && !reasonToSubmit) {
+            toast.error("Please provide a rejection reason");
             return;
         }
 
@@ -181,13 +194,18 @@ export default function AdminPendingPosts() {
             const res = await fetch(`/api/admin/posts/${postId}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ status }),
+                body: JSON.stringify({ 
+                    status, 
+                    rejectionReason: status === "rejected" ? reasonToSubmit : null 
+                }),
             });
 
             if (res.ok) {
                 setPosts(posts.filter(p => p._id !== postId));
                 toast.success(`Post has been ${status}`);
-                setRejectConfirmId(null);
+                setRejectingPost(null);
+                setSelectedReason("");
+                setCustomReason("");
             }
         } catch (err) {
             toast.error("Action failed");
@@ -241,6 +259,72 @@ export default function AdminPendingPosts() {
     return (
         <div className="min-h-screen bg-white p-6 dark:bg-[#0a0a0a] relative overflow-hidden">
             <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-blue-600/5 blur-[120px] rounded-full pointer-events-none" />
+
+            {/* --- REJECTION PROTOCOL MODAL --- */}
+            {rejectingPost && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="w-full max-w-lg bg-white dark:bg-gray-900 border-2 border-red-600/30 rounded-[32px] overflow-hidden shadow-2xl shadow-red-900/20">
+                        <div className="p-8">
+                            <div className="flex items-center gap-3 mb-6">
+                                <div className="h-2 w-2 bg-red-600 rounded-full animate-pulse shadow-[0_0_8px_#dc2626]" />
+                                <h2 className="text-sm font-black uppercase tracking-[0.3em] text-red-600">Rejection Protocol</h2>
+                            </div>
+
+                            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-4">
+                                Select Violation for: <span className="text-gray-900 dark:text-white italic">"{rejectingPost.title}"</span>
+                            </p>
+
+                            <div className="flex flex-wrap gap-2 mb-6">
+                                {generalReasons.map((reason) => (
+                                    <button
+                                        key={reason}
+                                        onClick={() => {
+                                            setSelectedReason(reason);
+                                            setCustomReason("");
+                                        }}
+                                        className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
+                                            selectedReason === reason 
+                                            ? "bg-red-600 border-red-600 text-white" 
+                                            : "border-gray-100 dark:border-gray-800 text-gray-400 hover:border-red-600/50"
+                                        }`}
+                                    >
+                                        {reason}
+                                    </button>
+                                ))}
+                            </div>
+
+                            <div className="relative mb-8">
+                                <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Manual Entry (Optional)</div>
+                                <textarea 
+                                    value={customReason}
+                                    onChange={(e) => {
+                                        setCustomReason(e.target.value);
+                                        setSelectedReason("");
+                                    }}
+                                    placeholder="Write specific violation details..."
+                                    className="w-full bg-gray-50 dark:bg-black border-2 border-gray-100 dark:border-gray-800 rounded-2xl p-4 text-sm font-medium text-gray-900 dark:text-white focus:border-red-600 outline-none h-24 resize-none transition-all"
+                                />
+                            </div>
+
+                            <div className="flex gap-4">
+                                <button 
+                                    onClick={() => setRejectingPost(null)}
+                                    className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors"
+                                >
+                                    Abort
+                                </button>
+                                <button 
+                                    onClick={() => handleAction(rejectingPost._id, "rejected")}
+                                    disabled={!selectedReason && !customReason}
+                                    className="flex-[2] bg-red-600 hover:bg-red-700 disabled:opacity-30 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-red-600/20"
+                                >
+                                    Confirm Termination
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             <div className="mx-auto max-w-5xl relative z-10">
                 {/* --- VERSION CONTROL SECTION --- */}
@@ -385,10 +469,7 @@ export default function AdminPendingPosts() {
                                 <div className="flex border-t-2 border-gray-100 dark:border-gray-800">
                                     <button
                                         disabled={!!btnLoading && btnLoading.includes(post._id)}
-                                        onClick={() => {
-                                            handleAction(post._id, "approved");
-                                            setRejectConfirmId(null); 
-                                        }}
+                                        onClick={() => handleAction(post._id, "approved")}
                                         className="flex-1 group/btn py-6 flex items-center justify-center gap-3 bg-transparent hover:bg-green-600 transition-all border-r-2 border-gray-100 dark:border-gray-800 disabled:opacity-50"
                                     >
                                         <span className="w-2 h-2 rounded-full bg-green-500 group-hover/btn:bg-white animate-pulse" />
@@ -397,44 +478,16 @@ export default function AdminPendingPosts() {
                                         </span>
                                     </button>
 
-                                    {/* REJECT SECTION WITH CANCEL BUTTON */}
-                                    <div className="flex-1 flex overflow-hidden">
-                                        {rejectConfirmId === post._id && (
-                                            <button
-                                                disabled={!!btnLoading}
-                                                onClick={() => setRejectConfirmId(null)}
-                                                className="flex-1 py-6 flex items-center justify-center bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all border-r-2 border-gray-200 dark:border-gray-700 animate-in slide-in-from-left duration-200"
-                                            >
-                                                <span className="font-black italic uppercase tracking-[0.3em] text-gray-500 text-[10px]">
-                                                    DECLINE CANCEL
-                                                </span>
-                                            </button>
-                                        )}
-                                        
-                                        <button
-                                            disabled={!!btnLoading && btnLoading.includes(post._id)}
-                                            onClick={() => handleAction(post._id, "rejected")}
-                                            className={`flex-1 group/btn py-6 flex items-center justify-center gap-3 transition-all disabled:opacity-50 ${
-                                                rejectConfirmId === post._id 
-                                                ? "bg-red-600 animate-pulse" 
-                                                : "bg-transparent hover:bg-red-600"
-                                            }`}
-                                        >
-                                            <span className={`w-2 h-2 rounded-full group-hover/btn:bg-white ${rejectConfirmId === post._id ? "bg-white" : "bg-red-500"}`} />
-                                            <span className={`font-black italic uppercase tracking-[0.3em] text-sm ${
-                                                rejectConfirmId === post._id 
-                                                ? "text-white" 
-                                                : "text-red-600 group-hover/btn:text-white"
-                                            }`}>
-                                                {btnLoading === `rejected-${post._id}` 
-                                                    ? "TERMINATING..." 
-                                                    : rejectConfirmId === post._id 
-                                                        ? "CONFIRM REJECT?" 
-                                                        : "REJECT"
-                                                }
-                                            </span>
-                                        </button>
-                                    </div>
+                                    <button
+                                        disabled={!!btnLoading && btnLoading.includes(post._id)}
+                                        onClick={() => setRejectingPost(post)}
+                                        className="flex-1 group/btn py-6 flex items-center justify-center gap-3 bg-transparent hover:bg-red-600 transition-all disabled:opacity-50"
+                                    >
+                                        <span className="w-2 h-2 rounded-full bg-red-500 group-hover/btn:bg-white" />
+                                        <span className="font-black italic uppercase tracking-[0.3em] text-sm text-red-600 group-hover/btn:text-white">
+                                            REJECT
+                                        </span>
+                                    </button>
                                 </div>
                             </div>
                         ))}
@@ -443,4 +496,4 @@ export default function AdminPendingPosts() {
             </div>
         </div>
     );
-}
+    }
