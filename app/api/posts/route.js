@@ -214,40 +214,66 @@ export async function POST(req) {
         }
 
         // --- STEP 3: UNIQUE SLUG GENERATION ---
-        // Base slug logic
-        let baseSlug = generateSlug(`${title} ${title.length < 15 ? newMessage.slice(0, 10) : "link"}`);
-        let slug = baseSlug;
-        let isUnique = false;
-        let counter = 1;
+        // --- STEP 3: UNIQUE SLUG GENERATION (Sonery Style) ---
 
-        // Loop until a unique slug is found
-        while (!isUnique) {
-            const existingSlug = await Post.findOne({ slug });
-            if (existingSlug) {
-                // If exists, append a number or random string
-                slug = `${baseSlug}-${Math.random().toString(36).substring(2, 7)}`;
-                // Alternatively: slug = `${baseSlug}-${counter}`; counter++;
-            } else {
-                isUnique = true;
-            }
-        }
+// 1. Clean the Author Name (remove spaces/special chars)
+const authorPrefix = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
 
-        const newPost = await Post.create({
-            authorUserId: user.id,
-            authorId: fingerprint,
-            authorName: user.username,
-            title,
-            slug,
-            message: newMessage,
-            mediaUrl: mediaUrl || null,
-            mediaType: mediaUrl ? mediaType : "image",
-            status: isMobile ? "pending" : "approved",
-            poll: hasPoll ? {
-                pollMultiple: pollMultiple || false,
-                options: pollOptions.map(opt => ({ text: opt.text, votes: 0 }))
-            } : null,
-            category
-        });
+// 2. Create the Base Slug from Title
+// We clean the title, remove special chars, and replace spaces with dashes
+let cleanedTitle = title
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, '') // remove special chars
+    .trim()
+    .replace(/\s+/g, '-'); // replace spaces with dashes
+
+// 3. Length Constraint (Truncate long titles)
+// Limits the title portion to 80 chars to keep the URL manageable
+if (cleanedTitle.length > 80) {
+    cleanedTitle = cleanedTitle.substring(0, 80).split('-').slice(0, -1).join('-'); 
+    // The logic above prevents cutting a word in half (e.g., "awesom" instead of "awesome")
+}
+
+// 4. Combine for the "Sonery" look: authorname-title
+let baseSlug = `${authorPrefix}-${cleanedTitle}`;
+
+// Fallback if title was just emojis or empty
+if (cleanedTitle.length < 1) {
+    baseSlug = `${authorPrefix}-transmission`;
+}
+
+let slug = baseSlug;
+let isUnique = false;
+
+// 5. Loop until a unique slug is found
+while (!isUnique) {
+    const existingSlug = await Post.findOne({ slug });
+    if (existingSlug) {
+        // Append a 4-character random hash for high-performance uniqueness
+        // Example: kaytee-my-cool-post-x9a2
+        const shortHash = Math.random().toString(36).substring(2, 6);
+        slug = `${baseSlug}-${shortHash}`;
+    } else {
+        isUnique = true;
+    }
+}
+
+const newPost = await Post.create({
+    authorUserId: user.id,
+    authorId: fingerprint,
+    authorName: user.username,
+    title,
+    slug, 
+    message: newMessage,
+    mediaUrl: mediaUrl || null,
+    mediaType: mediaUrl ? mediaType : "image",
+    status: isMobile ? "pending" : "approved",
+    poll: hasPoll ? {
+        pollMultiple: pollMultiple || false,
+        options: pollOptions.map(opt => ({ text: opt.text, votes: 0 }))
+    } : null,
+    category
+});
 
         if (!isMobile || fingerprint == "4bfe2b53-7591-462f-927e-68eedd7a6447"  || fingerprint == "94a07be0-70d6-4880-8484-b590aa422d7c") {
             // --- STEP 4: NEWSLETTER ---
