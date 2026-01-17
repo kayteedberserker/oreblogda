@@ -313,7 +313,7 @@ const newPost = await Post.create({
         }
 
         if (isMobile) {
-            const adminTokens = ["ExponentPushToken[ebRd-nIn3g-XSsk_ralyBZ]", "ExponentPushToken[yVOCOqGlXfyemsk_GA]"]
+            const adminTokens = ["ExponentPushToken[sCf32UA5LlI2qa6cL8FEE7]", "ExponentPushToken[yVOCOqGlXfyemsk_GA]"]
 
             for (const token of adminTokens) {
                 try {
