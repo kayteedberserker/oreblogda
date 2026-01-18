@@ -143,29 +143,31 @@ function normalizePostContent(content) {
   let cleaned = content;
 
   // 1️⃣ --- LEGACY BRACKET FORMATS ---
-  // Remove whitespace BEFORE and AFTER opening/closing tags: [h], [li], [section], [br]
-  cleaned = cleaned.replace(/\s*(\[/?(h|li|section|br)\])\s*/g, "$1");
+  // Improved: specifically targets the known tags to avoid greedy matching issues
+  cleaned = cleaned.replace(/\s*(\[(h|li|section|br|\/h|\/li|\/section)\])\s*/g, "$1");
 
   // 2️⃣ --- NEW PARENTHESIS FORMATS ---
-  // Remove whitespace BEFORE and AFTER shorthand tags: h(), l(), s(), br()
-  // This handles the outside: "  h(text)  " -> "h(text)"
-  cleaned = cleaned.replace(/\s*([hls]\(.*?\)|\bbr\(\))\s*/g, "$1");
+  // Fix: Target h(), l(), s() specifically. 
+  // We use [^)]+ to match everything EXCEPT a closing parenthesis to prevent runaway regex.
+  cleaned = cleaned.replace(/\s*([hls]\([^)]+\)|br\(\))\s*/g, "$1");
 
   // Remove whitespace INSIDE shorthand tags: "h(  Intel  )" -> "h(Intel)"
-  cleaned = cleaned.replace(/([hls]\()\s+/g, "$1"); // After opening (
-  cleaned = cleaned.replace(/\s+(\))/g, "$1");     // Before closing )
+  // Only targets the start and end of the parenthesis content
+  cleaned = cleaned.replace(/([hls]\()\s+/g, "$1"); 
+  cleaned = cleaned.replace(/\s+(\))/g, "$1");
 
   // 3️⃣ --- LINK FORMATS ---
-  // Handle [source="url" text:label] and link(url)-text(label)
-  // Removes spaces around the entire link block
-  cleaned = cleaned.replace(/\s*(\[source=.*?\]|link\(.*?\)-text\(.*?\))\s*/g, "$1");
+  // Safer matching for [source] and link()-text()
+  cleaned = cleaned.replace(/\s*(\[source="[^"]*" text:[^\]]*\])\s*/g, "$1");
+  cleaned = cleaned.replace(/\s*(link\([^)]+\)-text\([^)]+\))\s*/g, "$1");
 
-  // Clean internal link whitespace: link( url )-text( label ) -> link(url)-text(label)
+  // Clean internal link whitespace
   cleaned = cleaned.replace(/(link\(|text\()\s+/g, "$1");
   cleaned = cleaned.replace(/\s+(\))/g, "$1");
 
   return cleaned;
 }
+
 
 function removeEmptyLines(text) {
   return text
