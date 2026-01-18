@@ -6,7 +6,11 @@ import { toast } from "react-toastify";
 
 // --- 1. THE WEB PREVIEWER LOGIC ---
 const parseMessageSections = (msg) => {
-    const regex = /\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[source="(.*?)" text:(.*?)\]|\[br\]/gs;
+    if (!msg) return [];
+
+    // Regex for both Bracket [tag] and Parenthesis tag() formats
+    const regex = /s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs;
+
     const parts = [];
     let lastIndex = 0;
     let match;
@@ -15,17 +19,31 @@ const parseMessageSections = (msg) => {
         if (match.index > lastIndex) {
             parts.push({ type: "text", content: msg.slice(lastIndex, match.index) });
         }
-        if (match[1] !== undefined) parts.push({ type: "section", content: match[1].trim() });
-        else if (match[2] !== undefined) parts.push({ type: "heading", content: match[2].trim() });
-        else if (match[3] !== undefined) parts.push({ type: "listItem", content: match[3].trim() });
-        else if (match[4] !== undefined) parts.push({ type: "link", url: match[4], content: match[5] });
-        else parts.push({ type: "br" });
+
+        if (match[1] !== undefined || match[2] !== undefined) {
+            parts.push({ type: "section", content: (match[1] || match[2]).trim() });
+        } else if (match[3] !== undefined || match[4] !== undefined) {
+            parts.push({ type: "heading", content: (match[3] || match[4]).trim() });
+        } else if (match[5] !== undefined || match[6] !== undefined) {
+            parts.push({ type: "listItem", content: (match[5] || match[6]).trim() });
+        } else if (match[7] !== undefined && match[8] !== undefined) {
+            // New format: link(url)-text(label)
+            parts.push({ type: "link", url: match[7], content: match[8] });
+        } else if (match[9] !== undefined && match[10] !== undefined) {
+            // Old format: [source="url" text:label]
+            parts.push({ type: "link", url: match[9], content: match[10] });
+        } else {
+            parts.push({ type: "br" });
+        }
+
         lastIndex = regex.lastIndex;
     }
-    if (lastIndex < msg.length) parts.push({ type: "text", content: msg.slice(lastIndex) });
+
+    if (lastIndex < msg.length) {
+        parts.push({ type: "text", content: msg.slice(lastIndex) });
+    }
     return parts;
 };
-
 const PostPreviewContent = ({ message }) => {
     const rawParts = parseMessageSections(message || "");
     const finalElements = [];
@@ -56,12 +74,16 @@ const PostPreviewContent = ({ message }) => {
         } else {
             flushInlineBuffer(i);
             if (p.type === "heading") {
-                finalElements.push(<h3 key={i} className="text-xl font-bold mt-4 mb-2 text-black dark:text-white">{p.content}</h3>);
+                finalElements.push(
+                    <h3 key={i} className="text-xl font-bold mt-4 mb-2 text-black dark:text-white uppercase tracking-tight">
+                        {p.content}
+                    </h3>
+                );
             } else if (p.type === "listItem") {
                 finalElements.push(
                     <div key={i} className="flex items-start ml-4 my-1">
                         <span className="mr-2 text-blue-500">•</span>
-                        <span className="text-gray-700 dark:text-gray-300 text-base">{p.content}</span>
+                        <span className="text-gray-700 dark:text-gray-300 text-base font-medium">{p.content}</span>
                     </div>
                 );
             } else if (p.type === "section") {
@@ -77,6 +99,7 @@ const PostPreviewContent = ({ message }) => {
     flushInlineBuffer("end");
     return <div className="space-y-1">{finalElements}</div>;
 };
+
 
 // --- 2. THE MAIN ADMIN PAGE ---
 export default function AdminPendingPosts() {
