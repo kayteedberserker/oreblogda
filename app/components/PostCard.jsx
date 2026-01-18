@@ -34,7 +34,7 @@ const formatViews = (views) => {
   }
 
   // Case 2: 100 to 999 - Show 100+, 200+, etc. (Hiding last two digits)
-  if (views < 1000) {
+  if (views < 100) {
     return `${Math.floor(views / 100) * 100}+`;
   }
 
@@ -258,10 +258,12 @@ export default function PostCard({
 
 
 
-	// ✅ --- UPDATED MESSAGE SECTION ---
+	// ✅ --- HYBRID PARSER (Supports both Bracket & Parenthesis syntax) ---
 	const parseMessageSections = (msg) => {
-		// Added [source="(.*?)" text:(.*?)] to the regex
-		const regex = /\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[source="(.*?)" text:(.*?)\]|\[br\]/gs;
+		if (!msg) return [];
+		
+		// Expanded Regex to catch BOTH formats
+		const regex = /s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs;
 
 		const parts = [];
 		let lastIndex = 0;
@@ -272,16 +274,19 @@ export default function PostCard({
 				parts.push({ type: "text", content: msg.slice(lastIndex, match.index) });
 			}
 
-			if (match[1] !== undefined) {
-				parts.push({ type: "section", content: match[1] });
-			} else if (match[2] !== undefined) {
-				parts.push({ type: "heading", content: match[2] });
-			} else if (match[3] !== undefined) {
-				parts.push({ type: "listItem", content: match[3] });
-			} else if (match[4] !== undefined) {
-				// match[4] is the URL, match[5] is the text
-				parts.push({ type: "link", url: match[4], content: match[5] });
-			} else {
+			if (match[1] || match[2]) {
+				parts.push({ type: "section", content: match[1] || match[2] });
+			} else if (match[3] || match[4]) {
+				parts.push({ type: "heading", content: match[3] || match[4] });
+			} else if (match[5] || match[6]) {
+				parts.push({ type: "listItem", content: match[5] || match[6] });
+			} else if (match[7] && match[8]) {
+				// New Format Link
+				parts.push({ type: "link", url: match[7], content: match[8] });
+			} else if (match[9] && match[10]) {
+				// Old Format Link
+				parts.push({ type: "link", url: match[9], content: match[10] });
+			} else if (match[0] === 'br()' || match[0] === '[br]') {
 				parts.push({ type: "br" });
 			}
 
@@ -298,16 +303,13 @@ export default function PostCard({
 
 
 	const renderMessage = () => {
-		let maxLength = 150;
-		if (isSimilarPost) {
-			maxLength = 200;
-		} else {
-			maxLength = 150;
-		}
+		let maxLength = isSimilarPost ? 200 : 150;
 
 		if (isFeed) {
-			// Updated the replace regex to include the source tag for the feed view
-			const plainText = post.message.replace(/\[section\](.*?)\[\/section\]|\[h\](.*?)\[\/h\]|\[li\](.*?)\[\/li\]|\[source=".*?" text:.*?\]|\[br\]/gs, "");
+			// Strip all tags for feed view
+			const plainText = post.message.replace(/s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs, (match, p1, p2, p3, p4, p5, p6, p7, p8, p9, p10) => {
+				return p1 || p2 || p3 || p4 || p5 || p6 || p8 || p10 || '';
+			});
 			const truncated = plainText.length > maxLength ? plainText.slice(0, maxLength) + "..." : plainText;
 			return <span style={{ whiteSpace: 'pre-wrap' }}>{truncated}</span>;
 		}
@@ -317,7 +319,6 @@ export default function PostCard({
 		return parts.map((p, i) => {
 			switch (p.type) {
 				case "text":
-					// Added whiteSpace style to respect your "Enter" keys
 					return <span key={i} style={{ whiteSpace: 'pre-wrap' }}>{p.content}</span>;
 
 				case "br":
@@ -338,14 +339,14 @@ export default function PostCard({
 
 				case "heading":
 					return (
-						<h2 key={i} className="text-xl font-bold my-2 ">
+						<h2 key={i} className="text-xl font-bold my-2 uppercase tracking-tight">
 							{p.content}
 						</h2>
 					);
 
 				case "listItem":
 					return (
-						<li key={i} className="ml-24 md:ml-[170px] lg:ml-[290px] list-disc">
+						<li key={i} className="ml-10 md:ml-12 list-disc font-medium mb-1">
 							{p.content}
 						</li>
 					);
@@ -354,7 +355,7 @@ export default function PostCard({
 					return (
 						<div
 							key={i}
-							className="bg-gray-100 dark:bg-gray-700 p-2 my-2 w-fit max-w-[70%] mx-auto md:ml-[150px] lg:ml-[270px] rounded-md border-l-4 border-blue-500"
+							className="bg-gray-100 dark:bg-gray-800/60 p-4 my-4 rounded-xl border-l-4 border-blue-500 italic"
 							style={{ whiteSpace: 'pre-wrap' }}
 						>
 							{p.content}
