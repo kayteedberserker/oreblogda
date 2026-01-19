@@ -11,6 +11,8 @@ const mobileUserSchema = new mongoose.Schema(
       url: { type: String, default: "" },
       public_id: { type: String, default: "" },
     },
+    totalRejectedPost: { type: Number, default: 0 }, 
+    consecutiveStreak: { type: Number, default: 0 }, 
     country: { type: String, default: 'Unknown' },
     lastActive: { type: Date, default: Date.now }, // 👈 Added: Good for engagement timing
     appOpens: { type: Number, default: 0 },
