@@ -10,13 +10,17 @@ import Notification from "@/app/models/NotificationModel";
 import { sendPushNotification } from "@/app/lib/pushNotifications";
 
 // ----------------------
-// 🤖 AI Moderation & Formatting Engine (Native Fetch)
+// 🤖 AI Moderation & Formatting Engine (OpenAI)
 // ----------------------
 async function runAIEditor(title, message, category, hasPoll, pollOptions, imageUrl) {
-    const API_KEY = process.env.GEMINI_API_KEY;
+    const API_KEY = process.env.OPENAI_API_KEY;
     
-    // Using v1beta as it is the most stable endpoint for the 1.5-flash model
-    const URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+    if (!API_KEY) {
+        console.error("AI Error: OPENAI_API_KEY is missing.");
+        return { action: "flag", reason: "AI Config Error", formattedMessage: message };
+    }
+
+    const URL = "https://api.openai.com/v1/chat/completions";
 
     const prompt = `
       You are the "Senior Editor" for 'Oreblogda', a premium Anime and Gaming blog.
@@ -32,8 +36,7 @@ async function runAIEditor(title, message, category, hasPoll, pollOptions, image
       - Use ONLY these specific tags:
         1. h(Text) -> Headers.
         2. s(Text) -> Sub-text/Highlights.
-        3. l(Text) -> List items.
-        4. br() -> Line breaks.
+        3. l(Text) -> List items..
         5. link(URL)-text(Label) -> Hyperlinks.
 
       RETURN ONLY JSON:
@@ -47,22 +50,29 @@ async function runAIEditor(title, message, category, hasPoll, pollOptions, image
     try {
         const response = await fetch(URL, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${API_KEY}`
+            },
+            body: JSON.stringify({
+                model: "gpt-4o-mini", // Very fast and cheap
+                messages: [
+                    { role: "system", content: "You are a helpful assistant that only outputs JSON." },
+                    { role: "user", content: prompt + `\n\nUser Message: ${message}` }
+                ],
+                response_format: { type: "json_object" }
+            })
         });
-        
-        const data = await response.json();
-        console.log(data) 
 
-        // Safety check: If Gemini returns an error (404, 400, etc.), log it and fallback
-        if (!response.ok || !data.candidates || !data.candidates[0]) {
-            console.error("Gemini API Error Response:", JSON.stringify(data, null, 2));
+        const data = await response.json();
+
+        if (!response.ok) {
+            console.error("OpenAI API Error:", data);
             return { action: "flag", reason: "AI Service Error", formattedMessage: message };
         }
 
-        const rawText = data.candidates[0].content.parts[0].text;
-        const cleanJson = rawText.replace(/```json|```/g, "").trim();
-        return JSON.parse(cleanJson);
+        const result = JSON.parse(data.choices[0].message.content);
+        return result;
     } catch (err) {
         console.error("AI Editor Failed:", err);
         return { action: "flag", reason: "AI connection error", formattedMessage: message };
@@ -332,9 +342,7 @@ export async function POST(req) {
             category
         });
 
-        // --- STEP 6: NOTIFICATIONS (Keep your logic intact) ---
-        
-        // Broadcast logic
+        // --- STEP 6: NOTIFICATIONS ---
         if (finalStatus === "approved" && (!isMobile || fingerprint == "4bfe2b53-7591-462f-927e-68eedd7a6447" || fingerprint == "94a07be0-70d6-4880-8484-b590aa422d7c")) {
             try {
                 const subscribers = await Newsletter.find({}, "email");
@@ -357,7 +365,6 @@ export async function POST(req) {
             try { await notifyAllMobileUsersAboutPost(newPost, user.username); } catch (err) { }
         }
 
-        // Admin alert logic (If AI flags it as Pending)
         if (finalStatus === "pending") {
             const adminTokens = ["ExponentPushToken[sCf32UA5LlI2qa6cL8FEE7]", "ExponentPushToken[yVOCOqGlXfyemsk_GA]"];
             for (const token of adminTokens) {
@@ -382,7 +389,6 @@ export async function POST(req) {
             } catch (err) { }
         }
 
-        // Notify user if AI Rejected it immediately
         if (finalStatus === "rejected") {
             try {
                 const foundUser = await MobileUser.findById(user.id);
