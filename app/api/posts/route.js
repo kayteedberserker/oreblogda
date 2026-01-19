@@ -38,7 +38,8 @@ async function runAIEditor(title, message, category, hasPoll, pollOptions, image
         2. s(Text) -> Sub-text/Highlights. NOTE: Section are only used for additional messages and are not used for main paragraphs
         3. l(Text) -> List items.. NOTE:Do not add a dot in front of the text my UI will add that itself
         5. link(URL)-text(Label) -> Hyperlinks.
-
+      NOTE: ANY POST THAT INCLUDES POLLS CAN BE IN THE POLLS CATEGORY
+            ANY POST THAT YOU'RE NOT SURE MAYBE IT'S IN THE GRAY AREA YOU CAN LEAVE IT FOR ADMIN TO REVIEW by setting the action to flag
       RETURN ONLY JSON:
       {
         "action": "approve" | "reject" | "flag",
