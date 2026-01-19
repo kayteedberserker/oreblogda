@@ -15,8 +15,7 @@ import { sendPushNotification } from "@/app/lib/pushNotifications";
 async function runAIEditor(title, message, category, hasPoll, pollOptions, imageUrl) {
     const API_KEY = process.env.GEMINI_API_KEY;
     
-    // Note: If you get a 404 in the Gemini Dashboard, it's usually this URL path.
-    // Changing 'v1' to 'v1beta' is required for the 1.5-flash model on most keys.
+    // Using v1beta as it is the most stable endpoint for the 1.5-flash model
     const URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
 
     const prompt = `
@@ -51,11 +50,14 @@ async function runAIEditor(title, message, category, hasPoll, pollOptions, image
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
-        const data = await response.json();
         
-        // Logging the actual error from Google if the response is not OK
-        if (!response.ok) {
-            console.error("Gemini API Error details:", data);
+        const data = await response.json();
+        console.log(data) 
+
+        // Safety check: If Gemini returns an error (404, 400, etc.), log it and fallback
+        if (!response.ok || !data.candidates || !data.candidates[0]) {
+            console.error("Gemini API Error Response:", JSON.stringify(data, null, 2));
+            return { action: "flag", reason: "AI Service Error", formattedMessage: message };
         }
 
         const rawText = data.candidates[0].content.parts[0].text;
