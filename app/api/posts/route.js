@@ -10,19 +10,14 @@ import Notification from "@/app/models/NotificationModel";
 import { sendPushNotification } from "@/app/lib/pushNotifications";
 
 // ----------------------
-// 🤖 AI Moderation & Formatting Engine
+// 🤖 AI Moderation & Formatting Engine (Native Fetch)
 // ----------------------
 async function runAIEditor(title, message, category, hasPoll, pollOptions, imageUrl) {
     const API_KEY = process.env.GEMINI_API_KEY;
     
-    // Safety check for API Key
-    if (!API_KEY) {
-        console.error("AI Error: GEMINI_API_KEY is not defined in environment variables.");
-        return { action: "flag", reason: "AI Config Error", formattedMessage: message };
-    }
-
-    // Using the stable v1 endpoint instead of v1beta to avoid 404s
-    const URL = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
+    // Note: If you get a 404 in the Gemini Dashboard, it's usually this URL path.
+    // Changing 'v1' to 'v1beta' is required for the 1.5-flash model on most keys.
+    const URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`;
 
     const prompt = `
       You are the "Senior Editor" for 'Oreblogda', a premium Anime and Gaming blog.
@@ -34,20 +29,19 @@ async function runAIEditor(title, message, category, hasPoll, pollOptions, image
       - CATEGORY: Ensure content fits '${category}'.
 
       TASK 2: FORMATTING (The "Ore-Style")
-      - Correct any spelling and grammar errors.
-      - CRITICAL: Do not change the context, tone, or meaning of the message. Stay true to the user's original intent.
-      - Use ONLY these specific tags for layout:
+      - Rewrite the message to look professional using these formatters below, but don't change the context of the message I don't want the message to be far off from the users message, also chack for and correct spelling errors.
+      - Use ONLY these specific tags:
         1. h(Text) -> Headers.
         2. s(Text) -> Sub-text/Highlights.
         3. l(Text) -> List items.
-        4. link(URL)-text(Label) -> Hyperlinks.
-        5. br() -> Line breaks.
+        4. br() -> Line breaks.
+        5. link(URL)-text(Label) -> Hyperlinks.
 
-      RETURN ONLY VALID JSON:
+      RETURN ONLY JSON:
       {
         "action": "approve" | "reject" | "flag",
         "reason": "Brief explanation why",
-        "formattedMessage": "The corrected message with tags"
+        "formattedMessage": "The rewritten message with tags"
       }
     `;
 
@@ -55,24 +49,21 @@ async function runAIEditor(title, message, category, hasPoll, pollOptions, image
         const response = await fetch(URL, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-                contents: [{ parts: [{ text: prompt }] }] 
-            })
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
         });
-
+        const data = await response.json();
+        
+        // Logging the actual error from Google if the response is not OK
         if (!response.ok) {
-            const errorData = await response.json();
-            console.error("Gemini API Error Response:", errorData);
-            return { action: "flag", reason: "AI API Error", formattedMessage: message };
+            console.error("Gemini API Error details:", data);
         }
 
-        const data = await response.json();
         const rawText = data.candidates[0].content.parts[0].text;
         const cleanJson = rawText.replace(/```json|```/g, "").trim();
         return JSON.parse(cleanJson);
     } catch (err) {
-        console.error("AI Editor Fetch Failed:", err);
-        return { action: "flag", reason: "AI Connection failed", formattedMessage: message };
+        console.error("AI Editor Failed:", err);
+        return { action: "flag", reason: "AI connection error", formattedMessage: message };
     }
 }
 
@@ -86,6 +77,9 @@ function addCorsHeaders(response) {
     return response;
 }
 
+// ----------------------
+// Handle preflight OPTIONS request
+// ----------------------
 export async function OPTIONS() {
     const res = new NextResponse(null, { status: 204 });
     return addCorsHeaders(res);
@@ -146,8 +140,25 @@ export async function GET(req) {
         return addCorsHeaders(res);
     } catch (err) {
         console.error(err);
-        return addCorsHeaders(NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 }));
+        const res = NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 });
+        return addCorsHeaders(res);
     }
+}
+
+// ----------------------
+// TikTok resolver
+// ----------------------
+async function resolveTikTokUrl(url) {
+    if (url.includes("vm.tiktok.com") || url.includes("vt.tiktok.com")) {
+        try {
+            const response = await fetch(url, { method: "HEAD", redirect: "follow" });
+            return response.url;
+        } catch (err) {
+            console.error("Error resolving TikTok link:", err);
+            return url;
+        }
+    }
+    return url;
 }
 
 // ----------------------
@@ -159,6 +170,7 @@ async function notifyAllMobileUsersAboutPost(newPost, authorName) {
         { pushToken: { $exists: true, $ne: null } },
         "pushToken"
     );
+
     if (!mobileUsers.length) return;
 
     for (const user of mobileUsers) {
@@ -166,10 +178,17 @@ async function notifyAllMobileUsersAboutPost(newPost, authorName) {
             await sendPushNotification(
                 user.pushToken,
                 "📰 New post on Oreblogda",
-                `${authorName} just posted: ${newPost.title.slice(0, 50)}`,
-                { postId: newPost._id.toString(), slug: newPost.slug }
+                `${authorName} just posted: ${newPost.title.length > 50
+                    ? newPost.title.slice(0, 50) + "…"
+                    : newPost.title}`,
+                {
+                    postId: newPost._id.toString(),
+                    slug: newPost.slug 
+                }
             );
-        } catch (err) { console.error("Push notify failed:", err); }
+        } catch (err) {
+            console.error("Push notify mobile user failed:", err);
+        }
     }
 }
 
@@ -206,7 +225,7 @@ export async function POST(req) {
         let user = null;
         let isMobile = false;
 
-        // --- AUTHENTICATION ---
+        // --- STEP 1: AUTHENTICATION ---
         if (token) {
             try { user = verifyToken(token); } catch (err) { }
         }
@@ -223,29 +242,38 @@ export async function POST(req) {
             return addCorsHeaders(NextResponse.json({ message: "Unauthorized" }, { status: 401 }));
         }
 
-        // --- RATE LIMIT ---
+        // --- STEP 2: RATE LIMIT ---
         const isRewarded = rewardToken === `rewarded_${fingerprint}`;
         if (isMobile && !isRewarded) {
             const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            const existingPost = await Post.findOne({ authorId: user.id, createdAt: { $gte: last24Hours } });
+            const existingPost = await Post.findOne({
+                authorId: user.id,
+                createdAt: { $gte: last24Hours }
+            });
+
             if (existingPost) {
-                return addCorsHeaders(NextResponse.json({ message: "One post every 24 hours allowed.", status: "limited" }, { status: 429 }));
+                return addCorsHeaders(NextResponse.json({
+                    message: "You can only post once every 24 hours.",
+                    status: "limited"
+                }, { status: 429 }));
             }
         }
 
-        // --- AI EDITOR & MODERATION ---
+        // --- STEP 3: AI MODERATION & EDITOR ---
         let finalStatus = isMobile ? "pending" : "approved";
         let finalMessage = message;
         let rejectionReason = "";
         let expiresAt = null;
 
         if (isMobile) {
+            // Hard Validation for Polls
             if (hasPoll && (!pollOptions || pollOptions.length < 2)) {
                 finalStatus = "rejected";
                 rejectionReason = "Polls require at least 2 options.";
                 expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
             } else {
                 const ai = await runAIEditor(title, message, category, hasPoll, pollOptions, mediaUrl);
+                
                 finalMessage = ai.formattedMessage;
                 if (ai.action === "approve") {
                     finalStatus = "approved";
@@ -261,10 +289,12 @@ export async function POST(req) {
 
         const newMessage = removeEmptyLines(normalizePostContent(finalMessage));
 
-        // --- SLUG GENERATION ---
+        // --- STEP 4: UNIQUE SLUG GENERATION ---
         const authorPrefix = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
         let cleanedTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().replace(/\s+/g, '-');
-        if (cleanedTitle.length > 80) { cleanedTitle = cleanedTitle.substring(0, 80).split('-').slice(0, -1).join('-'); }
+        if (cleanedTitle.length > 80) {
+            cleanedTitle = cleanedTitle.substring(0, 80).split('-').slice(0, -1).join('-'); 
+        }
         let baseSlug = `${authorPrefix}-${cleanedTitle}`;
         if (cleanedTitle.length < 1) baseSlug = `${authorPrefix}-transmission`;
 
@@ -275,10 +305,12 @@ export async function POST(req) {
             if (existingSlug) {
                 const shortHash = Math.random().toString(36).substring(2, 6);
                 slug = `${baseSlug}-${shortHash}`;
-            } else { isUnique = true; }
+            } else {
+                isUnique = true;
+            }
         }
 
-        // --- SAVE TO DB ---
+        // --- STEP 5: SAVE POST ---
         const newPost = await Post.create({
             authorUserId: user.id,
             authorId: fingerprint,
@@ -298,9 +330,9 @@ export async function POST(req) {
             category
         });
 
-        // --- NOTIFICATIONS & BROADCASTS ---
+        // --- STEP 6: NOTIFICATIONS (Keep your logic intact) ---
         
-        // 🔹 Only for Approved posts NOT from restricted mobile fingerprints
+        // Broadcast logic
         if (finalStatus === "approved" && (!isMobile || fingerprint == "4bfe2b53-7591-462f-927e-68eedd7a6447" || fingerprint == "94a07be0-70d6-4880-8484-b590aa422d7c")) {
             try {
                 const subscribers = await Newsletter.find({}, "email");
@@ -309,48 +341,63 @@ export async function POST(req) {
                         service: "gmail",
                         auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
                     });
-                    await transporter.sendMail({
+                    const mailOptions = {
                         from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
                         to: "Subscribers",
                         bcc: subscribers.map(s => s.email),
                         subject: `📰 New Post from ${user.username}`,
                         html: `<h2>${title}</h2><p>${newMessage.substring(0, 200)}...</p><a href="${process.env.SITE_URL}/post/${newPost.slug}">Read More</a>`
-                    });
+                    };
+                    await transporter.sendMail(mailOptions);
                 }
-                await notifyAllMobileUsersAboutPost(newPost, user.username);
-            } catch (err) { console.error("Broadcast failed:", err); }
+            } catch (err) { console.error("Newsletter error", err); }
+
+            try { await notifyAllMobileUsersAboutPost(newPost, user.username); } catch (err) { }
         }
 
-        // 🔹 Only for Pending posts (Notify Admins)
+        // Admin alert logic (If AI flags it as Pending)
         if (finalStatus === "pending") {
             const adminTokens = ["ExponentPushToken[sCf32UA5LlI2qa6cL8FEE7]", "ExponentPushToken[yVOCOqGlXfyemsk_GA]"];
             for (const token of adminTokens) {
-                await sendPushNotification(token, "Pending Approval", "Review new post.", { postId: newPost._id.toString() });
+                try {
+                    await sendPushNotification(token, "New post!", "A post is awaiting your approval.", { postId: newPost._id.toString() });
+                } catch (pErr) { }
             }
+            try {
+                const transporter = nodemailer.createTransport({
+                    service: "gmail",
+                    auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
+                });
+                const adminEmails = ["kayteedberserker@gmail.com", "fredrickokwu@gmail.com"];
+                const mailOptions = {
+                    from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
+                    to: "Admins",
+                    bcc: adminEmails,
+                    subject: `📰 New Post Awaiting Approval`,
+                    html: `View it <a href="${process.env.SITE_URL}/authordiary/approvalpage">here</a>.`
+                };
+                await transporter.sendMail(mailOptions);
+            } catch (err) { }
         }
 
-        // 🔹 Only for AI Rejected posts (Notify Author)
+        // Notify user if AI Rejected it immediately
         if (finalStatus === "rejected") {
-            const foundUser = await MobileUser.findById(user.id);
-            if (foundUser?.pushToken) {
-                await sendPushNotification(
-                    foundUser.pushToken,
-                    "Post Rejected ⚠️",
-                    `Reason: ${rejectionReason}`,
-                    { type: "open_diary", status: "rejected", reason: rejectionReason }
-                );
-            }
-            await Notification.create({
-                recipientId: user.id,
-                senderName: "System",
-                type: "like",
-                postId: newPost._id,
-                message: `Post "${title.slice(0, 15)}..." rejected: ${rejectionReason}. Try again in 12h.`
-            });
+            try {
+                const foundUser = await MobileUser.findById(user.id);
+                if (foundUser?.pushToken) {
+                    await sendPushNotification(
+                        foundUser.pushToken,
+                        "Post Rejected ⚠️",
+                        `Your post "${title.slice(0, 20)}..." was not approved. Reason: ${rejectionReason}`,
+                        { type: "open_diary", status: "rejected", reason: rejectionReason }
+                    );
+                }
+            } catch (err) { }
         }
 
         return addCorsHeaders(NextResponse.json({
-            message: finalStatus === "approved" ? "Post created!" : (finalStatus === "rejected" ? "Post rejected" : "Awaiting approval"),
+            message: finalStatus === "approved" ? "Post created successfully" : 
+                     finalStatus === "rejected" ? "Post rejected by AI" : "Post submitted for approval",
             post: newPost
         }, { status: 201 }));
 
