@@ -31,12 +31,12 @@ async function runAIEditor(title, message, category, hasPoll, pollOptions, image
       - POLL CHECK: If hasPoll is true, there MUST be options.
       - CATEGORY: Ensure content fits '${category}'.
 
-      TASK 2: FORMATTING (The "Ore-Style")
-      - Rewrite the message to look professional using these formatters below, but don't change the context of the message I don't want the message to be far off from the users message, also chack for and correct spelling errors.
+      TASK 2:  MESSAGE CHECKING
+      Check the message and use these formatters below only where application, but don't change the context of the message I don't want the message to be far off from the users message, also chack for and correct spelling errors, actually don't change the message at all only check for spelling errors and where the formatters can be added.
       - Use ONLY these specific tags:
-        1. h(Text) -> Headers.
-        2. s(Text) -> Sub-text/Highlights.
-        3. l(Text) -> List items..
+        1. h(Text) -> Headers. NOTE: Headings are used for headings only not for other things
+        2. s(Text) -> Sub-text/Highlights. NOTE: Section are only used for additional messages and are not used for main paragraphs
+        3. l(Text) -> List items.. NOTE:Do not add a dot in front of the text my UI will add that itself
         5. link(URL)-text(Label) -> Hyperlinks.
 
       RETURN ONLY JSON:
