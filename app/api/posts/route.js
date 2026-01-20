@@ -309,7 +309,7 @@ export async function POST(req) {
             } else {
                 // Pass mediaUrl and mediaType to the moderator
                 const ai = await runAIModerator(title, message, category, mediaUrl, mediaType);
-                
+                console.log(ai) 
                 if (ai.action === "approve") {
                     finalStatus = "approved";
                 } else if (ai.action === "reject") {
