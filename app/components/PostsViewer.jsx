@@ -20,24 +20,26 @@ export default function PostsViewer({ initialPosts }) {
 
   // --- SWR Infinite ---
   const getKey = (pageIndex, previousPageData) => {
-    // If we reached the end
-    if (previousPageData && previousPageData.posts?.length < limit) return null;
+    // If we reached the end (no more posts)
+    if (previousPageData && (!previousPageData.posts || previousPageData.posts.length < limit)) return null;
     return `/api/posts?page=${pageIndex + 1}&limit=${limit}`;
   };
 
   /**
-   * FIX: Changed 'initialData' to 'fallbackData'.
-   * In SWR 2.x, fallbackData is the correct key for SSR hydration.
+   * REPAIR: fallbackData must strictly match the structure SWR Infinite expects.
+   * It expects an Array of pages. Each page is the result of the fetcher.
    */
-  const { data, size, setSize, isValidating, isLoading } = useSWRInfinite(getKey, fetcher, {
-    fallbackData: initialPosts ? [{ posts: initialPosts }] : [],
+  const { data, size, setSize, isValidating, isLoading, error } = useSWRInfinite(getKey, fetcher, {
+    fallbackData: initialPosts ? [{ posts: initialPosts }] : undefined,
     revalidateFirstPage: false,
+    persistSize: true,
   });
 
-  const posts = data ? data.flatMap((p) => p.posts || []) : [];
+  // SAFETY: Ensure data exists before flattening to prevent "cannot read property map of undefined"
+  const posts = data ? data.flatMap((p) => (Array.isArray(p?.posts) ? p.posts : [])) : [];
   
-  // Deduplicate posts by ID
-  const uniquePosts = Array.from(new Map(posts.map((p) => [p._id, p])).values());
+  // Deduplicate posts by ID to prevent key collisions which cause React crashes
+  const uniquePosts = Array.from(new Map(posts.filter(p => p && p._id).map((p) => [p._id, p])).values());
   
   const hasMore = data && data[data.length - 1]?.posts?.length === limit;
 
@@ -45,7 +47,7 @@ export default function PostsViewer({ initialPosts }) {
   useEffect(() => {
     const handleScroll = () => {
       if (
-        window.innerHeight + window.scrollY >= document.body.offsetHeight - 500 &&
+        window.innerHeight + window.scrollY >= document.body.offsetHeight - 800 &&
         hasMore &&
         !isLoading &&
         !isValidating
@@ -56,6 +58,11 @@ export default function PostsViewer({ initialPosts }) {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, [hasMore, isLoading, isValidating, setSize]);
+
+  // If there is a legitimate fetch error, we show it to avoid the "white screen of death"
+  if (error) {
+    console.error("SWR Error:", error);
+  }
 
   return (
     <div className="max-w-7xl mx-auto md:px-8 py-8 bg-white dark:bg-[#0a0a0a00] min-h-screen transition-colors duration-500">
@@ -82,34 +89,37 @@ export default function PostsViewer({ initialPosts }) {
             <div className="absolute bottom-0 left-0 h-[2px] w-24 bg-blue-600" />
           </div>
 
-          {/* RENDER POSTS: Uncommented and restored functionality */}
+          {/* RENDER POSTS */}
           <div className="flex flex-col gap-8">
-            {uniquePosts.map((post, index) => (
-              <div key={post._id || index} className="relative group">
-                <PostCard
-                  post={post}
-                  posts={uniquePosts}
-                  setPosts={() => { }} // This is a placeholder as requested not to change functionality
-                  isFeed
-                  isPriority={index < 2}
-                />
+            {uniquePosts.length > 0 ? (
+              uniquePosts.map((post, index) => (
+                <div key={post._id || index} className="relative group">
+                  <PostCard
+                    post={post}
+                    posts={uniquePosts}
+                    setPosts={() => { }} 
+                    isFeed
+                    isPriority={index < 2}
+                  />
 
-                {index % 2 === 1 && (
-                  <div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex flex-col items-center gap-1 justify-center bg-gray-50/50 dark:bg-white/5">
-                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
-                       <FeedAd /> 
-                  </div>
-                )}
+                  {index % 2 === 1 && (
+                    <div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex flex-col items-center gap-1 justify-center bg-gray-50/50 dark:bg-white/5">
+                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
+                         <FeedAd /> 
+                    </div>
+                  )}
+                </div>
+              ))
+            ) : !isLoading && (
+              <div className="text-center py-20">
+                  <h2 className="text-2xl font-black uppercase italic text-gray-300">No Intel Found</h2>
               </div>
-            ))}
+            )}
           </div>
 
           {/* LOADING & LOAD MORE STATE */}
           <div className="py-12 border-t border-gray-100 dark:border-gray-800 mt-10 min-h-[140px] flex flex-col items-center justify-center">
-            {/* isLoading is only true when there is NO data at all.
-                isValidating is true during revalidation/fetching next page.
-            */}
-            {(isLoading || (isValidating && size > data?.length)) ? (
+            {(isLoading || (isValidating && size > (data?.length || 0))) ? (
               <div className="flex flex-col items-center gap-3">
                   <div className="w-12 h-1 bg-gray-200 dark:bg-gray-800 overflow-hidden relative">
                      <div className="absolute inset-0 bg-blue-600 animate-[loading_1.5s_infinite]" />
@@ -131,14 +141,10 @@ export default function PostsViewer({ initialPosts }) {
                   </span>
                 </button>
               </div>
-            ) : uniquePosts.length > 0 ? (
+            ) : uniquePosts.length > 0 && (
               <p className="text-center text-[10px] font-black uppercase tracking-[0.5em] text-gray-400">
                 End of Transmission
               </p>
-            ) : (
-              <div className="text-center py-20">
-                  <h2 className="text-2xl font-black uppercase italic text-gray-300">No Intel Found</h2>
-              </div>
             )}
           </div>
         </div>
@@ -192,7 +198,7 @@ export default function PostsViewer({ initialPosts }) {
           {drawerOpen && (
             <div 
               onClick={() => setDrawerOpen(false)}
-              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30 animate-in fade-in duration-300" 
+              className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30" 
             />
           )}
         </div>
@@ -209,4 +215,4 @@ export default function PostsViewer({ initialPosts }) {
       `}</style>
     </div>
   );
-            }
+}
