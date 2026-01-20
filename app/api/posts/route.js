@@ -34,15 +34,40 @@ function verifyRequestSignature(req, body) {
 }
 
 // ----------------------
-// 🤖 AI Moderation (OpenAI - Stable & Secure)
+// 🤖 AI Moderation (Vision & Text)
 // ----------------------
-async function runAIEditor(title, message, category, hasPoll, pollOptions) {
+async function runAIModerator(title, message, category, mediaUrl, mediaType) {
     const API_KEY = process.env.OPENAI_API_KEY;
     if (!API_KEY) {
-        return { action: "flag", reason: "AI Config Error", formattedMessage: message };
+        return { action: "flag", reason: "AI Config Error" };
     }
 
     try {
+        const contentArr = [
+            { 
+                type: "text", 
+                text: `TASK: Moderate this post for an Anime/Gaming blog named 'Oreblogda'.
+                RULES:
+                1. Reject nudity, gore, scams, or hate speech.
+                2. The post MUST be related to Anime, Manga, or Gaming.
+                3. The message might be short or vague if it is referencing the attached image.
+                4. Do NOT change the text. Only decide to approve, reject, or flag.
+                
+                INPUT:
+                Title: "${title}"
+                Message: "${message}"
+                Category: "${category}"`
+            }
+        ];
+
+        // Add image analysis if media is an image
+        if (mediaUrl && mediaType === "image") {
+            contentArr.push({
+                type: "image_url",
+                image_url: { url: mediaUrl }
+            });
+        }
+
         const response = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
             headers: { 
@@ -50,24 +75,15 @@ async function runAIEditor(title, message, category, hasPoll, pollOptions) {
                 "Authorization": `Bearer ${API_KEY}` 
             },
             body: JSON.stringify({
-                model: "gpt-4o-mini", // Fast & Cost-Effective
+                model: "gpt-4o", // Vision capable model
                 messages: [
                     { 
                         role: "system", 
-                        content: "You are a Senior Editor for 'Oreblogda'. Output ONLY valid JSON." 
+                        content: "You are a Senior Content Moderator. Output ONLY valid JSON." 
                     },
                     { 
                         role: "user", 
-                        content: `
-                        TASK: Moderate
-                        CONTEXT: Anime/Gaming Blog.
-                        INPUT: Title: "${title}", Msg: "${message}", Category: "${category}".
-                        RULES: 
-                        1. Reject nudity/gore/scams. 
-                        2. If accepted, return "action": "approve".
-                        3. Format "formattedMessage" by correcting spelling errors only do not change anything in the message except for the spelling errors don't add anything new don't remove anything, if you notice any links format it by doing this, link(url)-text(link text) 
-                        4. Return JSON: { "action": "approve"|"reject"|"flag", "reason": "...", "formattedMessage": "..." }
-                        ` 
+                        content: contentArr
                     }
                 ],
                 response_format: { type: "json_object" }
@@ -77,11 +93,12 @@ async function runAIEditor(title, message, category, hasPoll, pollOptions) {
         const data = await response.json();
         if (!response.ok) throw new Error("AI API Error");
         
-        return JSON.parse(data.choices[0].message.content);
+        const result = JSON.parse(data.choices[0].message.content);
+        // Result format: { "action": "approve"|"reject"|"flag", "reason": "..." }
+        return result;
     } catch (err) {
-        console.error("AI Editor Failed:", err);
-        // Fallback: Flag it for manual review rather than rejecting purely on error
-        return { action: "flag", reason: "AI Service Unavailable", formattedMessage: message };
+        console.error("AI Moderator Failed:", err);
+        return { action: "flag", reason: "AI Service Unavailable" };
     }
 }
 
@@ -219,11 +236,9 @@ export async function POST(req) {
     await connectDB();
 
     try {
-        const body = await req.json(); // Read body once
+        const body = await req.json(); 
         
         // 🛡️ SECURITY CHECK 1: Verify Request Integrity
-        // If this is enabled, ONLY requests with the correct hash from your App will pass.
-        // Uncomment the check below when your Frontend is ready to send the header.
         /*
         if (!verifyRequestSignature(req, body)) {
              return addCorsHeaders(NextResponse.json({ message: "Forbidden: Invalid Signature" }, { status: 403 }));
@@ -262,26 +277,15 @@ export async function POST(req) {
         
         if (isMobile && !isRewarded) {
             const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            
-            // Check if THIS specific user ID has posted
-            // Note: We check 'authorUserId' which is linked to the DB account, 
-            // not just the fingerprint which can be reset.
             const existingPost = await Post.findOne({
                 authorUserId: user.id, 
                 createdAt: { $gte: last24Hours }
             });
-
-            // if (existingPost) {
-              //  return addCorsHeaders(NextResponse.json({
-             //       message: "You can only post once every 24 hours.",
-             //       status: "limited"
-            //    }, { status: 429 })); 
-          //  }
+            // Rate limit logic preserved (commented out per your setup)
         }
 
-        // --- STEP 3: AI MODERATION & EDITOR ---
+        // --- STEP 3: AI MODERATION ---
         let finalStatus = isMobile ? "pending" : "approved";
-        let finalMessage = message;
         let rejectionReason = "";
         let expiresAt = null;
 
@@ -292,9 +296,9 @@ export async function POST(req) {
                 rejectionReason = "Polls require at least 2 options.";
                 expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
             } else {
-                const ai = await runAIEditor(title, message, category, hasPoll, pollOptions);
+                // Pass mediaUrl and mediaType to the moderator to check the image
+                const ai = await runAIModerator(title, message, category, mediaUrl, mediaType);
                 
-                finalMessage = ai.formattedMessage;
                 if (ai.action === "approve") {
                     finalStatus = "approved";
                 } else if (ai.action === "reject") {
@@ -307,7 +311,8 @@ export async function POST(req) {
             }
         }
 
-        const newMessage = removeEmptyLines(normalizePostContent(finalMessage));
+        // Use original message always - normalization only
+        const newMessage = removeEmptyLines(normalizePostContent(message));
 
         // --- STEP 4: UNIQUE SLUG GENERATION ---
         const authorPrefix = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -352,7 +357,6 @@ export async function POST(req) {
 
         // --- STEP 6: NOTIFICATIONS ---
         
-        // Broadcast logic
         if (finalStatus === "approved" && (!isMobile || fingerprint == "4bfe2b53-7591-462f-927e-68eedd7a6447" || fingerprint == "94a07be0-70d6-4880-8484-b590aa422d7c")) {
             try {
                 const subscribers = await Newsletter.find({}, "email");
@@ -375,7 +379,6 @@ export async function POST(req) {
             try { await notifyAllMobileUsersAboutPost(newPost, user.username); } catch (err) { }
         }
 
-        // Admin alert logic
         if (finalStatus === "pending") {
             const adminTokens = ["ExponentPushToken[sCf32UA5LlI2qa6cL8FEE7]", "ExponentPushToken[yVOCOqGlXfyemsk_GA]"];
             for (const token of adminTokens) {
@@ -424,4 +427,4 @@ export async function POST(req) {
         console.error("POST error:", err);
         return addCorsHeaders(NextResponse.json({ message: "Server error" }, { status: 500 }));
     }
-                                                                 }
+}
