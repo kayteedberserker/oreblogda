@@ -41,7 +41,7 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
     if (!API_KEY) {
         return { action: "flag", reason: "AI Config Error" };
     }
-    console.log("trying to check") 
+    
     try {
         const contentArr = [
             { 
@@ -92,7 +92,7 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
                 response_format: { type: "json_object" }
             })
         });
-         console.log(response) 
+          
         const data = await response.json();
         console.log(data) 
         
@@ -309,10 +309,10 @@ export async function POST(req) {
             } else {
                 // Pass mediaUrl and mediaType to the moderator
                 const ai = await runAIModerator(title, message, category, mediaUrl, mediaType);
-                console.log(ai) 
-                if (ai.action === "approve") {
+                 
+                if (ai.status === "approve") {
                     finalStatus = "approved";
-                } else if (ai.action === "reject") {
+                } else if (ai.status === "reject") {
                     finalStatus = "rejected";
                     rejectionReason = ai.reason;
                     expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
