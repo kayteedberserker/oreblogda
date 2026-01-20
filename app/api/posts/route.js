@@ -41,7 +41,7 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
     if (!API_KEY) {
         return { action: "flag", reason: "AI Config Error" };
     }
-
+    console.log("trying to check") 
     try {
         const contentArr = [
             { 
@@ -92,8 +92,10 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
                 response_format: { type: "json_object" }
             })
         });
-
+         console.log(response) 
         const data = await response.json();
+        console.log(data) 
+        
         
         if (!response.ok) {
             console.error("OpenAI API Error Details:", data.error);
@@ -101,6 +103,7 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
         }
         
         const result = JSON.parse(data.choices[0].message.content);
+        console.log(result) 
         // Result format expected: { "action": "approve"|"reject"|"flag", "reason": "..." }
         return result;
     } catch (err) {
