@@ -77,7 +77,7 @@ export default function PostsViewer({ initialPosts }) {
             <div className="absolute bottom-0 left-0 h-[2px] w-24 bg-blue-600" />
           </div>
 
-          <div className="flex flex-col gap-8">
+          {/* <div className="flex flex-col gap-8">
             {uniquePosts.map((post, index) => (
               <div key={post._id} className="relative group">
                 <PostCard
@@ -85,11 +85,9 @@ export default function PostsViewer({ initialPosts }) {
                   posts={uniquePosts}
                   setPosts={() => { }}
                   isFeed
-                  /* Optimization: Give priority to the first two images in the viewport */
                   isPriority={index < 2}
                 />
 
-                {/* AD TERMINAL SLOT */}
                 {index % 2 === 1 && (
                   <div className="my-10 w-full p-4 p-2 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex flex-col items-center gap-1 justify-center bg-gray-50/50 dark:bg-white/5">
                       <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
@@ -98,7 +96,7 @@ export default function PostsViewer({ initialPosts }) {
                 )}
               </div>
             ))}
-          </div>
+          </div>*/}
 
           {/* LOADING & LOAD MORE STATE */}
           {/* FIX: Added min-h-[140px] to keep the container stable during loading (Fixes CLS) */}
