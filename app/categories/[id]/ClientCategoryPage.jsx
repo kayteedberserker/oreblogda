@@ -18,24 +18,36 @@ export default function ClientCategoryPage({ category, initialPosts }) {
   // SWR Infinite Pagination
   const getKey = (pageIndex, previousPageData) => {
     if (!category) return null;
-    if (previousPageData && previousPageData.posts?.length < limit) return null;
+    // If we reached the end
+    if (previousPageData && (!previousPageData.posts || previousPageData.posts.length < limit)) return null;
     return `/api/posts?category=${category}&page=${pageIndex + 1}&limit=${limit}`;
   };
 
-  const { data, size, setSize, isLoading, isValidating } = useSWRInfinite(getKey, fetcher, {
-    initialData: [{ posts: initialPosts }],
+  /**
+   * FIX: Changed 'initialData' to 'fallbackData'.
+   * Wrapped initialPosts in the expected array structure for SWR Infinite.
+   */
+  const { data, size, setSize, isLoading, isValidating, error } = useSWRInfinite(getKey, fetcher, {
+    fallbackData: initialPosts ? [{ posts: initialPosts }] : [],
+    revalidateFirstPage: false,
+    persistSize: true,
   });
 
-  // Combine & deduplicate
-  const posts = data ? data.flatMap((p) => p.posts || []) : [];
-  const uniquePosts = Array.from(new Map(posts.map((p) => [p._id, p])).values());
+  // Combined, Flattened, and Deduplicated posts with safety checks
+  const posts = data ? data.flatMap((p) => (Array.isArray(p?.posts) ? p.posts : [])) : [];
+  
+  // Deduplicate by _id to prevent React "Duplicate Key" crashes
+  const uniquePosts = Array.from(
+    new Map(posts.filter(p => p && p._id).map((p) => [p._id, p])).values()
+  );
+
   const hasMore = data && data[data.length - 1]?.posts?.length === limit;
 
   // Infinite scroll
   useEffect(() => {
     const handleScroll = () => {
       if (
-        window.innerHeight + window.scrollY >= document.body.offsetHeight - 500 &&
+        window.innerHeight + window.scrollY >= document.body.offsetHeight - 800 &&
         hasMore &&
         !isLoading &&
         !isValidating
@@ -47,12 +59,12 @@ export default function ClientCategoryPage({ category, initialPosts }) {
     return () => window.removeEventListener("scroll", handleScroll);
   }, [hasMore, isLoading, isValidating, setSize]);
 
+  // If there's a client-side error, logging it helps find the culprit
+  if (error) console.error("SWR Infinite Error:", error);
+
   return (
     <div 
       ref={ref} 
-      initial="hidden" 
-      animate={controls} 
-      variants={variants} 
       className="bg-transparent rounded-2xl shadow-md"
     >
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 relative min-h-[75vh]">
@@ -61,11 +73,9 @@ export default function ClientCategoryPage({ category, initialPosts }) {
         <div className="absolute top-10 left-10 w-48 h-48 bg-blue-400 dark:bg-indigo-900 opacity-10 rounded-full blur-[100px] animate-pulse pointer-events-none" />
         <div className="absolute bottom-10 right-10 w-56 h-56 bg-blue-300 dark:bg-blue-700 opacity-10 rounded-full blur-[120px] animate-pulse pointer-events-none" />
 
-        {/* FIX: added items-start and overflow-visible to support sticky sidebar */}
         <div className="md:flex md:gap-12 items-start overflow-visible">
           
           {/* --- MAIN CONTENT AREA --- */}
-          {/* PERFORMANCE FIX: Removed max-h and overflow-y to stop Forced Reflows and enable sticky sidebar */}
           <div
             id="postsContainer"
             className="md:flex-1 pr-2 scrollbar-hide"
@@ -83,35 +93,40 @@ export default function ClientCategoryPage({ category, initialPosts }) {
             </div>
 
             <div className="flex flex-col gap-6">
-              {uniquePosts.map((post, index) => (
-                <div key={post._id} className="break-inside-avoid">
-                  <PostCard 
-                    post={post} 
-                    posts={uniquePosts} 
-                    setPosts={() => { }} 
-                    isFeed 
-                    isPriority={index < 2} // Optimization for LCP
-                  />
-                  
-                  {/* Ad Placeholder logic kept consistent */}
-                  {(index + 1) % 2 === 0 && (
-                     <div className="my-10 w-full p-4 p-2 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex flex-col items-center gap-1 justify-center bg-gray-50/50 dark:bg-white/5">
-                      <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
-                       <FeedAd /> 
+              {uniquePosts.length > 0 ? (
+                uniquePosts.map((post, index) => (
+                  <div key={post._id || index} className="break-inside-avoid">
+                    <PostCard 
+                      post={post} 
+                      posts={uniquePosts} 
+                      setPosts={() => { }} 
+                      isFeed 
+                      isPriority={index < 2} 
+                    />
+                    
+                    {(index + 1) % 2 === 0 && (
+                       <div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex flex-col items-center gap-1 justify-center bg-gray-50/50 dark:bg-white/5">
+                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
+                         <FeedAd /> 
+                      </div>
+                    )}
                   </div>
-                  )}
+                ))
+              ) : !isLoading && (
+                <div className="text-center py-20 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-3xl w-full">
+                  <p className="text-gray-500 font-black uppercase italic tracking-widest">
+                    No posts found in <span className="text-blue-600">{category}</span>
+                  </p>
                 </div>
-              ))}
+              )}
             </div>
 
             {/* --- LOADING & FEEDBACK --- */}
-            {/* FIX: Added min-h-[140px] to stabilize layout during loading (Fixes CLS) */}
             <div className="py-12 min-h-[140px] flex flex-col items-center justify-center">
-              {(isLoading || isValidating) ? (
+              {(isLoading || (isValidating && size > (data?.length || 0))) ? (
                 <div className="flex flex-col items-center gap-3">
-                   {/* Custom Loading Animation per instructions */}
-                   <div className="w-16 h-1 bg-gray-100 dark:bg-gray-800 overflow-hidden rounded-full">
-                      <div className="h-full bg-blue-600 animate-[loading_1.5s_infinite]" />
+                   <div className="w-16 h-1 bg-gray-100 dark:bg-gray-800 overflow-hidden rounded-full relative">
+                      <div className="absolute inset-0 bg-blue-600 animate-[loading_1.5s_infinite]" />
                    </div>
                    <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 animate-pulse">
                       Retrieving Data...
@@ -130,22 +145,15 @@ export default function ClientCategoryPage({ category, initialPosts }) {
                     </span>
                   </button>
                 </div>
-              ) : uniquePosts.length > 0 ? (
+              ) : uniquePosts.length > 0 && (
                 <p className="text-center text-[10px] font-black uppercase tracking-[0.5em] text-gray-400 mt-4">
                   END OF ARCHIVE
                 </p>
-              ) : (
-                <div className="text-center py-20 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-3xl w-full">
-                  <p className="text-gray-500 font-black uppercase italic tracking-widest">
-                    No posts found in <span className="text-blue-600">{category}</span>
-                  </p>
-                </div>
               )}
             </div>
           </div>
 
           {/* --- DESKTOP SIDEBAR --- */}
-          {/* FIX: h-fit and top-24 ensure the sidebar sticks correctly */}
           <aside className="hidden md:flex flex-col gap-6 md:w-[350px] lg:w-[450px] sticky top-24 h-fit">
             <div className="flex items-center gap-2 mb-4">
               <div className="h-1 w-4 bg-blue-600" />
@@ -154,7 +162,7 @@ export default function ClientCategoryPage({ category, initialPosts }) {
             <RecentPollsCard />
           </aside>
 
-          {/* --- TACTICAL MINI DRAWER (Mobile Only) --- */}
+          {/* --- TACTICAL MINI DRAWER --- */}
           <div className="md:hidden">
             <button
               aria-label="Open drawer"
@@ -169,7 +177,6 @@ export default function ClientCategoryPage({ category, initialPosts }) {
               </div>
             </button>
 
-            {/* Drawer Sliding Panel */}
             <div
               className={`fixed top-0 right-0 z-40 h-full w-[85%] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-xl border-l border-blue-600/20 p-6 shadow-[-20px_0_50px_rgba(0,0,0,0.3)] transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${
                 drawerOpen ? "translate-x-0" : "translate-x-full"
@@ -184,8 +191,7 @@ export default function ClientCategoryPage({ category, initialPosts }) {
               </div>
             </div>
 
-            {/* Backdrop Blur */}
-            {drawerOpen && (
+            {if (drawerOpen) (
               <div 
                 onClick={() => setDrawerOpen(false)}
                 className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30" 
@@ -194,7 +200,6 @@ export default function ClientCategoryPage({ category, initialPosts }) {
           </div>
         </div>
 
-        {/* Global Styles for this component */}
         <style jsx>{`
           .scrollbar-hide::-webkit-scrollbar { width: 0px; }
           .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
@@ -202,12 +207,6 @@ export default function ClientCategoryPage({ category, initialPosts }) {
           @keyframes loading {
             0% { transform: translateX(-100%); }
             100% { transform: translateX(100%); }
-          }
-
-          div[style*="overflow-y: auto"]::-webkit-scrollbar { width: 4px; }
-          div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb {
-            background-color: #2563eb;
-            border-radius: 10px;
           }
         `}</style>
       </div>
