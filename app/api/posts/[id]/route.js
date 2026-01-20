@@ -1,269 +1,246 @@
-// PATCH — like, comment, vote, share, view
 import { NextResponse } from "next/server";
 import connectDB from "@/app/lib/mongodb";
 import Post from "@/app/models/PostModel";
 import Notification from "@/app/models/NotificationModel";
-import { sendPushNotification } from "@/app/lib/pushNotifications"; // 👈 Added utility
-import MobileUser from "@/app/models/MobileUserModel"; // 👈 Added for push lookup
+import { sendPushNotification } from "@/app/lib/pushNotifications";
+import MobileUser from "@/app/models/MobileUserModel";
+import crypto from "crypto";
 
-function getClientIp(req) {
-	const xfwd = req.headers?.get
-		? req.headers.get("x-forwarded-for")
-		: req.headers?.["x-forwarded-for"];
+// ----------------------
+// 🛡️ SECURITY: Request Signature Verification
+// ----------------------
+function verifyRequestSignature(req, body) {
+    const signature = req.headers.get("x-oreblogda-signature");
+    const SECRET = process.env.APP_INTERNAL_SECRET; 
+    
+    if (!SECRET) return true; 
+    if (!signature) return false;
 
-	const cf = req.headers?.get
-		? req.headers.get("cf-connecting-ip")
-		: req.headers?.["cf-connecting-ip"];
+    const expectedSignature = crypto
+        .createHmac("sha256", SECRET)
+        .update(JSON.stringify(body))
+        .digest("hex");
 
-	const xr = req.headers?.get
-		? req.headers.get("x-real-ip")
-		: req.headers?.["x-real-ip"];
-
-	let ip = (xfwd && xfwd.split(",")[0].trim()) || cf || xr;
-
-	if (!ip && req.socket?.remoteAddress) {
-		ip = req.socket.remoteAddress;
-	}
-
-	if (ip && ip.includes("::ffff:")) ip = ip.split("::ffff:").pop();
-	return ip || "unknown";
+    return signature === expectedSignature;
 }
 
+// ----------------------
+// 🌐 UTILITY: Get Client IP
+// ----------------------
+function getClientIp(req) {
+    const xfwd = req.headers.get("x-forwarded-for");
+    const cf = req.headers.get("cf-connecting-ip");
+    const xr = req.headers.get("x-real-ip");
+
+    let ip = (xfwd && xfwd.split(",")[0].trim()) || cf || xr;
+    if (!ip) ip = "unknown";
+    if (ip.includes("::ffff:")) ip = ip.split("::ffff:").pop();
+    return ip;
+}
+
+// ----------------------
+// 🤖 UTILITY: Bot Detection
+// ----------------------
+const isBotRequest = async (req, ip) => {
+    if (!ip || ip === "unknown") return false;
+    const botKeywords = [
+        "facebookexternalhit", "Facebot", "Facebook", "Google", "Googlebot", "Bingbot", "Twitterbot",
+        "LinkedInBot", "Slackbot", "Discordbot", "Pingdom", "AhrefsBot", "SemrushBot",
+        "MJ12bot", "Baiduspider", "YandexBot"
+    ];
+    const userAgent = req.headers.get("user-agent") || "";
+    const isBotUA = botKeywords.some(bot => userAgent.toLowerCase().includes(bot.toLowerCase()));
+    const botIPPrefixes = [
+        "66.102.", "66.249.", "64.233.", "34.", "65.0", "74.125.", "142.250.", "172.217.",
+        "209.85.", "216.58.", "31.13.", "66.220.", "69.171.", "15.206.", "52.66.", "13.",
+        "43.", "3.", "157.240.", "173.252.", "18.", "17.", "::1", "198.7.237.", "102.67.", "204.", "137.184."
+    ];
+    const isBotIP = botIPPrefixes.some(prefix => ip.startsWith(prefix));
+    return isBotUA || isBotIP;
+};
+
+// ----------------------
+// Helper for CORS
+// ----------------------
+function addCorsHeaders(response) {
+    response.headers.set("Access-Control-Allow-Origin", "*");
+    response.headers.set("Access-Control-Allow-Methods", "GET,PATCH,OPTIONS");
+    response.headers.set("Access-Control-Allow-Headers", "Content-Type,Authorization,x-oreblogda-signature");
+    return response;
+}
+
+export async function OPTIONS() {
+    return addCorsHeaders(new NextResponse(null, { status: 204 }));
+}
+
+// ----------------------
+// PATCH: Handle Likes, Views, Shares, Votes
+// ----------------------
 export async function PATCH(req, { params }) {
     await connectDB();
-    const resolvedParams = await params; 
+    const resolvedParams = await params;
     const { id } = resolvedParams;
-    
+
     try {
-        const { action, payload, fingerprint } = await req.json();
-        const post = await Post.findById(id);
-
-        if (!post) {
-            return NextResponse.json({ message: "Post not found" }, { status: 404 });
+        const body = await req.json();
+        
+        // 🛡️ SECURITY: Uncomment when Frontend sends the signature header
+        /*
+        if (!verifyRequestSignature(req, body)) {
+             return addCorsHeaders(NextResponse.json({ message: "Forbidden: Invalid Signature" }, { status: 403 }));
         }
+        */
 
+        const { action, payload, fingerprint } = body;
         const ip = getClientIp(req);
-
-        /* ===========================
-            BOT CHECK FUNCTION
-        =========================== */
-        const isBotRequest = async (req, ip) => {
-            if (!ip) return false;
-            const botKeywords = [
-                "facebookexternalhit", "Facebot", "Facebook", "Google", "Googlebot", "Bingbot", "Twitterbot",
-                "LinkedInBot", "Slackbot", "Discordbot", "Pingdom", "AhrefsBot", "SemrushBot",
-                "MJ12bot", "Baiduspider", "YandexBot"
-            ];
-            const userAgent = req.headers.get("user-agent") || "";
-            const isBotUA = botKeywords.some(bot => userAgent.toLowerCase().includes(bot.toLowerCase()));
-            const botIPPrefixes = [
-                "66.102.", "66.249.", "64.233.", "34.", "65.0", "74.125.", "142.250.", "172.217.",
-                "209.85.", "216.58.", "31.13.", "66.220.", "69.171.", "15.206.", "52.66.", "13.",
-                "43.", "3.", "157.240.", "173.252.", "18.", "17.", "::1",
-                "198.7.237.195", "198.7.237.196", "198.7.237.197", "102.67.30.228", "198.7.237.198",
-                "204.", "198.7.237.199", "137.184.", "50.18.", "54.", "35.", "23.27", "13.5", "196.49.26.134", "192.178.", "69.63.18"
-            ];
-            const isBotIP = botIPPrefixes.some(prefix => ip.startsWith(prefix));
-            return isBotUA || isBotIP;
-        };
-
         const isBot = await isBotRequest(req, ip);
 
-        /* ===========================
-            VOTE LOGIC
-        =========================== */
+        // --- 1. VOTE LOGIC ---
         if (action === "vote") {
-            const { selectedOptions } = payload;
-            if (!post.poll || !Array.isArray(post.poll.options)) {
-                return NextResponse.json({ message: "Poll not found" }, { status: 400 });
+            const { selectedOptions } = payload; // Array of indices
+
+            // Atomic update: only proceed if fingerprint not in 'voters'
+            const post = await Post.findOneAndUpdate(
+                { _id: id, voters: { $ne: fingerprint } },
+                { $addToSet: { voters: fingerprint } },
+                { new: true }
+            );
+
+            if (!post) {
+                return addCorsHeaders(NextResponse.json({ message: "Already voted or post missing" }, { status: 400 }));
             }
-            if (post.voters?.includes(fingerprint)) {
-                return NextResponse.json({ message: "Already voted" }, { status: 400 });
-            }
 
-            post.poll.options = post.poll.options.map((option, index) => {
-                const o = option.toObject ? option.toObject() : option;
-                return selectedOptions.includes(index)
-                    ? { ...o, votes: (o.votes || 0) + 1 }
-                    : o;
-            });
-
-            post.voters = [...(post.voters || []), fingerprint];
-            post.markModified("poll");
-
-            // Notify author if not voting on own post
-            if (post.authorId !== fingerprint) {
-                const message = `Someone voted on your post: "${post.title.substring(0, 15)}..."`;
-
-                await Notification.create({
-                    recipientId: post.authorId,
-                    senderName: "Someone",
-                    type: "like",
-                    postId: post._id,
-                    message
-                });
-
-                const author = await MobileUser.findOne({ deviceId: post.authorId });
-                if (author?.pushToken) {
-                    // Added type: "post_detail" to ensure frontend routes correctly
-                    await sendPushNotification(author.pushToken, "New Vote! ✅", message, { 
-                        postId: post._id.toString(),
-                        type: "post_detail" 
-                    });
+            // Safely increment poll options
+            if (post.poll && Array.isArray(post.poll.options)) {
+                for (const index of selectedOptions) {
+                    if (post.poll.options[index]) {
+                        await Post.updateOne(
+                            { _id: id },
+                            { $inc: { [`poll.options.${index}.votes`]: 1 } }
+                        );
+                    }
                 }
             }
 
-            await post.save();
-            return NextResponse.json({ message: "Vote added", post }, { status: 200 });
-        }
-
-        /* ===========================
-            LIKE LOGIC
-        =========================== */
-        if (action === "like") {
-            const alreadyLiked = post.likes.some(l => l.fingerprint === fingerprint);
-            if (alreadyLiked) {
-                return NextResponse.json({ message: "You have liked this post" }, { status: 400 });
-            }
-
-            post.likes.push({ fingerprint, date: new Date() });
-            await post.save();
-
-            // Notify author if not liking own post
+            // Notification logic
             if (post.authorId !== fingerprint) {
-                const message = `Someone liked your post: "${post.title.substring(0, 15)}..."`;
-
-                await Notification.create({
-                    recipientId: post.authorId,
-                    senderName: "Someone",
-                    type: "like",
-                    priority: "high",
-                    postId: post._id,
-                    message
-                });
-
+                const msg = `Someone voted on your post: "${post.title.substring(0, 15)}..."`;
+                await Notification.create({ recipientId: post.authorId, senderName: "Someone", type: "like", postId: post._id, message: msg });
                 const author = await MobileUser.findOne({ deviceId: post.authorId });
                 if (author?.pushToken) {
-                    // Added type: "post_detail" to ensure frontend routes correctly
-                    await sendPushNotification(author.pushToken, "New Like! ❤️", message, { 
-                        postId: post._id.toString(),
-                        type: "post_detail"
-                    });
+                    await sendPushNotification(author.pushToken, "New Vote! ✅", msg, { postId: post._id.toString(), type: "post_detail" });
+                }
+            }
+
+            return addCorsHeaders(NextResponse.json({ message: "Vote added" }, { status: 200 }));
+        }
+
+        // --- 2. LIKE LOGIC ---
+        if (action === "like") {
+            const updatedPost = await Post.findOneAndUpdate(
+                { _id: id, "likes.fingerprint": { $ne: fingerprint } },
+                { $push: { likes: { fingerprint, date: new Date() } } },
+                { new: true }
+            );
+
+            if (!updatedPost) {
+                return addCorsHeaders(NextResponse.json({ message: "Already liked" }, { status: 400 }));
+            }
+
+            // Notify Author
+            if (updatedPost.authorId !== fingerprint) {
+                const msg = `Someone liked your post: "${updatedPost.title.substring(0, 15)}..."`;
+                await Notification.create({ recipientId: updatedPost.authorId, senderName: "Someone", type: "like", priority: "high", postId: updatedPost._id, message: msg });
+                const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
+                if (author?.pushToken) {
+                    await sendPushNotification(author.pushToken, "New Like! ❤️", msg, { postId: updatedPost._id.toString(), type: "post_detail" });
                 }
             }
 
             // Milestones
             const milestones = [5, 10, 25, 50, 100];
-            if (milestones.includes(post.likes.length)) {
-                const milestoneMsg = `🔥 Trending! Your post reached ${post.likes.length} likes!`;
-
-                await Notification.create({
-                    recipientId: post.authorId,
-                    senderName: "System",
-                    type: "trending",
-                    postId: post._id,
-                    message: milestoneMsg
-                });
-
-                const author = await MobileUser.findOne({ deviceId: post.authorId });
+            if (milestones.includes(updatedPost.likes.length)) {
+                const mMsg = `🔥 Trending! Your post reached ${updatedPost.likes.length} likes!`;
+                await Notification.create({ recipientId: updatedPost.authorId, senderName: "System", type: "trending", postId: updatedPost._id, message: mMsg });
+                const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
                 if (author?.pushToken) {
-                    await sendPushNotification(author.pushToken, "Going Viral!", milestoneMsg, { 
-                        postId: post._id.toString(),
-                        type: "post_detail"
-                    });
+                    await sendPushNotification(author.pushToken, "Going Viral!", mMsg, { postId: updatedPost._id.toString(), type: "post_detail" });
                 }
             }
 
-            return NextResponse.json(post, { status: 200 });
+            return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
         }
 
-        /* ===========================
-            SHARE LOGIC
-        =========================== */
+        // --- 3. SHARE LOGIC ---
         if (action === "share") {
-            post.shares += 1;
-            await post.save();
-            return NextResponse.json(post, { status: 200 });
+            const updatedPost = await Post.findByIdAndUpdate(id, { $inc: { shares: 1 } }, { new: true });
+            return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
         }
 
-        /* ===========================
-            VIEW LOGIC
-        =========================== */
+        // --- 4. VIEW LOGIC ---
         if (action === "view") {
-            post.viewsIPs = post.viewsIPs || [];
-            let country = "Unknown", city = "Unknown", timezone = "";
+            let country = "Unknown", city = "Unknown", timezone = "Unknown";
 
-            try {
-                const response = await fetch(`https://ipinfo.io/${ip}/json`);
-                const data = await response.json();
-                country = data.country || "Unknown";
-                city = data.city || "Unknown";
-                timezone = data.timezone || "Unknown";
-            } catch (err) {
-                console.log("Geo lookup failed:", err);
+            if (!isBot && fingerprint) {
+                // Geo Lookup
+                try {
+                    const geoRes = await fetch(`https://ipinfo.io/${ip}/json?token=${process.env.IPINFO_TOKEN}`);
+                    const geoData = await geoRes.json();
+                    country = geoData.country || "Unknown";
+                    city = geoData.city || "Unknown";
+                    timezone = geoData.timezone || "Unknown";
+                } catch (err) { console.log("Geo lookup failed"); }
+
+                // Unique View Check using $addToSet for fingerprint tracking
+                const updatedPost = await Post.findOneAndUpdate(
+                    { _id: id, viewsFingerprints: { $ne: fingerprint } },
+                    { 
+                        $inc: { views: 1 },
+                        $addToSet: { viewsFingerprints: fingerprint },
+                        $push: { viewsData: { visitorId: fingerprint, ip, country, city, timezone, timestamp: new Date() } }
+                    },
+                    { new: true }
+                );
+
+                if (updatedPost) return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
             }
-            if (!isBot && fingerprint && !post.viewsIPs.includes(fingerprint)) {
-                
-                post.views += 1;
-                post.viewsIPs.push(fingerprint);
-
-                post.viewsData = post.viewsData || [];
-                post.viewsData.push({
-                    visitorId: fingerprint,
-                    ip, country, city, timezone,
-                    timestamp: new Date()
-                });
-            }
-
-            await post.save();
             
-            return NextResponse.json(post, { status: 200 });
+            // Fallback if already viewed or bot
+            const post = await Post.findById(id);
+            return addCorsHeaders(NextResponse.json(post, { status: 200 }));
         }
 
-        return NextResponse.json({ message: "Invalid action" }, { status: 400 });
+        return addCorsHeaders(NextResponse.json({ message: "Invalid action" }, { status: 400 }));
 
     } catch (err) {
         console.error("PATCH error:", err);
-        return NextResponse.json({ message: "Server error", error: err.message }, { status: 500 });
+        return addCorsHeaders(NextResponse.json({ message: "Server error", error: err.message }, { status: 500 }));
     }
 }
 
-
-
-
-
-
-
-// GET: fetch single post by ID
+// ----------------------
+// GET: Fetch single post by ID or Slug
+// ----------------------
 export async function GET(req, { params }) {
-	try {
-		await connectDB();
+    try {
+        await connectDB();
+        const resolvedParams = await params;
+        const { id } = resolvedParams;
+        if (!id) return addCorsHeaders(NextResponse.json({ message: "Post identifier required" }, { status: 400 }));
 
-		const resolvedParams = await params;  // unwrap the Promise
-		const { id } = resolvedParams;
-		if (!id) 
-			return NextResponse.json({ message: "Post Slug is required" }, { status: 400 });
+        let post;
+        if (id.includes("-")) {
+            post = await Post.findOne({ slug: id });
+        } else {
+            post = await Post.findById(id);
+        }
 
-		let post;
-		if (id.includes("-")) {
-			post = await Post.findOne({ slug: id });
-		} else {
-			post = await Post.findById(id);
-		}
+        if (!post) return addCorsHeaders(NextResponse.json({ message: "Post not found" }, { status: 404 }));
 
-		if (!post) 
-			return NextResponse.json({ message: "Post not found" }, { status: 404 });
+        const postCount = await Post.countDocuments({ authorId: post.authorId });
+        return addCorsHeaders(NextResponse.json({ ...post.toObject(), authorPostCount: postCount }));
 
-		// Get the full post count of the author
-		const postCount = await Post.countDocuments({ authorId: post.authorId });
-
-		// Return post + author's total post count
-		return NextResponse.json({ ...post.toObject(), authorPostCount: postCount });
-
-	} catch (err) {
-		console.error(err);
-		return NextResponse.json({ message: "Server error", error: err.message }, { status: 500 });
-	}
+    } catch (err) {
+        return addCorsHeaders(NextResponse.json({ message: "Server error", error: err.message }, { status: 500 }));
+    }
 }
-
-
