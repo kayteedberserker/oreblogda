@@ -302,7 +302,11 @@ export async function POST(req) {
 
         if (isMobile) {
             // Hard Validation for Polls
-            if (hasPoll && (!pollOptions || pollOptions.length < 2)) {
+            if(category == "polls" && !hasPoll) {
+             finalStatus = "rejected";
+                rejectionReason = "Polls category are for posts that includes polls";
+                expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000)
+            }else if (hasPoll && (!pollOptions || pollOptions.length < 2)) {
                 finalStatus = "rejected";
                 rejectionReason = "Polls require at least 2 options.";
                 expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
