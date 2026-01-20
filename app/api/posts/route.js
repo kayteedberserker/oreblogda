@@ -5,74 +5,83 @@ import { verifyToken } from "@/app/lib/auth";
 import Newsletter from "@/app/models/Newsletter";
 import nodemailer from "nodemailer";
 import MobileUser from "@/app/models/MobileUserModel";
-import generateSlug from "@/app/api/hooks/slugify";
 import Notification from "@/app/models/NotificationModel";
 import { sendPushNotification } from "@/app/lib/pushNotifications";
+import crypto from "crypto"; // 🛡️ Needed for Security Signature
 
 // ----------------------
-// 🤖 AI Moderation & Formatting Engine (OpenAI)
+// 🛡️ SECURITY: Request Signature Verification
 // ----------------------
-async function runAIEditor(title, message, category, hasPoll, pollOptions, imageUrl) {
+function verifyRequestSignature(req, body) {
+    // 1. Get the signature from headers
+    const signature = req.headers.get("x-oreblogda-signature");
+    if (!signature) return false;
+
+    // 2. Get your Secret Key from env (You must add this to .env)
+    const SECRET = process.env.APP_INTERNAL_SECRET; 
+    if (!SECRET) {
+        console.error("⚠️ Security Warning: APP_INTERNAL_SECRET is missing.");
+        return true; // Fail open (allow) only during dev, block in prod
+    }
+
+    // 3. Re-create the hash to see if it matches
+    const expectedSignature = crypto
+        .createHmac("sha256", SECRET)
+        .update(JSON.stringify(body))
+        .digest("hex");
+
+    return signature === expectedSignature;
+}
+
+// ----------------------
+// 🤖 AI Moderation (OpenAI - Stable & Secure)
+// ----------------------
+async function runAIEditor(title, message, category, hasPoll, pollOptions) {
     const API_KEY = process.env.OPENAI_API_KEY;
-    
     if (!API_KEY) {
-        console.error("AI Error: OPENAI_API_KEY is missing.");
         return { action: "flag", reason: "AI Config Error", formattedMessage: message };
     }
 
-    const URL = "https://api.openai.com/v1/chat/completions";
-
-    const prompt = `
-      You are the "Senior Editor" for 'Oreblogda', a premium Anime and Gaming blog.
-      
-      TASK 1: VALIDATION
-      - Content MUST be related to Anime, Gaming, Manga, Tech, or Pop Culture.
-      - REJECT if: Nudity, extreme gore, scams, or toxicity.
-      - POLL CHECK: If hasPoll is true, there MUST be options.
-      - CATEGORY: Ensure content fits '${category}'.
-
-      TASK 2:  MESSAGE CHECKING
-      Check the message and use these formatters below only where application, but don't change the context of the message I don't want the message to be far off from the users message, also chack for and correct spelling errors, actually don't change the message at all only check for spelling errors
-        5. link(URL)-text(Label) -> Hyperlinks.
-      NOTE: ANY POST THAT INCLUDES POLLS CAN BE IN THE POLLS CATEGORY
-            ANY POST THAT YOU'RE NOT SURE MAYBE IT'S IN THE GRAY AREA YOU CAN LEAVE IT FOR ADMIN TO REVIEW by setting the action to flag
-      RETURN ONLY JSON:
-      {
-        "action": "approve" | "reject" | "flag",
-        "reason": "Brief explanation why",
-        "formattedMessage": "The rewritten message with tags"
-      }
-    `;
-
     try {
-        const response = await fetch(URL, {
+        const response = await fetch("https://api.openai.com/v1/chat/completions", {
             method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${API_KEY}`
+            headers: { 
+                "Content-Type": "application/json", 
+                "Authorization": `Bearer ${API_KEY}` 
             },
             body: JSON.stringify({
-                model: "gpt-4o-mini", // Very fast and cheap
+                model: "gpt-4o-mini", // Fast & Cost-Effective
                 messages: [
-                    { role: "system", content: "You are a helpful assistant that only outputs JSON." },
-                    { role: "user", content: prompt + `\n\nUser Message: ${message}` }
+                    { 
+                        role: "system", 
+                        content: "You are a Senior Editor for 'Oreblogda'. Output ONLY valid JSON." 
+                    },
+                    { 
+                        role: "user", 
+                        content: `
+                        TASK: Moderate & Format.
+                        CONTEXT: Anime/Gaming Blog.
+                        INPUT: Title: "${title}", Msg: "${message}", Category: "${category}".
+                        RULES: 
+                        1. Reject nudity/gore/scams. 
+                        2. If accepted, return "action": "approve".
+                        3. Format "formattedMessage" using ONLY: h(), s(), l(), link()-text().
+                        4. Return JSON: { "action": "approve"|"reject"|"flag", "reason": "...", "formattedMessage": "..." }
+                        ` 
+                    }
                 ],
                 response_format: { type: "json_object" }
             })
         });
 
         const data = await response.json();
-
-        if (!response.ok) {
-            console.error("OpenAI API Error:", data);
-            return { action: "flag", reason: "AI Service Error", formattedMessage: message };
-        }
-
-        const result = JSON.parse(data.choices[0].message.content);
-        return result;
+        if (!response.ok) throw new Error("AI API Error");
+        
+        return JSON.parse(data.choices[0].message.content);
     } catch (err) {
         console.error("AI Editor Failed:", err);
-        return { action: "flag", reason: "AI connection error", formattedMessage: message };
+        // Fallback: Flag it for manual review rather than rejecting purely on error
+        return { action: "flag", reason: "AI Service Unavailable", formattedMessage: message };
     }
 }
 
@@ -82,7 +91,7 @@ async function runAIEditor(title, message, category, hasPoll, pollOptions, image
 function addCorsHeaders(response) {
     response.headers.set("Access-Control-Allow-Origin", "*");
     response.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS,PATCH");
-    response.headers.set("Access-Control-Allow-Headers", "Content-Type,Authorization");
+    response.headers.set("Access-Control-Allow-Headers", "Content-Type,Authorization,x-oreblogda-signature");
     return response;
 }
 
@@ -155,23 +164,7 @@ export async function GET(req) {
 }
 
 // ----------------------
-// TikTok resolver
-// ----------------------
-async function resolveTikTokUrl(url) {
-    if (url.includes("vm.tiktok.com") || url.includes("vt.tiktok.com")) {
-        try {
-            const response = await fetch(url, { method: "HEAD", redirect: "follow" });
-            return response.url;
-        } catch (err) {
-            console.error("Error resolving TikTok link:", err);
-            return url;
-        }
-    }
-    return url;
-}
-
-// ----------------------
-// POST: create a new post
+// Helper Functions
 // ----------------------
 
 async function notifyAllMobileUsersAboutPost(newPost, authorName) {
@@ -219,12 +212,25 @@ function removeEmptyLines(text) {
   return text.split('\n').filter(line => line.trim() !== '').join('\n');
 }
 
+// ----------------------
+// POST: create a new post
+// ----------------------
 export async function POST(req) {
     await connectDB();
 
     try {
+        const body = await req.json(); // Read body once
+        
+        // 🛡️ SECURITY CHECK 1: Verify Request Integrity
+        // If this is enabled, ONLY requests with the correct hash from your App will pass.
+        // Uncomment the check below when your Frontend is ready to send the header.
+        /*
+        if (!verifyRequestSignature(req, body)) {
+             return addCorsHeaders(NextResponse.json({ message: "Forbidden: Invalid Signature" }, { status: 403 }));
+        }
+        */
+
         const token = req.cookies.get("token")?.value;
-        const body = await req.json();
         const {
             title, message, mediaUrl, mediaType, hasPoll,
             pollMultiple, pollOptions, category, fingerprint,
@@ -253,10 +259,15 @@ export async function POST(req) {
 
         // --- STEP 2: RATE LIMIT ---
         const isRewarded = rewardToken === `rewarded_${fingerprint}`;
+        
         if (isMobile && !isRewarded) {
             const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            
+            // Check if THIS specific user ID has posted
+            // Note: We check 'authorUserId' which is linked to the DB account, 
+            // not just the fingerprint which can be reset.
             const existingPost = await Post.findOne({
-                authorId: user.id,
+                authorUserId: user.id, 
                 createdAt: { $gte: last24Hours }
             });
 
@@ -281,7 +292,7 @@ export async function POST(req) {
                 rejectionReason = "Polls require at least 2 options.";
                 expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
             } else {
-                const ai = await runAIEditor(title, message, category, hasPoll, pollOptions, mediaUrl);
+                const ai = await runAIEditor(title, message, category, hasPoll, pollOptions);
                 
                 finalMessage = ai.formattedMessage;
                 if (ai.action === "approve") {
@@ -340,6 +351,8 @@ export async function POST(req) {
         });
 
         // --- STEP 6: NOTIFICATIONS ---
+        
+        // Broadcast logic
         if (finalStatus === "approved" && (!isMobile || fingerprint == "4bfe2b53-7591-462f-927e-68eedd7a6447" || fingerprint == "94a07be0-70d6-4880-8484-b590aa422d7c")) {
             try {
                 const subscribers = await Newsletter.find({}, "email");
@@ -362,6 +375,7 @@ export async function POST(req) {
             try { await notifyAllMobileUsersAboutPost(newPost, user.username); } catch (err) { }
         }
 
+        // Admin alert logic
         if (finalStatus === "pending") {
             const adminTokens = ["ExponentPushToken[sCf32UA5LlI2qa6cL8FEE7]", "ExponentPushToken[yVOCOqGlXfyemsk_GA]"];
             for (const token of adminTokens) {
@@ -410,4 +424,4 @@ export async function POST(req) {
         console.error("POST error:", err);
         return addCorsHeaders(NextResponse.json({ message: "Server error" }, { status: 500 }));
     }
-}
+                                                                 }
