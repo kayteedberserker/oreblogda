@@ -47,8 +47,7 @@ export default async function HomePage() {
       {/* --- LAYER 3: THE CONTENT ENGINE --- */}
       <div className="relative z-1">
         {/* Pass SSR posts to PostsViewer (which is a Client Component) */}
-{/*<PostsViewer initialPosts={initialPosts} />*/}
-        Hi
+         <PostsViewer initialPosts={initialPosts} />
       </div>
 
       {/* --- LAYER 4: SYSTEM MARQUEE DECOR --- */}
