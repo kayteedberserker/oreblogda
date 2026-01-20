@@ -65,7 +65,7 @@ async function runAIEditor(title, message, category, hasPoll, pollOptions) {
                         RULES: 
                         1. Reject nudity/gore/scams. 
                         2. If accepted, return "action": "approve".
-                        3. Format "formattedMessage" using ONLY: h(), s(), l(), link()-text().
+                        3. Format "formattedMessage" by correcting spelling errors, if you notice any links format it by doing this, link(url)-text(link text) 
                         4. Return JSON: { "action": "approve"|"reject"|"flag", "reason": "...", "formattedMessage": "..." }
                         ` 
                     }
