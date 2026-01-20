@@ -48,10 +48,10 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
                 type: "text", 
                 text: `TASK: Moderate this post for an Anime/Gaming blog named 'Oreblogda'.
                 RULES:
-                1. Reject nudity, gore, scams, or hate speech.
+                1. Reject nudity, gore, scams, or hate speech, try your best to get the meaning of the context before rejecting.
                 2. The post MUST be related to Anime, Manga, or Gaming.
                 3. The message might be short or vague if it is referencing the attached image.
-                4. Do NOT change the text. Only decide to approve, reject, or flag.
+                4. Do NOT change the text. Only decide to approve, reject, or flag. flag any content that seems borderline for manual review
                 
                 INPUT:
                 Title: "${title}"
