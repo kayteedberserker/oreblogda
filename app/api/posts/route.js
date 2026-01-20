@@ -60,11 +60,14 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
             }
         ];
 
-        // Add image analysis if media is an image
-        if (mediaUrl && mediaType === "image") {
+        // Add image analysis if media is an image and URL exists
+        if (mediaUrl && (mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i))) {
             contentArr.push({
                 type: "image_url",
-                image_url: { url: mediaUrl }
+                image_url: { 
+                    url: mediaUrl,
+                    detail: "low" // 'low' is faster and cheaper, sufficient for topic detection
+                }
             });
         }
 
@@ -75,7 +78,7 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
                 "Authorization": `Bearer ${API_KEY}` 
             },
             body: JSON.stringify({
-                model: "gpt-4o", // Vision capable model
+                model: "gpt-4o-mini", // Cost-effective and vision-capable
                 messages: [
                     { 
                         role: "system", 
@@ -91,14 +94,19 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
         });
 
         const data = await response.json();
-        if (!response.ok) throw new Error("AI API Error");
+        
+        if (!response.ok) {
+            console.error("OpenAI API Error Details:", data.error);
+            throw new Error(`AI API Error: ${data.error?.message || "Unknown error"}`);
+        }
         
         const result = JSON.parse(data.choices[0].message.content);
-        // Result format: { "action": "approve"|"reject"|"flag", "reason": "..." }
+        // Result format expected: { "action": "approve"|"reject"|"flag", "reason": "..." }
         return result;
     } catch (err) {
         console.error("AI Moderator Failed:", err);
-        return { action: "flag", reason: "AI Service Unavailable" };
+        // Fallback to manual approval (flagging) so posts aren't lost on API failure
+        return { action: "flag", reason: "AI Service Unavailable/Error" };
     }
 }
 
@@ -281,7 +289,7 @@ export async function POST(req) {
                 authorUserId: user.id, 
                 createdAt: { $gte: last24Hours }
             });
-            // Rate limit logic preserved (commented out per your setup)
+            // Rate limit logic preserved
         }
 
         // --- STEP 3: AI MODERATION ---
@@ -296,7 +304,7 @@ export async function POST(req) {
                 rejectionReason = "Polls require at least 2 options.";
                 expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
             } else {
-                // Pass mediaUrl and mediaType to the moderator to check the image
+                // Pass mediaUrl and mediaType to the moderator
                 const ai = await runAIModerator(title, message, category, mediaUrl, mediaType);
                 
                 if (ai.action === "approve") {
@@ -311,7 +319,7 @@ export async function POST(req) {
             }
         }
 
-        // Use original message always - normalization only
+        // --- Use original message (normalized only) ---
         const newMessage = removeEmptyLines(normalizePostContent(message));
 
         // --- STEP 4: UNIQUE SLUG GENERATION ---
