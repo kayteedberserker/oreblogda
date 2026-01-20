@@ -271,12 +271,12 @@ export async function POST(req) {
                 createdAt: { $gte: last24Hours }
             });
 
-            if (existingPost) {
-                return addCorsHeaders(NextResponse.json({
-                    message: "You can only post once every 24 hours.",
-                    status: "limited"
-                }, { status: 429 }));
-            }
+            // if (existingPost) {
+              //  return addCorsHeaders(NextResponse.json({
+             //       message: "You can only post once every 24 hours.",
+             //       status: "limited"
+            //    }, { status: 429 })); 
+          //  }
         }
 
         // --- STEP 3: AI MODERATION & EDITOR ---
