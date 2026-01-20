@@ -6,6 +6,7 @@ import RecentPollsCard from "./RecentPollsCard";
 import { FaPoll } from "react-icons/fa";
 import { useScrollAnimation } from "./useScrollAnimation";
 import dynamic from "next/dynamic";
+
 const FeedAd = dynamic(() => import("./FeedAd"), {
   ssr: false,
 });
@@ -19,19 +20,28 @@ export default function PostsViewer({ initialPosts }) {
 
   // --- SWR Infinite ---
   const getKey = (pageIndex, previousPageData) => {
+    // If we reached the end
     if (previousPageData && previousPageData.posts?.length < limit) return null;
     return `/api/posts?page=${pageIndex + 1}&limit=${limit}`;
   };
 
+  /**
+   * FIX: Changed 'initialData' to 'fallbackData'.
+   * In SWR 2.x, fallbackData is the correct key for SSR hydration.
+   */
   const { data, size, setSize, isValidating, isLoading } = useSWRInfinite(getKey, fetcher, {
-    initialData: [{ posts: initialPosts || [] }],
+    fallbackData: initialPosts ? [{ posts: initialPosts }] : [],
+    revalidateFirstPage: false,
   });
 
   const posts = data ? data.flatMap((p) => p.posts || []) : [];
+  
+  // Deduplicate posts by ID
   const uniquePosts = Array.from(new Map(posts.map((p) => [p._id, p])).values());
+  
   const hasMore = data && data[data.length - 1]?.posts?.length === limit;
 
-  // Infinite scroll
+  // Infinite scroll logic
   useEffect(() => {
     const handleScroll = () => {
       if (
@@ -53,14 +63,9 @@ export default function PostsViewer({ initialPosts }) {
       {/* --- AMBIENT BACKGROUND ELEMENTS --- */}
       <div className="fixed top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-blue-600 to-transparent opacity-50 z-50" />
       
-      {/* STRICT FIX FOR STICKY: 
-          1. items-start prevents the sidebar from growing to match the Post height.
-          2. The parent MUST NOT have overflow-hidden or overflow-auto.
-      */}
       <div className="md:flex md:gap-12 items-start overflow-visible">
         
         {/* --- MAIN CONTENT: THE DATA STREAM --- */}
-        {/* PERFORMANCE FIX: Removed max-h-screen and overflow-y-auto to stop Forced Reflows and Layout Shifts */}
         <div
           id="postsContainer"
           className="md:flex-1 pr-4 scrollbar-hide px-4 md:px-0"
@@ -77,34 +82,37 @@ export default function PostsViewer({ initialPosts }) {
             <div className="absolute bottom-0 left-0 h-[2px] w-24 bg-blue-600" />
           </div>
 
-          {/* <div className="flex flex-col gap-8">
+          {/* RENDER POSTS: Uncommented and restored functionality */}
+          <div className="flex flex-col gap-8">
             {uniquePosts.map((post, index) => (
-              <div key={post._id} className="relative group">
+              <div key={post._id || index} className="relative group">
                 <PostCard
                   post={post}
                   posts={uniquePosts}
-                  setPosts={() => { }}
+                  setPosts={() => { }} // This is a placeholder as requested not to change functionality
                   isFeed
                   isPriority={index < 2}
                 />
 
                 {index % 2 === 1 && (
-                  <div className="my-10 w-full p-4 p-2 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex flex-col items-center gap-1 justify-center bg-gray-50/50 dark:bg-white/5">
+                  <div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex flex-col items-center gap-1 justify-center bg-gray-50/50 dark:bg-white/5">
                       <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
                        <FeedAd /> 
                   </div>
                 )}
               </div>
             ))}
-          </div>*/}
+          </div>
 
           {/* LOADING & LOAD MORE STATE */}
-          {/* FIX: Added min-h-[140px] to keep the container stable during loading (Fixes CLS) */}
           <div className="py-12 border-t border-gray-100 dark:border-gray-800 mt-10 min-h-[140px] flex flex-col items-center justify-center">
-            {(isLoading || isValidating) ? (
+            {/* isLoading is only true when there is NO data at all.
+                isValidating is true during revalidation/fetching next page.
+            */}
+            {(isLoading || (isValidating && size > data?.length)) ? (
               <div className="flex flex-col items-center gap-3">
-                  <div className="w-12 h-1 bg-gray-200 dark:bg-gray-800 overflow-hidden">
-                     <div className="h-full bg-blue-600 animate-[loading_1.5s_infinite]" />
+                  <div className="w-12 h-1 bg-gray-200 dark:bg-gray-800 overflow-hidden relative">
+                     <div className="absolute inset-0 bg-blue-600 animate-[loading_1.5s_infinite]" />
                   </div>
                   <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 animate-pulse">
                     Synchronizing...
@@ -136,22 +144,16 @@ export default function PostsViewer({ initialPosts }) {
         </div>
 
         {/* --- DESKTOP SIDEBAR --- */}
-        {/* SIDEBAR REPAIR: 
-            'h-fit' ensures the sidebar only takes up as much room as the poll card.
-            'top-24' needs to be adjusted based on your navbar height.
-        */}
         <aside className="hidden md:flex flex-col gap-6 md:w-[350px] lg:w-[450px] sticky top-20 h-fit">
           <div className="flex items-center gap-2 mb-4 ml-1">
             <div className="h-1 w-4 bg-blue-600" />
             <span className="text-[10px] font-black uppercase tracking-widest">Sidebar Widgets</span>
           </div>
           <RecentPollsCard />
-          {/* You can add FooterAds here if you want them to stick as well */}
         </aside>
 
         {/* --- THE TACTICAL MOBILE DRAWER --- */}
         <div className="md:hidden">
-          {/* Glowing Trigger Button */}
           <button
             aria-label="Open drawer"
             onClick={() => setDrawerOpen((prev) => !prev)}
@@ -160,12 +162,11 @@ export default function PostsViewer({ initialPosts }) {
             }`}
           >
             <div className="relative">
-               {drawerOpen ? <span className="text-xl">✕</span> : <FaPoll className="text-xl text-white" />}
+               {drawerOpen ? <span className="text-xl text-white">✕</span> : <FaPoll className="text-xl text-white" />}
                {!drawerOpen && <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-blue-600 animate-bounce" />}
             </div>
           </button>
 
-          {/* Drawer Overlay Terminal */}
           <div
             className={`fixed top-0 right-0 z-40 h-full w-[85%] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-xl border-l border-blue-600/20 p-6 shadow-[-20px_0_50px_rgba(0,0,0,0.2)] transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${
               drawerOpen ? "translate-x-0" : "translate-x-full"
@@ -208,4 +209,4 @@ export default function PostsViewer({ initialPosts }) {
       `}</style>
     </div>
   );
-}
+            }
