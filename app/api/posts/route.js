@@ -315,6 +315,7 @@ export async function POST(req) {
                     expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
                 } else {
                     finalStatus = "pending";
+                    rejectionReason = ai.reason;
                 }
             }
         }
