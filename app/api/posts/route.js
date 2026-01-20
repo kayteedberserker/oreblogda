@@ -302,7 +302,8 @@ export async function POST(req) {
 
         if (isMobile) {
             // Hard Validation for Polls
-            if(category == "polls" && !hasPoll) {
+            console.log(category) 
+            if(category == "Polls" && !hasPoll) {
              finalStatus = "rejected";
                 rejectionReason = "Polls category are for posts that includes polls";
                 expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000)
