@@ -18,14 +18,13 @@ export default function ClientCategoryPage({ category, initialPosts }) {
   // SWR Infinite Pagination
   const getKey = (pageIndex, previousPageData) => {
     if (!category) return null;
-    // If we reached the end
     if (previousPageData && (!previousPageData.posts || previousPageData.posts.length < limit)) return null;
     return `/api/posts?category=${category}&page=${pageIndex + 1}&limit=${limit}`;
   };
 
   /**
    * FIX: Changed 'initialData' to 'fallbackData'.
-   * Wrapped initialPosts in the expected array structure for SWR Infinite.
+   * In SWR 2.x, fallbackData is required for proper hydration.
    */
   const { data, size, setSize, isLoading, isValidating, error } = useSWRInfinite(getKey, fetcher, {
     fallbackData: initialPosts ? [{ posts: initialPosts }] : [],
@@ -33,14 +32,12 @@ export default function ClientCategoryPage({ category, initialPosts }) {
     persistSize: true,
   });
 
-  // Combined, Flattened, and Deduplicated posts with safety checks
+  // Combine & deduplicate with safety checks to prevent crashes
   const posts = data ? data.flatMap((p) => (Array.isArray(p?.posts) ? p.posts : [])) : [];
-  
-  // Deduplicate by _id to prevent React "Duplicate Key" crashes
   const uniquePosts = Array.from(
     new Map(posts.filter(p => p && p._id).map((p) => [p._id, p])).values()
   );
-
+  
   const hasMore = data && data[data.length - 1]?.posts?.length === limit;
 
   // Infinite scroll
@@ -58,9 +55,6 @@ export default function ClientCategoryPage({ category, initialPosts }) {
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, [hasMore, isLoading, isValidating, setSize]);
-
-  // If there's a client-side error, logging it helps find the culprit
-  if (error) console.error("SWR Infinite Error:", error);
 
   return (
     <div 
@@ -162,7 +156,7 @@ export default function ClientCategoryPage({ category, initialPosts }) {
             <RecentPollsCard />
           </aside>
 
-          {/* --- TACTICAL MINI DRAWER --- */}
+          {/* --- TACTICAL MINI DRAWER (Mobile Only) --- */}
           <div className="md:hidden">
             <button
               aria-label="Open drawer"
@@ -177,6 +171,7 @@ export default function ClientCategoryPage({ category, initialPosts }) {
               </div>
             </button>
 
+            {/* Drawer Sliding Panel */}
             <div
               className={`fixed top-0 right-0 z-40 h-full w-[85%] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-xl border-l border-blue-600/20 p-6 shadow-[-20px_0_50px_rgba(0,0,0,0.3)] transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${
                 drawerOpen ? "translate-x-0" : "translate-x-full"
@@ -191,7 +186,8 @@ export default function ClientCategoryPage({ category, initialPosts }) {
               </div>
             </div>
 
-            {if (drawerOpen) (
+            {/* FIXED: Conditional rendering using && instead of if */}
+            {drawerOpen && (
               <div 
                 onClick={() => setDrawerOpen(false)}
                 className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30" 
@@ -212,4 +208,4 @@ export default function ClientCategoryPage({ category, initialPosts }) {
       </div>
     </div>
   );
-}
+                         }
