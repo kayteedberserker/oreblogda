@@ -24,7 +24,6 @@ export async function POST(req, { params }) {
   const { id } = await params;
 
   try {
-    // replyTo contains { name, text, id } of the specific message being replied to
     const { name, text, parentCommentId, replyTo, fingerprint, userId } = await req.json();
 
     const foundMobileUser = await MobileUser.findOne({ deviceId: fingerprint });
@@ -40,7 +39,7 @@ export async function POST(req, { params }) {
       authorUserId: mobileUserId,
       name,
       text,
-      replyTo: replyTo || null, 
+      replyTo: replyTo || null, // Stores { name, text, id } for the UI "Quote Box"
       date: new Date(),
       replies: []
     };
@@ -49,52 +48,44 @@ export async function POST(req, { params }) {
     let notificationType = "comment";
     let notificationMsg = "";
 
+    // --- RECURSIVE FUNCTION TO FIND TARGET AND INSERT ---
+    // This traverses the tree to find the comment with _id === parentCommentId
+    const findAndReply = (comments) => {
+      for (let comment of comments) {
+        if (comment._id.toString() === parentCommentId) {
+          comment.replies.push(newComment);
+          return comment.authorUserId; // Return the ID of the person we just replied to
+        }
+        if (comment.replies && comment.replies.length > 0) {
+          const found = findAndReply(comment.replies);
+          if (found !== undefined) return found; // If found deep down, propagate return up
+        }
+      }
+      return undefined;
+    };
+
     if (!parentCommentId) {
-      // --- TOP LEVEL COMMENT ---
+      // Top Level Comment
       post.comments.unshift(newComment);
       recipientUserId = post.authorUserId;
       notificationMsg = `${name} started a new signal on your post.`;
     } else {
-      // --- REPLY TO A DISCUSSION ---
+      // Nested Reply (Deep Search)
       notificationType = "reply";
+      recipientUserId = findAndReply(post.comments);
       
-      // 1. Find the Anchor Comment (The container for this discussion)
-      const anchorComment = post.comments.find(c => c._id.toString() === parentCommentId);
-
-      if (anchorComment) {
-        // 2. Add the reply to the anchor's list
-        anchorComment.replies.push(newComment);
-        post.markModified("comments");
-
-        // 3. DETERMINE RECIPIENT: Who are we replying to?
-        if (replyTo && replyTo.id) {
-            // Case A: Replying to a specific message inside the thread
-            if (replyTo.id === anchorComment._id.toString()) {
-                // Replying to the Anchor Author
-                recipientUserId = anchorComment.authorUserId;
-            } else {
-                // Replying to a specific Reply Author
-                const targetReply = anchorComment.replies.find(r => r._id.toString() === replyTo.id);
-                recipientUserId = targetReply?.authorUserId;
-            }
-        } else {
-            // Fallback: Default to Anchor Author if no specific target
-            recipientUserId = anchorComment.authorUserId;
-        }
-
-        notificationMsg = `${name} replied to your signal: "${text.substring(0, 20)}..."`;
-
-      } else {
-        return NextResponse.json({ message: "Parent signal not found" }, { status: 404 });
+      if (recipientUserId === undefined) {
+         return NextResponse.json({ message: "Target signal not found" }, { status: 404 });
       }
+      
+      notificationMsg = `${name} replied to your signal: "${text.substring(0, 20)}..."`;
+      post.markModified("comments");
     }
 
     await post.save();
 
-    // 🔔 SEND NOTIFICATION (To the specific person replied to)
-    // We explicitly check that the user isn't replying to themselves
+    // 🔔 NOTIFICATION LOGIC
     if (recipientUserId && recipientUserId.toString() !== mobileUserId?.toString()) {
-      
       await Notification.create({
         recipientId: recipientUserId,
         senderName: name,
@@ -103,10 +94,10 @@ export async function POST(req, { params }) {
         message: notificationMsg
       });
 
-      const recipientUser = await MobileUser.findById(recipientUserId);
-      if (recipientUser?.pushToken) {
+      const user = await MobileUser.findById(recipientUserId);
+      if (user?.pushToken) {
         await sendPushNotification(
-            recipientUser.pushToken, 
+            user.pushToken, 
             notificationType === "reply" ? "New Reply 💬" : "New Signal 📝", 
             notificationMsg, 
             { postId: post._id.toString(), type: notificationType }
