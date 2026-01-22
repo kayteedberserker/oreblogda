@@ -99,7 +99,6 @@ export async function PATCH(req, { params }) {
         if (action === "vote") {
             const { selectedOptions } = payload; // Array of indices
 
-            // Atomic update: only proceed if fingerprint not in 'voters'
             const post = await Post.findOneAndUpdate(
                 { _id: id, voters: { $ne: fingerprint } },
                 { $addToSet: { voters: fingerprint } },
@@ -110,7 +109,6 @@ export async function PATCH(req, { params }) {
                 return addCorsHeaders(NextResponse.json({ message: "Already voted or post missing" }, { status: 400 }));
             }
 
-            // Safely increment poll options
             if (post.poll && Array.isArray(post.poll.options)) {
                 for (const index of selectedOptions) {
                     if (post.poll.options[index]) {
@@ -122,8 +120,13 @@ export async function PATCH(req, { params }) {
                 }
             }
 
-            // Notification logic
+            // ✨ AURA LOGIC: +2 for Voting
             if (post.authorId !== fingerprint) {
+                await MobileUser.updateOne(
+                    { deviceId: post.authorId },
+                    { $inc: { weeklyAura: 2 } }
+                );
+
                 const msg = `Someone voted on your post: "${post.title.substring(0, 15)}..."`;
                 await Notification.create({ recipientId: post.authorId, senderName: "Someone", type: "like", postId: post._id, message: msg });
                 const author = await MobileUser.findOne({ deviceId: post.authorId });
@@ -147,8 +150,13 @@ export async function PATCH(req, { params }) {
                 return addCorsHeaders(NextResponse.json({ message: "Already liked" }, { status: 400 }));
             }
 
-            // Notify Author
+            // ✨ AURA LOGIC: +2 for Liking
             if (updatedPost.authorId !== fingerprint) {
+                await MobileUser.updateOne(
+                    { deviceId: updatedPost.authorId },
+                    { $inc: { weeklyAura: 2 } }
+                );
+
                 const msg = `Someone liked your post: "${updatedPost.title.substring(0, 15)}..."`;
                 await Notification.create({ recipientId: updatedPost.authorId, senderName: "Someone", type: "like", priority: "high", postId: updatedPost._id, message: msg });
                 const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
@@ -174,6 +182,15 @@ export async function PATCH(req, { params }) {
         // --- 3. SHARE LOGIC ---
         if (action === "share") {
             const updatedPost = await Post.findByIdAndUpdate(id, { $inc: { shares: 1 } }, { new: true });
+            
+            // ✨ AURA LOGIC: +5 for Sharing
+            if (updatedPost && updatedPost.authorId !== fingerprint) {
+                await MobileUser.updateOne(
+                    { deviceId: updatedPost.authorId },
+                    { $inc: { weeklyAura: 5 } }
+                );
+            }
+
             return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
         }
 
@@ -182,7 +199,6 @@ export async function PATCH(req, { params }) {
             let country = "Unknown", city = "Unknown", timezone = "Unknown";
 
             if (!isBot && fingerprint) {
-                // Geo Lookup
                 try {
                     const geoRes = await fetch(`https://ipinfo.io/${ip}/json?token=${process.env.IPINFO_TOKEN}`);
                     const geoData = await geoRes.json();
@@ -191,7 +207,6 @@ export async function PATCH(req, { params }) {
                     timezone = geoData.timezone || "Unknown";
                 } catch (err) { console.log("Geo lookup failed"); }
 
-                // Unique View Check using $addToSet for fingerprint tracking
                 const updatedPost = await Post.findOneAndUpdate(
                     { _id: id, viewsFingerprints: { $ne: fingerprint } },
                     { 
@@ -202,10 +217,18 @@ export async function PATCH(req, { params }) {
                     { new: true }
                 );
 
-                if (updatedPost) return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
+                if (updatedPost) {
+                    // ✨ AURA LOGIC: +1 Aura for every 50 unique views
+                    if (updatedPost.views % 50 === 0) {
+                        await MobileUser.updateOne(
+                            { deviceId: updatedPost.authorId },
+                            { $inc: { weeklyAura: 1 } }
+                        );
+                    }
+                    return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
+                }
             }
             
-            // Fallback if already viewed or bot
             const post = await Post.findById(id);
             return addCorsHeaders(NextResponse.json(post, { status: 200 }));
         }
@@ -219,7 +242,7 @@ export async function PATCH(req, { params }) {
 }
 
 // ----------------------
-// GET: Fetch single post by ID or Slug
+// GET: Fetch single post (Unchanged)
 // ----------------------
 export async function GET(req, { params }) {
     try {
