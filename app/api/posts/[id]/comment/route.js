@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/app/lib/mongodb";
 import Post from "@/app/models/PostModel";
-import Notification from "@/app/models/NotificationModel"; // 👈 New Import
+import Notification from "@/app/models/NotificationModel";
+import MobileUser from "@/app/models/MobileUserModel";
+import { sendPushNotification } from "@/app/lib/pushNotifications";
 import mongoose from "mongoose";
 
 export async function GET(req, { params }) {
@@ -10,58 +12,50 @@ export async function GET(req, { params }) {
     await connectDB();
     const searchFilter = id.includes("-") ? { slug: id } : { _id: id };
     const post = await Post.findOne(searchFilter).select("comments");
-
     if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
     return NextResponse.json({ comments: post.comments });
   } catch (err) {
     return NextResponse.json({ message: "Server error" }, { status: 500 });
   }
 }
-import MobileUser from "@/app/models/MobileUserModel"; // 👈 Added
-import { sendPushNotification } from "@/app/lib/pushNotifications"; // 👈 Added
 
 export async function POST(req, { params }) {
   await connectDB();
-  const resolvedParams = await params;
-  const { id } = resolvedParams;
+  const { id } = await params;
 
   try {
-    const { name, text, parentCommentId, fingerprint, userId } = await req.json();
+    const { name, text, parentCommentId, replyTo, fingerprint, userId } = await req.json();
 
-    const deviceId = fingerprint;
-    let mobileUserId
     const foundMobileUser = await MobileUser.findOne({ deviceId: fingerprint });
-    if (foundMobileUser) {
-      mobileUserId = foundMobileUser._id;
-    }
+    const mobileUserId = foundMobileUser?._id;
+
     const searchFilter = id.includes("-") ? { slug: id } : { _id: id };
     const post = await Post.findOne(searchFilter);
-    
-
-    if (!post) {
-      return NextResponse.json({ message: "Post not found" }, { status: 404 });
-    }
+    if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
 
     const newComment = {
       _id: new mongoose.Types.ObjectId(),
-      authorFingerprint: deviceId,
-      authorId: deviceId, // backward support
+      authorFingerprint: fingerprint,
       authorUserId: mobileUserId,
       name,
       text,
+      replyTo: replyTo || null, // Persist who is being replied to
       date: new Date(),
       replies: []
     };
-    let recipientUserId = post.authorUserId;
+
+    let recipientUserId = null;
     let type = "comment";
+
     if (!parentCommentId) {
       post.comments.unshift(newComment);
+      recipientUserId = post.authorUserId; // Post owner
     } else {
       type = "reply";
-      const insertReply = comments => {
+      const insertReply = (comments) => {
         for (const c of comments) {
           if (c._id.toString() === parentCommentId) {
-            recipientUserId = c.authorUserId;
+            recipientUserId = c.authorUserId; // The person you are replying to
             c.replies.push(newComment);
             return true;
           }
@@ -69,20 +63,17 @@ export async function POST(req, { params }) {
         }
         return false;
       };
-
       insertReply(post.comments);
       post.markModified("comments");
     }
 
     await post.save();
 
-    // 🔔 Notify only MobileUsers
-    
+    // 🔔 NOTIFICATION LOGIC
     if (recipientUserId && recipientUserId.toString() !== mobileUserId?.toString()) {
-      const msg =
-        type === "reply"
-          ? `${name} replied to your comment.`
-          : `${name} commented on your post: "${post.title.slice(0, 20)}..."`;
+      const msg = type === "reply" 
+        ? `${name} replied to your signal.` 
+        : `${name} started a new signal on your post.`;
 
       await Notification.create({
         recipientId: recipientUserId,
@@ -94,18 +85,22 @@ export async function POST(req, { params }) {
 
       const user = await MobileUser.findById(recipientUserId);
       if (user?.pushToken) {
-        await sendPushNotification(
-          user.pushToken,
-          type === "reply" ? "New Reply 💬" : "New Comment 📝",
-          msg,
-          { postId: post._id.toString(), type }
-        );
+        await sendPushNotification(user.pushToken, type === "reply" ? "New Reply 💬" : "New Comment 📝", msg, { postId: post._id.toString(), type });
+      }
+    }
+
+    // 📢 Discussion Ongoing Notification (Every 10 replies)
+    if (parentCommentId) {
+      const parent = post.comments.find(c => c._id.toString() === parentCommentId);
+      if (parent && parent.replies.length % 10 === 0 && post.authorUserId) {
+        const ownerMsg = `A heated discussion is ongoing on your post "${post.title.slice(0, 15)}..."`;
+        await sendPushNotification(post.authorUserId, "Discussion Alert 🔥", ownerMsg, { postId: post._id.toString() });
       }
     }
 
     return NextResponse.json({ comment: newComment }, { status: 201 });
   } catch (err) {
-    console.error("POST comment error:", err);
-    return NextResponse.json({ message: "Error adding comment" }, { status: 500 });
+    console.error("POST error:", err);
+    return NextResponse.json({ message: "Error" }, { status: 500 });
   }
 }
