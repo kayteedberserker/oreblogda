@@ -36,7 +36,7 @@ export async function GET() {
         // Explicitly return the string
         return `
     <url>
-      <loc>${baseUrl}/author/${user.deviceId || user._id}</loc>
+      <loc>${baseUrl}/author/${user._id}</loc>
       <lastmod>${new Date(user.updatedAt).toISOString()}</lastmod>
     </url>`;
       })
