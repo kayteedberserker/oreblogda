@@ -170,7 +170,9 @@ export async function GET(req) {
             .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
+            .select("-authorId") // 👈 Excludes the authorId field from the results
             .lean();
+
 
         const serializedPosts = posts.map((p) => ({
             ...p,
