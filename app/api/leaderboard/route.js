@@ -36,7 +36,7 @@ export async function GET(req) {
         country: user.country || "Unknown",
         postCount: postCountMap[userIdStr] || 0,
         // Using fields from your provided Schema:
-        streak: user.consecutiveStreak || 0, 
+        streak: user.lastStreak || 0, 
         weeklyAura: user.weeklyAura || 0,
         previousRank: user.previousRank || null
       };
