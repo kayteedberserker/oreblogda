@@ -1,28 +1,37 @@
-// middleware.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 const APP_SECRET = process.env.APP_INTERNAL_SECRET;
+const MY_DOMAIN = "oreblogda.com";
 
-export function middleware(request: NextRequest) {
-  // 1. Only protect API routes
-  if (request.nextUrl.pathname.startsWith('/api')) {
+export function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  const response = NextResponse.next();
+
+  // --- 1. HANDLE API ROUTES (Security & CORS) ---
+  if (pathname.startsWith("/api")) {
     
-    // 2. Extract headers
-    const clientSecret = request.headers.get('x-oreblogda-secret');
-    const referer = request.headers.get('referer');
-    const origin = request.headers.get('origin');
-    
-    // 3. INTERNAL CHECK: 
-    // Get your domain (e.g., oreblogda.com) from environment variables or hardcode it
-    const myDomain = "oreblogda.com"; 
+    // A. CORS Headers (Keep these for your mobile app/external access)
+    response.headers.set("Access-Control-Allow-Origin", "*"); 
+    response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    // 🔹 IMPORTANT: Added your custom secret header to the allowed headers list
+    response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-oreblogda-secret");
+
+    // Handle Preflight (OPTIONS)
+    if (req.method === "OPTIONS") {
+      return new NextResponse(null, { status: 204, headers: response.headers });
+    }
+
+    // B. BOT/SECURITY CHECK
+    const clientSecret = req.headers.get('x-oreblogda-secret');
+    const referer = req.headers.get('referer');
+    const origin = req.headers.get('origin');
     
     const isInternal = 
-      (referer && referer.includes(myDomain)) || 
-      (origin && origin.includes(myDomain));
+      (referer && referer.includes(MY_DOMAIN)) || 
+      (origin && origin.includes(MY_DOMAIN));
 
-    // 4. SECURITY LOGIC:
-    // If it's NOT internal AND the secret is wrong/missing, block it.
+    // If it's external, it MUST have the secret
     if (!isInternal) {
       if (!clientSecret || clientSecret !== APP_SECRET) {
         return new NextResponse(
@@ -34,12 +43,22 @@ export function middleware(request: NextRequest) {
         );
       }
     }
+
+    return response;
+  }
+
+  // --- 2. AUTH LOGIC (Authors Diary) ---
+  const token = req.cookies.get("token")?.value;
+
+  if (pathname.startsWith("/authorsdiary") && !token) {
+    return NextResponse.redirect(new URL("/auth/login", req.url));
   }
 
   return NextResponse.next();
 }
 
-// 5. Configure which paths this runs on
+// --- 3. CONFIGURATION ---
 export const config = {
-  matcher: '/api/:path*',
+  // Combine both matchers here
+  matcher: ["/authorsdiary/:path*", "/api/:path*"], 
 };
