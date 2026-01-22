@@ -6,15 +6,58 @@ import MobileUser from "@/app/models/MobileUserModel";
 import { sendPushNotification } from "@/app/lib/pushNotifications";
 import mongoose from "mongoose";
 
+// --- Helper: Milestone Check Logic ---
+const shouldNotifyMilestone = (count) => {
+  if (count <= 5) return true; // 1, 2, 3, 4, 5
+  if (count <= 50) return count % 10 === 0; // 10, 20, 30, 40, 50
+  return count % 50 === 0; // 100, 150, 200, 250...
+};
+
+// --- Helper: Get all user IDs in a specific comment branch ---
+const getBranchData = (comment) => {
+  let userIds = new Set();
+  let count = 0;
+
+  const traverse = (node) => {
+    count++;
+    if (node.authorUserId) userIds.add(node.authorUserId.toString());
+    if (node.replies) node.replies.forEach(traverse);
+  };
+
+  traverse(comment);
+  return { participants: Array.from(userIds), totalMessages: count - 1 }; 
+};
+
 export async function GET(req, { params }) {
   const { id } = await params;
+  const { searchParams } = new URL(req.url);
+  
+  // Pagination Defaults
+  const page = parseInt(searchParams.get("page")) || 1;
+  const limit = parseInt(searchParams.get("limit")) || 40;
+  const skip = (page - 1) * limit;
+
   try {
     await connectDB();
     const searchFilter = id.includes("-") ? { slug: id } : { _id: id };
-    const post = await Post.findOne(searchFilter).select("comments");
+
+    // We fetch the total count and the sliced comments
+    const post = await Post.findOne(searchFilter)
+      .select({ 
+        comments: { $slice: [skip, limit] },
+        // Also get total length of comments array for pagination logic
+        commentCount: { $size: "$comments" } 
+      });
+
     if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
-    return NextResponse.json({ comments: post.comments });
+
+    return NextResponse.json({ 
+      comments: post.comments,
+      total: post.commentCount,
+      hasMore: skip + post.comments.length < post.commentCount
+    });
   } catch (err) {
+    console.error("GET error:", err);
     return NextResponse.json({ message: "Server error" }, { status: 500 });
   }
 }
@@ -39,71 +82,106 @@ export async function POST(req, { params }) {
       authorUserId: mobileUserId,
       name,
       text,
-      replyTo: replyTo || null, // Stores { name, text, id } for the UI "Quote Box"
+      replyTo: replyTo || null,
       date: new Date(),
       replies: []
     };
 
-    let recipientUserId = null;
-    let notificationType = "comment";
-    let notificationMsg = "";
+    let targetRootComment = null;
+    let immediateRecipientId = null;
 
-    // --- RECURSIVE FUNCTION TO FIND TARGET AND INSERT ---
-    // This traverses the tree to find the comment with _id === parentCommentId
-    const findAndReply = (comments) => {
+    const findAndReply = (comments, rootComment = null) => {
       for (let comment of comments) {
+        const currentRoot = rootComment || comment;
         if (comment._id.toString() === parentCommentId) {
           comment.replies.push(newComment);
-          return comment.authorUserId; // Return the ID of the person we just replied to
+          targetRootComment = currentRoot;
+          return comment.authorUserId;
         }
-        if (comment.replies && comment.replies.length > 0) {
-          const found = findAndReply(comment.replies);
-          if (found !== undefined) return found; // If found deep down, propagate return up
+        if (comment.replies?.length > 0) {
+          const found = findAndReply(comment.replies, currentRoot);
+          if (found) return found;
         }
       }
-      return undefined;
     };
 
     if (!parentCommentId) {
-      // Top Level Comment
       post.comments.unshift(newComment);
-      recipientUserId = post.authorUserId;
-      notificationMsg = `${name} started a new signal on your post.`;
-    } else {
-      // Nested Reply (Deep Search)
-      notificationType = "reply";
-      recipientUserId = findAndReply(post.comments);
-      
-      if (recipientUserId === undefined) {
-         return NextResponse.json({ message: "Target signal not found" }, { status: 404 });
+      const totalTopLevel = post.comments.length;
+      if (shouldNotifyMilestone(totalTopLevel)) {
+        immediateRecipientId = post.authorUserId;
       }
-      
-      notificationMsg = `${name} replied to your signal: "${text.substring(0, 20)}..."`;
+    } else {
+      immediateRecipientId = findAndReply(post.comments);
+      if (!immediateRecipientId) {
+        return NextResponse.json({ message: "Signal lost" }, { status: 404 });
+      }
       post.markModified("comments");
     }
 
     await post.save();
 
-    // 🔔 NOTIFICATION LOGIC
-    if (recipientUserId && recipientUserId.toString() !== mobileUserId?.toString()) {
-      await Notification.create({
-        recipientId: recipientUserId,
-        senderName: name,
-        type: notificationType,
-        postId: post._id,
-        message: notificationMsg
-      });
+    const notifications = [];
 
-      const user = await MobileUser.findById(recipientUserId);
-      if (user?.pushToken) {
-        await sendPushNotification(
-            user.pushToken, 
-            notificationType === "reply" ? "New Reply 💬" : "New Signal 📝", 
-            notificationMsg, 
-            { postId: post._id.toString(), type: notificationType }
-        );
+    if (parentCommentId && immediateRecipientId?.toString() !== mobileUserId?.toString()) {
+      notifications.push({
+        recipientId: immediateRecipientId,
+        title: "New Reply 💬",
+        message: `${name} replied: "${text.substring(0, 20)}..."`,
+        type: "reply"
+      });
+    }
+
+    if (!parentCommentId && immediateRecipientId?.toString() !== mobileUserId?.toString()) {
+      notifications.push({
+        recipientId: immediateRecipientId,
+        title: "New Signal 📝",
+        message: `${name} started a new signal (#${post.comments.length})`,
+        type: "comment"
+      });
+    }
+
+    if (parentCommentId && targetRootComment) {
+      const { participants, totalMessages } = getBranchData(targetRootComment);
+      if (shouldNotifyMilestone(totalMessages)) {
+        const discussionMsg = `Discussion Ongoing: ${totalMessages} replies on ${targetRootComment.name}'s signal.`;
+        participants.forEach(pId => {
+          if (pId !== mobileUserId?.toString()) {
+            notifications.push({
+              recipientId: pId,
+              title: "Discussion Active 🔥",
+              message: discussionMsg,
+              type: "discussion"
+            });
+          }
+        });
+        if (!participants.includes(post.authorUserId?.toString())) {
+            notifications.push({
+                recipientId: post.authorUserId,
+                title: "Trending Discussion 📈",
+                message: discussionMsg,
+                type: "discussion"
+            });
+        }
       }
     }
+
+    await Promise.all(notifications.map(async (n) => {
+      await Notification.create({
+        recipientId: n.recipientId,
+        senderName: name,
+        type: n.type,
+        postId: post._id,
+        message: n.message
+      });
+      const user = await MobileUser.findById(n.recipientId);
+      if (user?.pushToken) {
+        await sendPushNotification(user.pushToken, n.title, n.message, { 
+          postId: post._id.toString(), 
+          type: n.type 
+        });
+      }
+    }));
 
     return NextResponse.json({ comment: newComment }, { status: 201 });
   } catch (err) {
