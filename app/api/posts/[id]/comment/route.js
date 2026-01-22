@@ -5,12 +5,31 @@ import Notification from "@/app/models/NotificationModel";
 import MobileUser from "@/app/models/MobileUserModel";
 import { sendPushNotification } from "@/app/lib/pushNotifications";
 import mongoose from "mongoose";
+import crypto from "crypto";
+
+// ----------------------
+// 🛡️ SECURITY: Request Signature Verification
+// ----------------------
+function verifyRequestSignature(req, body) {
+    const signature = req.headers.get("x-oreblogda-signature");
+    const SECRET = process.env.APP_INTERNAL_SECRET; 
+    
+    if (!SECRET) return true; 
+    if (!signature) return false;
+
+    const expectedSignature = crypto
+        .createHmac("sha256", SECRET)
+        .update(JSON.stringify(body))
+        .digest("hex");
+
+    return signature === expectedSignature;
+}
 
 // --- Helper: Milestone Check Logic ---
 const shouldNotifyMilestone = (count) => {
-  if (count <= 5) return true; // 1, 2, 3, 4, 5
-  if (count <= 50) return count % 10 === 0; // 10, 20, 30, 40, 50
-  return count % 50 === 0; // 100, 150, 200, 250...
+  if (count <= 5) return true; 
+  if (count <= 50) return count % 10 === 0; 
+  return count % 50 === 0; 
 };
 
 // --- Helper: Get all user IDs in a specific comment branch ---
@@ -32,7 +51,6 @@ export async function GET(req, { params }) {
   const { id } = await params;
   const { searchParams } = new URL(req.url);
   
-  // Pagination Defaults
   const page = parseInt(searchParams.get("page")) || 1;
   const limit = parseInt(searchParams.get("limit")) || 40;
   const skip = (page - 1) * limit;
@@ -41,11 +59,9 @@ export async function GET(req, { params }) {
     await connectDB();
     const searchFilter = id.includes("-") ? { slug: id } : { _id: id };
 
-    // We fetch the total count and the sliced comments
     const post = await Post.findOne(searchFilter)
       .select({ 
         comments: { $slice: [skip, limit] },
-        // Also get total length of comments array for pagination logic
         commentCount: { $size: "$comments" } 
       });
 
@@ -67,10 +83,20 @@ export async function POST(req, { params }) {
   const { id } = await params;
 
   try {
-    const { name, text, parentCommentId, replyTo, fingerprint, userId } = await req.json();
+    const body = await req.json();
+
+    // 🛡️ SECURITY: Placeholder (Disabled for now)
+    /*
+    if (!verifyRequestSignature(req, body)) {
+         return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+    }
+    */
+
+    const { name, text, parentCommentId, replyTo, fingerprint } = body;
 
     const foundMobileUser = await MobileUser.findOne({ deviceId: fingerprint });
     const mobileUserId = foundMobileUser?._id;
+    const authorAuraId = foundMobileUser?.deviceId; 
 
     const searchFilter = id.includes("-") ? { slug: id } : { _id: id };
     const post = await Post.findOne(searchFilter);
@@ -88,7 +114,7 @@ export async function POST(req, { params }) {
     };
 
     let targetRootComment = null;
-    let immediateRecipientId = null;
+    let immediateRecipientId = null; 
 
     const findAndReply = (comments, rootComment = null) => {
       for (let comment of comments) {
@@ -106,17 +132,32 @@ export async function POST(req, { params }) {
     };
 
     if (!parentCommentId) {
+      // 1. TOP LEVEL COMMENT
       post.comments.unshift(newComment);
-      const totalTopLevel = post.comments.length;
-      if (shouldNotifyMilestone(totalTopLevel)) {
-        immediateRecipientId = post.authorUserId;
+      immediateRecipientId = post.authorUserId; 
+
+      // ✨ AURA: +3 to Post Author for a new Signal
+      if (post.authorUserId !== authorAuraId) {
+        await MobileUser.updateOne(
+          { deviceId: post.authorUserId },
+          { $inc: { weeklyAura: 3 } }
+        );
       }
     } else {
+      // 2. REPLY
       immediateRecipientId = findAndReply(post.comments);
       if (!immediateRecipientId) {
         return NextResponse.json({ message: "Signal lost" }, { status: 404 });
       }
       post.markModified("comments");
+
+      // ✨ AURA: +3 to the Comment Author being replied to
+      if (immediateRecipientId.toString() !== mobileUserId?.toString()) {
+        await MobileUser.updateOne(
+          { _id: immediateRecipientId },
+          { $inc: { weeklyAura: 3 } }
+        );
+      }
     }
 
     await post.save();
@@ -128,21 +169,42 @@ export async function POST(req, { params }) {
         recipientId: immediateRecipientId,
         title: "New Reply 💬",
         message: `${name} replied: "${text.substring(0, 20)}..."`,
-        type: "reply"
+        type: "reply",
+        isMongoId: true 
       });
     }
 
-    if (!parentCommentId && immediateRecipientId?.toString() !== mobileUserId?.toString()) {
+    if (!parentCommentId && post.authorUserId !== authorAuraId) {
       notifications.push({
-        recipientId: immediateRecipientId,
+        recipientId: post.authorUserId,
         title: "New Signal 📝",
         message: `${name} started a new signal (#${post.comments.length})`,
-        type: "comment"
+        type: "comment",
+        isMongoId: false 
       });
     }
 
     if (parentCommentId && targetRootComment) {
       const { participants, totalMessages } = getBranchData(targetRootComment);
+
+      // ✨ AURA: Discussion Bonus (Awarded every 5 replies)
+      if (totalMessages > 0 && totalMessages % 5 === 0) {
+        // A) Award the Thread Starter (+1 Aura)
+        if (targetRootComment.authorUserId?.toString() !== mobileUserId?.toString()) {
+          await MobileUser.updateOne(
+            { _id: targetRootComment.authorUserId },
+            { $inc: { weeklyAura: 1 } }
+          );
+        }
+        // B) Award the Post Owner (+1 Aura) for hosting the discussion
+        if (post.authorUserId !== authorAuraId) {
+          await MobileUser.updateOne(
+            { deviceId: post.authorUserId },
+            { $inc: { weeklyAura: 1 } }
+          );
+        }
+      }
+
       if (shouldNotifyMilestone(totalMessages)) {
         const discussionMsg = `Discussion Ongoing: ${totalMessages} replies on ${targetRootComment.name}'s signal.`;
         participants.forEach(pId => {
@@ -151,35 +213,34 @@ export async function POST(req, { params }) {
               recipientId: pId,
               title: "Discussion Active 🔥",
               message: discussionMsg,
-              type: "discussion"
+              type: "discussion",
+              isMongoId: true
             });
           }
         });
-        if (!participants.includes(post.authorUserId?.toString())) {
-            notifications.push({
-                recipientId: post.authorUserId,
-                title: "Trending Discussion 📈",
-                message: discussionMsg,
-                type: "discussion"
-            });
-        }
       }
     }
 
+    // Process Notifications
     await Promise.all(notifications.map(async (n) => {
-      await Notification.create({
-        recipientId: n.recipientId,
-        senderName: name,
-        type: n.type,
-        postId: post._id,
-        message: n.message
-      });
-      const user = await MobileUser.findById(n.recipientId);
-      if (user?.pushToken) {
-        await sendPushNotification(user.pushToken, n.title, n.message, { 
-          postId: post._id.toString(), 
-          type: n.type 
+      const query = n.isMongoId ? { _id: n.recipientId } : { deviceId: n.recipientId };
+      const user = await MobileUser.findOne(query);
+
+      if (user) {
+        await Notification.create({
+          recipientId: user.deviceId, 
+          senderName: name,
+          type: n.type,
+          postId: post._id,
+          message: n.message
         });
+
+        if (user.pushToken) {
+          await sendPushNotification(user.pushToken, n.title, n.message, { 
+            postId: post._id.toString(), 
+            type: n.type 
+          });
+        }
       }
     }));
 
