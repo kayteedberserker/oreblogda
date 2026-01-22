@@ -214,7 +214,7 @@ export default function PostCard({
 	useEffect(() => {
 		const fetchAuthor = async () => {
 			try {
-				const res = await fetch(`/api/users/${post.authorId}`);
+				const res = await fetch(`/api/users/${post.authorUserId}`);
 				if (!res.ok) throw new Error("Failed to fetch author");
 				const data = await res.json();
 
@@ -460,7 +460,7 @@ export default function PostCard({
 				{/* Author & Views */}
 				<div className="flex justify-between items-center mb-4">
 					<Link
-						href={`/author/${post.authorId}`}
+						href={`/author/${post.authorUserId}`}
 						className="flex items-center space-x-3 group/author"
 					>
 						{author.image ? (
