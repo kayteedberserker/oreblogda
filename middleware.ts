@@ -11,10 +11,9 @@ export function middleware(req: NextRequest) {
   // --- 1. HANDLE API ROUTES (Security & CORS) ---
   if (pathname.startsWith("/api")) {
     
-    // A. CORS Headers (Keep these for your mobile app/external access)
+    // A. CORS Headers
     response.headers.set("Access-Control-Allow-Origin", "*"); 
     response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    // 🔹 IMPORTANT: Added your custom secret header to the allowed headers list
     response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-oreblogda-secret");
 
     // Handle Preflight (OPTIONS)
@@ -31,9 +30,20 @@ export function middleware(req: NextRequest) {
       (referer && referer.includes(MY_DOMAIN)) || 
       (origin && origin.includes(MY_DOMAIN));
 
+    // --- DEBUG LOGS FOR VERCEL ---
+    console.log("--- NEURAL_LINK_DEBUG ---");
+    console.log("Path:", pathname);
+    console.log("Is Internal:", isInternal);
+    console.log("Referer:", referer);
+    console.log("Origin:", origin);
+    console.log("Secret Provided:", clientSecret ? "YES (HIDDEN)" : "NO");
+    console.log("Secret Match:", clientSecret === APP_SECRET);
+    console.log("-------------------------");
+
     // If it's external, it MUST have the secret
     if (!isInternal) {
       if (!clientSecret || clientSecret !== APP_SECRET) {
+        console.error("⛔ ACCESS_DENIED: Bot or External unauthorized source blocked.");
         return new NextResponse(
           JSON.stringify({ 
             success: false, 
@@ -59,6 +69,5 @@ export function middleware(req: NextRequest) {
 
 // --- 3. CONFIGURATION ---
 export const config = {
-  // Combine both matchers here
   matcher: ["/authorsdiary/:path*", "/api/:path*"], 
 };
