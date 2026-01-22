@@ -24,6 +24,7 @@ export async function POST(req, { params }) {
   const { id } = await params;
 
   try {
+    // replyTo contains { name, text, id } of the specific message being replied to
     const { name, text, parentCommentId, replyTo, fingerprint, userId } = await req.json();
 
     const foundMobileUser = await MobileUser.findOne({ deviceId: fingerprint });
@@ -39,74 +40,80 @@ export async function POST(req, { params }) {
       authorUserId: mobileUserId,
       name,
       text,
-      replyTo: replyTo || null, // This stores {name, text, id} of the person replied to
+      replyTo: replyTo || null, 
       date: new Date(),
       replies: []
     };
 
     let recipientUserId = null;
-    let type = "comment";
+    let notificationType = "comment";
+    let notificationMsg = "";
 
     if (!parentCommentId) {
+      // --- TOP LEVEL COMMENT ---
       post.comments.unshift(newComment);
       recipientUserId = post.authorUserId;
+      notificationMsg = `${name} started a new signal on your post.`;
     } else {
-      type = "reply";
+      // --- REPLY TO A DISCUSSION ---
+      notificationType = "reply";
       
-      // FIX: Find the TOP-LEVEL comment, no matter how deep the reply is.
-      // We want to push all replies into the same flat list for that discussion.
-      const topLevelComment = post.comments.find(c => 
-        c._id.toString() === parentCommentId || 
-        c.replies.some(r => r._id.toString() === parentCommentId)
-      );
+      // 1. Find the Anchor Comment (The container for this discussion)
+      const anchorComment = post.comments.find(c => c._id.toString() === parentCommentId);
 
-      if (topLevelComment) {
-        // Find the specific user we are replying to for the notification
-        if (topLevelComment._id.toString() === parentCommentId) {
-          recipientUserId = topLevelComment.authorUserId;
+      if (anchorComment) {
+        // 2. Add the reply to the anchor's list
+        anchorComment.replies.push(newComment);
+        post.markModified("comments");
+
+        // 3. DETERMINE RECIPIENT: Who are we replying to?
+        if (replyTo && replyTo.id) {
+            // Case A: Replying to a specific message inside the thread
+            if (replyTo.id === anchorComment._id.toString()) {
+                // Replying to the Anchor Author
+                recipientUserId = anchorComment.authorUserId;
+            } else {
+                // Replying to a specific Reply Author
+                const targetReply = anchorComment.replies.find(r => r._id.toString() === replyTo.id);
+                recipientUserId = targetReply?.authorUserId;
+            }
         } else {
-          const specificReply = topLevelComment.replies.find(r => r._id.toString() === parentCommentId);
-          recipientUserId = specificReply?.authorUserId;
+            // Fallback: Default to Anchor Author if no specific target
+            recipientUserId = anchorComment.authorUserId;
         }
 
-        topLevelComment.replies.push(newComment);
-        post.markModified("comments");
+        notificationMsg = `${name} replied to your signal: "${text.substring(0, 20)}..."`;
+
       } else {
-        return NextResponse.json({ message: "Discussion thread not found" }, { status: 404 });
+        return NextResponse.json({ message: "Parent signal not found" }, { status: 404 });
       }
     }
 
     await post.save();
 
-    // ... (Notification logic remains the same) ...
-     // 🔔 NOTIFICATION LOGIC
+    // 🔔 SEND NOTIFICATION (To the specific person replied to)
+    // We explicitly check that the user isn't replying to themselves
     if (recipientUserId && recipientUserId.toString() !== mobileUserId?.toString()) {
-      const msg = type === "reply" 
-        ? `${name} replied to your signal.` 
-        : `${name} started a new signal on your post.`;
-
+      
       await Notification.create({
         recipientId: recipientUserId,
         senderName: name,
-        type,
+        type: notificationType,
         postId: post._id,
-        message: msg
+        message: notificationMsg
       });
 
-      const user = await MobileUser.findById(recipientUserId);
-      if (user?.pushToken) {
-        await sendPushNotification(user.pushToken, type === "reply" ? "New Reply 💬" : "New Comment 📝", msg, { postId: post._id.toString(), type });
+      const recipientUser = await MobileUser.findById(recipientUserId);
+      if (recipientUser?.pushToken) {
+        await sendPushNotification(
+            recipientUser.pushToken, 
+            notificationType === "reply" ? "New Reply 💬" : "New Signal 📝", 
+            notificationMsg, 
+            { postId: post._id.toString(), type: notificationType }
+        );
       }
     }
 
-    // 📢 Discussion Ongoing Notification (Every 10 replies)
-    if (parentCommentId) {
-      const parent = post.comments.find(c => c._id.toString() === parentCommentId);
-      if (parent && parent.replies.length % 10 === 0 && post.authorUserId) {
-        const ownerMsg = `A heated discussion is ongoing on your post "${post.title.slice(0, 15)}..."`;
-        await sendPushNotification(post.authorUserId, "Discussion Alert 🔥", ownerMsg, { postId: post._id.toString() });
-      }
-    }
     return NextResponse.json({ comment: newComment }, { status: 201 });
   } catch (err) {
     console.error("POST error:", err);
