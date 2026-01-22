@@ -34,11 +34,10 @@ export async function GET(req) {
 
     // 3️⃣ Fetch all users from both collections
     const mobileUsers = await MobileUser.find({});
-    const adminUsers = await AdminUser.find({});
-    console.log(`👤 Mobile users: ${mobileUsers.length}, Admin users: ${adminUsers.length}`);
+    
 
     // 4️⃣ Combine and attach post counts
-    const combinedUsers = [...mobileUsers, ...adminUsers]
+    const combinedUsers = [...mobileUsers]
       .map((user) => {
         const postCount = postCountMap[user._id.toString()] || 0;
         return { ...user._doc, postCount, streak: user.lastStreak || 0 };
