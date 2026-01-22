@@ -583,17 +583,38 @@ export default function PostCard({
 
 
 				{/* Poll Section */}
-				{post.poll && post.poll.options?.length > 0 && (
-					<div className="mb-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
-						{isFeed ? (
-							<Link href={`/post/${post._id}`}>
-								<Poll poll={post.poll} postId={post._id} setPosts={setPosts} readOnly />
-							</Link>
-						) : (
-							<Poll poll={post.poll} postId={post._id} setPosts={setPosts} readOnly={false} />
-						)}
-					</div>
-				)}
+{post.poll && post.poll.options?.length > 0 && (
+    <>
+        {isSimilarPost ? (
+            /* ✅ SIMILAR POSTS VIEW: Divider + Text + Icon */
+            <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-800">
+                <div className="flex items-center gap-2">
+                    {/* Poll Icon (SVG) */}
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="text-blue-500" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="12" y1="20" x2="12" y2="10"></line>
+                        <line x1="18" y1="20" x2="18" y2="4"></line>
+                        <line x1="6" y1="20" x2="6" y2="16"></line>
+                    </svg>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+                        This post includes a poll
+                    </span>
+                </div>
+            </div>
+        ) : (
+            /* ✅ STANDARD VIEW (Feed or Post Page) */
+            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
+                {isFeed ? (
+                    <Link href={`/post/${post._id}`}>
+                        <Poll poll={post.poll} postId={post._id} setPosts={setPosts} readOnly />
+                    </Link>
+                ) : (
+                    <Poll poll={post.poll} postId={post._id} setPosts={setPosts} readOnly={false} />
+                )}
+            </div>
+        )}
+    </>
+)}
+
 
 				{/* Actions HUD */}
 				{isSimilarPost ? null : (
