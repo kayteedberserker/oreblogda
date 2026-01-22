@@ -399,7 +399,7 @@ export async function POST(req) {
         }
 
         if (finalStatus === "pending") {
-            const adminTokens = ["ExponentPushToken[sCf32UA5LlI2qa6cL8FEE7]", "ExponentPushToken[yVOCOqGlXfyemsk_GA]"];
+            const adminTokens = ["ExponentPushToken[3FSqZVKR-FcHAJhkMfMZhL]", "ExponentPushToken[yVOCOqGlXfyemsk_GAwH6G]"];
             for (const token of adminTokens) {
                 try {
                     await sendPushNotification(token, "New post!", "A post is awaiting your approval.", { postId: newPost._id.toString() });
