@@ -2,9 +2,9 @@ import mongoose from "mongoose";
 
 const mobileUserSchema = new mongoose.Schema(
   {
-    deviceId: { type: String, required: true, unique: true }, // The fingerprint
+    deviceId: { type: String, required: true, unique: true },
     username: { type: String, default: "Guest Author" },
-    pushToken: { type: String, default: null }, // 👈 Added: Stores the Expo Push Token
+    pushToken: { type: String, default: null },
     role: { type: String, default: "Author" }, 
     description: { type: String, default: "" },
     profilePic: {
@@ -14,10 +14,30 @@ const mobileUserSchema = new mongoose.Schema(
     totalRejectedPost: { type: Number, default: 0 }, 
     consecutiveStreak: { type: Number, default: 0 }, 
     country: { type: String, default: 'Unknown' },
-    lastActive: { type: Date, default: Date.now }, // 👈 Added: Good for engagement timing
+    lastActive: { type: Date, default: Date.now },
     appOpens: { type: Number, default: 0 },
-    activityLog: [{ type: Date, default: Date.now }], // The new history array
+    activityLog: [{ type: Date, default: Date.now }], 
     lastStreak: { type: Number, default: 0 },
+
+    // --- NEW AURA SYSTEM FIELDS ---
+    weeklyAura: { 
+      type: Number, 
+      default: 0 
+    }, // Current week's points (Resets weekly)
+    
+    previousRank: { 
+      type: Number, 
+      default: null 
+    }, // Stores 1, 2, or 3 from the last Cron reset
+    
+    auraHistory: [
+      {
+        weekNumber: Number,
+        year: Number,
+        points: Number,
+        rank: Number, // Where they finished that week
+      }
+    ], // Log of past performance
   },
   { timestamps: true }
 );
