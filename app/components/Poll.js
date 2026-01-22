@@ -4,11 +4,21 @@ import { useState } from "react";
 import { toast } from "react-toastify";
 import FingerprintJS from "@fingerprintjs/fingerprintjs";
 import { motion, AnimatePresence } from "framer-motion";
+import { usePathname } from "next/navigation";
+import Link from "next/link";
 
 export default function Poll({ poll, postId, setPosts, readOnly = false }) {
+  const pathname = usePathname();
   const [selectedOptions, setSelectedOptions] = useState([]);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  // ✅ Route Check: Determine if we are on a single post page
+  const isPostPage = pathname?.includes("/post/");
+  
+  // ✅ Determine which options to show
+  const displayOptions = isPostPage ? poll.options : poll.options.slice(0, 2);
+  const hasMoreOptions = !isPostPage && poll.options.length > 2;
 
   const handleOptionChange = (optionIndex) => {
     if (readOnly || submitted) return;
@@ -94,15 +104,15 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {poll.options.map((opt, i) => {
+      <div className={`grid grid-cols-1 ${isPostPage ? 'sm:grid-cols-2' : ''} gap-4`}>
+        {displayOptions.map((opt, i) => {
           const percentage = totalVotes ? ((opt.votes / totalVotes) * 100).toFixed(1) : 0;
           const isSelected = selectedOptions.includes(i);
 
           return (
             <motion.div
               key={i}
-              whileHover={!submitted && !readOnly ? { scale: 1.02 } : {}}
+              whileHover={!submitted && !readOnly ? { scale: 1.01 } : {}}
               onClick={() => handleOptionChange(i)}
               className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer overflow-hidden ${isSelected
                   ? "border-blue-600 bg-blue-600/5 dark:bg-blue-600/10"
@@ -138,6 +148,19 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
         })}
       </div>
 
+      {/* ✅ More Options Link (Website Version) */}
+      {hasMoreOptions && (
+        <Link href={`/post/${postId}`} className="group">
+          <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800/50 flex items-center justify-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>
+            <span className="text-[10px] font-black uppercase tracking-widest text-blue-500 group-hover:text-blue-400 transition-colors">
+              Check {poll.options.length - 2} more options
+            </span>
+            <svg className="group-hover:translate-x-1 transition-transform" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+          </div>
+        </Link>
+      )}
+
       {!readOnly && !submitted && (
         <button
           onClick={(e) => { e.stopPropagation(); handleVote(); }}
@@ -155,20 +178,20 @@ export default function Poll({ poll, postId, setPosts, readOnly = false }) {
             )}
           </div>
 
-          {/* User Instruction: Loading Animation */}
+          {/* Loading Animation Bar */}
           <div className={`absolute bottom-0 left-0 h-1 bg-blue-600 transition-all duration-300 ${loading ? 'w-full animate-[loading_2s_infinite]' : 'w-0'}`} />
         </button>
       )}
 
       {submitted && (
-        <div
+        <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           className="mt-6 p-3 bg-green-500/10 border border-green-500/20 rounded-xl flex items-center justify-center gap-2"
         >
           <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
           <p className="text-[10px] font-black uppercase tracking-widest text-green-600">Verification Complete: Vote Logged</p>
-        </div>
+        </motion.div>
       )}
 
       <style jsx>{`
