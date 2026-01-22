@@ -62,7 +62,7 @@ export async function GET(req) {
       type,
       count: topLeaderboard.length,
       leaderboard: topLeaderboard.map((u) => ({
-        userId: u.deviceId,
+        userId: u._id,
         adminId: u.email ? u._id : null,
         username: u.username,
         profilePic: u.profilePic?.url || "",
