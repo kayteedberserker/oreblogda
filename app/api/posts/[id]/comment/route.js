@@ -39,7 +39,7 @@ export async function POST(req, { params }) {
       authorUserId: mobileUserId,
       name,
       text,
-      replyTo: replyTo || null, // Persist who is being replied to
+      replyTo: replyTo || null, // This stores {name, text, id} of the person replied to
       date: new Date(),
       replies: []
     };
@@ -49,27 +49,37 @@ export async function POST(req, { params }) {
 
     if (!parentCommentId) {
       post.comments.unshift(newComment);
-      recipientUserId = post.authorUserId; // Post owner
+      recipientUserId = post.authorUserId;
     } else {
       type = "reply";
-      const insertReply = (comments) => {
-        for (const c of comments) {
-          if (c._id.toString() === parentCommentId) {
-            recipientUserId = c.authorUserId; // The person you are replying to
-            c.replies.push(newComment);
-            return true;
-          }
-          if (c.replies?.length && insertReply(c.replies)) return true;
+      
+      // FIX: Find the TOP-LEVEL comment, no matter how deep the reply is.
+      // We want to push all replies into the same flat list for that discussion.
+      const topLevelComment = post.comments.find(c => 
+        c._id.toString() === parentCommentId || 
+        c.replies.some(r => r._id.toString() === parentCommentId)
+      );
+
+      if (topLevelComment) {
+        // Find the specific user we are replying to for the notification
+        if (topLevelComment._id.toString() === parentCommentId) {
+          recipientUserId = topLevelComment.authorUserId;
+        } else {
+          const specificReply = topLevelComment.replies.find(r => r._id.toString() === parentCommentId);
+          recipientUserId = specificReply?.authorUserId;
         }
-        return false;
-      };
-      insertReply(post.comments);
-      post.markModified("comments");
+
+        topLevelComment.replies.push(newComment);
+        post.markModified("comments");
+      } else {
+        return NextResponse.json({ message: "Discussion thread not found" }, { status: 404 });
+      }
     }
 
     await post.save();
 
-    // 🔔 NOTIFICATION LOGIC
+    // ... (Notification logic remains the same) ...
+     // 🔔 NOTIFICATION LOGIC
     if (recipientUserId && recipientUserId.toString() !== mobileUserId?.toString()) {
       const msg = type === "reply" 
         ? `${name} replied to your signal.` 
@@ -97,7 +107,6 @@ export async function POST(req, { params }) {
         await sendPushNotification(post.authorUserId, "Discussion Alert 🔥", ownerMsg, { postId: post._id.toString() });
       }
     }
-
     return NextResponse.json({ comment: newComment }, { status: 201 });
   } catch (err) {
     console.error("POST error:", err);
