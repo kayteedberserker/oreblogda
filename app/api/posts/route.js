@@ -43,7 +43,7 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
         // Check if it's a direct image or a Cloudinary asset, but NOT a social link
         const isSocial = mediaUrl?.match(/(tiktok|youtube|instagram|facebook)\.com/i);
         
-        if (mediaUrl && mediaUrl.includes("cloudinary.com"))) {
+        if (mediaUrl == "image" && mediaUrl.includes("cloudinary.com")) {
             try {
                 const imgRes = await fetch(mediaUrl);
                 
