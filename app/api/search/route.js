@@ -43,7 +43,7 @@ export async function GET(req) {
             users = await MobileUser.find({})
                 .sort({ previousRank: 1, weeklyAura: -1 }) // Primary: Rank, Secondary: Aura
                 .limit(15) // Give a few more for leaderboards
-                .select("username profilePic weeklyAura consecutiveStreak previousRank description")
+                .select("username profilePic weeklyAura lastStreak previousRank description")
                 .lean();
 
             // We don't fetch posts for this specific intent to keep focus on users
