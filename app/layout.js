@@ -10,7 +10,6 @@ import { Analytics } from "@vercel/analytics/react"
 import { SWRConfig } from "swr";
 import { ToastContainer } from "react-toastify";
 import Adsense from "./components/Adsense";
-import TesterRecruitment from "./components/TesterRecruitment";
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"] });
 
 export const metadata = {
@@ -112,10 +111,6 @@ export default function RootLayout({ children }) {
 							<div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-blue-500/50 to-transparent z-10" />
 
 							<CategoryNav />
-							{/* 2. THE RECRUITMENT BLOCK (Integrated directly into the feed) */}
-							<section className="px-4 py-8">
-								<TesterRecruitment />
-							</section>
 							{/* MAIN CONTENT ENGINE */}
 							<main className="relative z-10 flex-grow">
 								{children}
