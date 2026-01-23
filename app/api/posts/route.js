@@ -310,9 +310,10 @@ export async function POST(req) {
                 // Pass mediaUrl and mediaType to the moderator
                 const ai = await runAIModerator(title, message, category, mediaUrl, mediaType);
                  
-                if (ai.status === "approve") {
+                if (ai.action === "approve") {
                     finalStatus = "approved";
-                } else if (ai.status === "reject") {
+                    rejectionReason = ai.reason;
+                } else if (ai.action === "reject") {
                     finalStatus = "rejected";
                     rejectionReason = ai.reason;
                     expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
