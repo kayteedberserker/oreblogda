@@ -4,15 +4,15 @@ import Post from "@/app/models/PostModel";
 import MobileUser from "@/app/models/MobileUserModel";
 
 /**
- * SMART SEARCH ENGINE v2.1
- * Features: Pagination, Relevance Scoring, Dynamic Author Post Counts
+ * SMART SEARCH ENGINE v2.5 - NEURAL SCORING
+ * Features: Tokenization, Fuzzy Numeric Matching, Weighted Relevance
  */
 export async function GET(req) {
     try {
         await connectDB();
 
         const { searchParams } = new URL(req.url);
-        const query = searchParams.get("q");
+        const query = searchParams.get("q")?.trim();
         const page = parseInt(searchParams.get("page")) || 1;
         const limit = parseInt(searchParams.get("limit")) || 10;
         const skip = (page - 1) * limit;
@@ -21,57 +21,94 @@ export async function GET(req) {
             return NextResponse.json({ success: false, message: "Input required" }, { status: 400 });
         }
 
-        // --- SEARCH LOGIC ---
-        const searchRegex = new RegExp(query, "i");
+        // --- SMART TOKENIZATION ---
+        // Split query into words: "Winter 2026" -> ["Winter", "2026"]
+        const tokens = query.split(/\s+/).filter(t => t.length > 1);
+        
+        // --- FUZZY NUMERIC LOGIC ---
+        // If searching a year like 2027, include 2026 in the search terms
+        const extendedTokens = [...tokens];
+        tokens.forEach(token => {
+            if (/^\d{4}$/.test(token)) {
+                const year = parseInt(token);
+                extendedTokens.push((year - 1).toString());
+                extendedTokens.push((year + 1).toString());
+            }
+        });
+
+        const searchRegexes = extendedTokens.map(t => new RegExp(t, "i"));
+
+        // --- AGGREGATION PIPELINE FOR POSTS (SCORING) ---
+        const postsPipeline = [
+            {
+                $match: {
+                    status: "approved",
+                    $or: [
+                        { title: { $in: searchRegexes } },
+                        { category: { $in: searchRegexes } },
+                        { authorName: { $in: searchRegexes } },
+                        { message: { $in: searchRegexes } }
+                    ]
+                }
+            },
+            {
+                $addFields: {
+                    relevanceScore: {
+                        $add: [
+                            // Higher weight for exact title match
+                            { $cond: [{ $regexMatch: { input: "$title", regex: new RegExp(query, "i") } }, 10, 0] },
+                            // Weight for word matches in title
+                            { $multiply: [{ $size: { $setIntersection: [ { $split: ["$title", " "] }, extendedTokens ] } }, 5] },
+                            // Lower weight for message match
+                            { $cond: [{ $regexMatch: { input: "$message", regex: new RegExp(query, "i") } }, 2, 0] }
+                        ]
+                    }
+                }
+            },
+            { $sort: { relevanceScore: -1, createdAt: -1 } },
+            { $skip: skip },
+            { $limit: limit },
+            {
+                $project: {
+                    title: 1, message: 1, category: 1, mediaUrl: 1, 
+                    authorName: 1, authorId: 1, createdAt: 1, 
+                    likes: 1, comments: 1, shares: 1, views: 1
+                }
+            }
+        ];
 
         const [users, posts, totalPosts] = await Promise.all([
-            // 1. AUTHOR SEARCH
+            // 1. AUTHOR SEARCH (Keep simple regex for users)
             MobileUser.find({
                 $or: [
-                    { username: searchRegex },
-                    { clanName: searchRegex }
+                    { username: { $in: searchRegexes } },
+                    { clanName: { $in: searchRegexes } }
                 ]
             })
-            .select("username profilePic weeklyAura lastStreak previousRank description")
+            .select("username profilePic weeklyAura consecutiveStreak previousRank description")
             .limit(5)
             .lean(),
 
-            // 2. SMART POST SEARCH
-            Post.find({
-                status: "approved",
-                $or: [
-                    { title: searchRegex },
-                    { category: searchRegex },
-                    { authorName: searchRegex }
-                ]
-            })
-            .select("title message category mediaUrl authorName authorId createdAt likes comments shares views")
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .lean(),
+            // 2. SMART POST SEARCH (Using Pipeline)
+            Post.aggregate(postsPipeline),
 
             // 3. COUNT FOR PAGINATION
             Post.countDocuments({
                 status: "approved",
                 $or: [
-                    { title: searchRegex },
-                    { category: searchRegex }
+                    { title: { $in: searchRegexes } },
+                    { category: { $in: searchRegexes } }
                 ]
             })
         ]);
 
         // --- ENHANCEMENT: Fetch Post Counts for each User ---
-        // We do this here because the MobileUser model doesn't store a live count
         const usersWithCounts = await Promise.all(users.map(async (user) => {
             const count = await Post.countDocuments({ 
-                authorName: user.username, // Or use authorId if your schema links by ID
+                authorName: user.username, 
                 status: "approved" 
             });
-            return {
-                ...user,
-                postsCount: count
-            };
+            return { ...user, postsCount: count };
         }));
 
         // Process Posts for Mobile Analytics
@@ -81,7 +118,7 @@ export async function GET(req) {
             commentsCount: post.comments?.length || 0,
             sharesCount: post.shares || 0,
             viewsCount: post.views || 0,
-            message: post.message.substring(0, 100) + "...", 
+            message: post.message ? post.message.substring(0, 100) + "..." : "", 
             likes: undefined,
             comments: undefined
         }));
