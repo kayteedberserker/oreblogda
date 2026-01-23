@@ -6,12 +6,13 @@ const MY_DOMAIN = "oreblogda.com";
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  const userAgent = req.headers.get('user-agent') || '';
   const response = NextResponse.next();
 
   // --- 1. HANDLE API ROUTES (Security & CORS) ---
   if (pathname.startsWith("/api")) {
     
-    // A. CORS Headers
+    // A. CORS Headers (Crucial for Mobile App)
     response.headers.set("Access-Control-Allow-Origin", "*"); 
     response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
     response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-oreblogda-secret");
@@ -21,33 +22,32 @@ export function middleware(req: NextRequest) {
       return new NextResponse(null, { status: 204, headers: response.headers });
     }
 
-    // B. BOT/SECURITY CHECK
-    const clientSecret = req.headers.get('x-oreblogda-secret');
+    // B. IDENTIFY TRUSTED SOURCES
+    
+    // 1. Search Engines (SEO Protection)
+    const isSearchEngine = /Googlebot|Bingbot|Slurp|DuckDuckBot|Baiduspider|YandexBot/i.test(userAgent);
+
+    // 2. Internal Site Requests
     const referer = req.headers.get('referer');
     const origin = req.headers.get('origin');
-    
     const isInternal = 
       (referer && referer.includes(MY_DOMAIN)) || 
       (origin && origin.includes(MY_DOMAIN));
 
-    // --- DEBUG LOGS FOR VERCEL ---
-    console.log("--- NEURAL_LINK_DEBUG ---");
-    console.log("Path:", pathname);
-    console.log("Is Internal:", isInternal);
-    console.log("Referer:", referer);
-    console.log("Origin:", origin);
-    console.log("Secret Provided:", clientSecret ? "YES (HIDDEN)" : "NO");
-    console.log("Secret Match:", clientSecret === APP_SECRET);
-    console.log("-------------------------");
-
-    // If it's external, it MUST have the secret
-    if (!isInternal) {
+    // C. SECURITY ENFORCEMENT
+    // If it's NOT a search engine AND it's NOT from our own website...
+    if (!isSearchEngine && !isInternal) {
+      const clientSecret = req.headers.get('x-oreblogda-secret');
+      
+      // ...then it MUST be the Mobile App with the correct secret
       if (!clientSecret || clientSecret !== APP_SECRET) {
-        console.error("⛔ ACCESS_DENIED: Bot or External unauthorized source blocked.");
+        // Log it to Vercel so you can track attempts
+        console.error(`⛔ BLOCKED: Unauthorized external request to ${pathname}`);
+        
         return new NextResponse(
           JSON.stringify({ 
             success: false, 
-            message: "NEURAL_LINK_DENIED: External unauthorized access protocol." 
+            message: "NEURAL_LINK_DENIED: Access restricted to authorized operatives." 
           }),
           { status: 401, headers: { 'content-type': 'application/json' } }
         );
