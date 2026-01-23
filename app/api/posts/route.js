@@ -7,6 +7,7 @@ import nodemailer from "nodemailer";
 import MobileUser from "@/app/models/MobileUserModel";
 import Notification from "@/app/models/NotificationModel";
 import { sendPushNotification } from "@/app/lib/pushNotifications";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import crypto from "crypto"; // 🛡️ Needed for Security Signature
 
 // ----------------------
@@ -36,80 +37,75 @@ function verifyRequestSignature(req, body) {
 // ----------------------
 // 🤖 AI Moderation (Vision & Text)
 // ----------------------
+
+/**
+ * 🔹 UPDATED AI MODERATOR (Gemini 1.5 Flash Edition)
+ * Faster, higher rate limits, and better vision context for Anime/Gaming.
+ */
 async function runAIModerator(title, message, category, mediaUrl, mediaType) {
-    const API_KEY = process.env.OPENAI_API_KEY;
+    const API_KEY = process.env.GEMINI_API_KEY;
     if (!API_KEY) {
-        return { action: "flag", reason: "AI Config Error" };
+        return { action: "flag", reason: "AI Config Error: Missing Gemini Key" };
     }
-    
+
+    const genAI = new GoogleGenerativeAI(API_KEY);
+    // 1.5 Flash is optimized for high-speed, high-volume tasks like moderation
+    const model = genAI.getGenerativeModel({ 
+        model: "gemini-1.5-flash",
+        generationConfig: { responseMimeType: "application/json" }
+    });
+
     try {
-        const contentArr = [
-            { 
-                type: "text", 
-                text: `TASK: Moderate this post for an Anime/Gaming blog named 'Oreblogda'.
-                RULES:
-                1. Reject nudity, gore, scams, or hate speech, try your best to get the meaning of the context before rejecting.
-                2. The post MUST be related to Anime, Manga, or Gaming.
-                3. The message might be short or vague if it is referencing the attached image.
-                4. Do NOT change the text. Only decide to approve, reject, or flag. flag any content that seems borderline for manual review
-                
-                INPUT:
-                Title: "${title}"
-                Message: "${message}"
-                Category: "${category}"`
-            }
-        ];
+        const prompt = `
+            TASK: Moderate this post for an Anime/Gaming blog named 'Oreblogda'.
+            RULES:
+            1. Reject nudity, gore, scams, or hate speech. Understand context (e.g., fictional anime battles are okay, real violence is not).
+            2. The post MUST be related to Anime, Manga, or Gaming.
+            3. Decide to "approve", "reject", or "flag" (for borderline cases).
+            
+            INPUT:
+            Title: "${title}"
+            Message: "${message}"
+            Category: "${category}"
 
-        // Add image analysis if media is an image and URL exists
+            OUTPUT: Return ONLY valid JSON in this format: 
+            {"action": "approve" | "reject" | "flag", "reason": "short explanation"}
+        `;
+
+        const parts = [{ text: prompt }];
+
+        // 🔹 Handle Image Analysis
+        // Note: For Gemini, it's best to fetch the image and pass as base64 if it's a local buffer, 
+        // but since you have a URL, we will assume you can fetch it or use the File API.
         if (mediaUrl && (mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i))) {
-            contentArr.push({
-                type: "image_url",
-                image_url: { 
-                    url: mediaUrl,
-                    detail: "low" // 'low' is faster and cheaper, sufficient for topic detection
-                }
-            });
+            try {
+                const response = await fetch(mediaUrl);
+                const buffer = await response.arrayBuffer();
+                parts.push({
+                    inlineData: {
+                        data: Buffer.from(buffer).toString("base64"),
+                        mimeType: "image/jpeg"
+                    }
+                });
+            } catch (imgErr) {
+                console.error("Failed to fetch image for Gemini analysis:", imgErr);
+                // Continue with just text if image fetch fails
+            }
         }
 
-        const response = await fetch("https://api.openai.com/v1/chat/completions", {
-            method: "POST",
-            headers: { 
-                "Content-Type": "application/json", 
-                "Authorization": `Bearer ${API_KEY}` 
-            },
-            body: JSON.stringify({
-                model: "gpt-4o-mini", // Cost-effective and vision-capable
-                messages: [
-                    { 
-                        role: "system", 
-                        content: "You are a Senior Content Moderator. Output ONLY valid JSON." 
-                    },
-                    { 
-                        role: "user", 
-                        content: contentArr
-                    }
-                ],
-                response_format: { type: "json_object" }
-            })
-        });
-          
-        const data = await response.json();
-        console.log(data) 
+        const result = await model.generateContent(parts);
+        const responseText = result.response.text();
         
+        // Clean and parse the JSON
+        const moderationResult = JSON.parse(responseText);
         
-        if (!response.ok) {
-            console.error("OpenAI API Error Details:", data.error);
-            throw new Error(`AI API Error: ${data.error?.message || "Unknown error"}`);
-        }
-        
-        const result = JSON.parse(data.choices[0].message.content);
-        console.log(result) 
-        // Result format expected: { "action": "approve"|"reject"|"flag", "reason": "..." }
-        return result;
+        console.log("Moderation Outcome:", moderationResult);
+        return moderationResult;
+
     } catch (err) {
-        console.error("AI Moderator Failed:", err);
-        // Fallback to manual approval (flagging) so posts aren't lost on API failure
-        return { action: "flag", reason: "AI Service Unavailable/Error" };
+        console.error("Gemini Moderator Failed:", err);
+        // Fallback to flag so humans can review it
+        return { action: "flag", reason: "AI Service Error" };
     }
 }
 
