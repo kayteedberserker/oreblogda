@@ -9,6 +9,7 @@ export async function generateMetadata({ params }) {
 
 	// Fetch author info
 	const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/users/${id}`);
+    console.log(res) 
 	if (!res.ok) return notFound();
 
 	const author = await res.json();
