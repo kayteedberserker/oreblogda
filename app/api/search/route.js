@@ -33,7 +33,7 @@ export async function GET(req) {
                     { clanName: searchRegex } // Included for future-proofing
                 ]
             })
-            .select("username profilePic weeklyAura consecutiveStreak previousRank")
+            .select("username profilePic weeklyAura lastStreak previousRank")
             .limit(5) // Keep author results small and top-tier
             .lean(),
 
