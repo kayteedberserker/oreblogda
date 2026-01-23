@@ -131,20 +131,26 @@ export async function POST(req, { params }) {
       }
     };
 
+    // 1. DISTRIBUTE AURA FOR THE COMMENTER (Active User Reward)
+    if (mobileUserId) {
+        await MobileUser.updateOne({ _id: mobileUserId }, { $inc: { weeklyAura: 1 } });
+    }
+
     if (!parentCommentId) {
-      // 1. TOP LEVEL COMMENT
+      // TOP LEVEL COMMENT
       post.comments.unshift(newComment);
       immediateRecipientId = post.authorUserId; 
 
       // ✨ AURA: +3 to Post Author for a new Signal
-      if (post.authorUserId !== authorAuraId) {
+      // FIX: Use authorUserId (ObjectId) to update points
+      if (post.authorUserId && post.authorUserId.toString() !== mobileUserId?.toString()) {
         await MobileUser.updateOne(
-          { deviceId: post.authorUserId },
+          { _id: post.authorUserId },
           { $inc: { weeklyAura: 3 } }
         );
       }
     } else {
-      // 2. REPLY
+      // REPLY
       immediateRecipientId = findAndReply(post.comments);
       if (!immediateRecipientId) {
         return NextResponse.json({ message: "Signal lost" }, { status: 404 });
@@ -164,6 +170,7 @@ export async function POST(req, { params }) {
 
     const notifications = [];
 
+    // Notification Logic
     if (parentCommentId && immediateRecipientId?.toString() !== mobileUserId?.toString()) {
       notifications.push({
         recipientId: immediateRecipientId,
@@ -174,13 +181,13 @@ export async function POST(req, { params }) {
       });
     }
 
-    if (!parentCommentId && post.authorUserId !== authorAuraId) {
+    if (!parentCommentId && post.authorUserId && post.authorUserId.toString() !== mobileUserId?.toString()) {
       notifications.push({
         recipientId: post.authorUserId,
         title: "New Signal 📝",
         message: `${name} started a new signal (#${post.comments.length})`,
         type: "comment",
-        isMongoId: false 
+        isMongoId: true 
       });
     }
 
@@ -190,16 +197,16 @@ export async function POST(req, { params }) {
       // ✨ AURA: Discussion Bonus (Awarded every 5 replies)
       if (totalMessages > 0 && totalMessages % 5 === 0) {
         // A) Award the Thread Starter (+1 Aura)
-        if (targetRootComment.authorUserId?.toString() !== mobileUserId?.toString()) {
+        if (targetRootComment.authorUserId && targetRootComment.authorUserId.toString() !== mobileUserId?.toString()) {
           await MobileUser.updateOne(
             { _id: targetRootComment.authorUserId },
             { $inc: { weeklyAura: 1 } }
           );
         }
-        // B) Award the Post Owner (+1 Aura) for hosting the discussion
-        if (post.authorUserId !== authorAuraId) {
+        // B) Award the Post Owner (+1 Aura)
+        if (post.authorUserId && post.authorUserId.toString() !== mobileUserId?.toString()) {
           await MobileUser.updateOne(
-            { deviceId: post.authorUserId },
+            { _id: post.authorUserId },
             { $inc: { weeklyAura: 1 } }
           );
         }
