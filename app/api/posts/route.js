@@ -39,8 +39,8 @@ function verifyRequestSignature(req, body) {
 // ----------------------
 
 /**
- * 🔹 UPDATED AI MODERATOR (Gemini 1.5 Flash Edition)
- * Faster, higher rate limits, and better vision context for Anime/Gaming.
+ * 🔹 UPDATED AI MODERATOR (Gemini 1.5 Flash - Stable Fix)
+ * Fixed the 404/v1beta issue by using the standard model naming and SDK approach.
  */
 async function runAIModerator(title, message, category, mediaUrl, mediaType) {
     const API_KEY = process.env.GEMINI_API_KEY;
@@ -48,67 +48,73 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
         return { action: "flag", reason: "AI Config Error: Missing Gemini Key" };
     }
 
+    // Initialize the SDK
     const genAI = new GoogleGenerativeAI(API_KEY);
-    // 1.5 Flash is optimized for high-speed, high-volume tasks like moderation
-    const model = genAI.getGenerativeModel({ 
-        model: "gemini-1.5-flash",
-        generationConfig: { responseMimeType: "application/json" }
-    });
 
     try {
+        // We use gemini-1.5-flash (stable). 
+        // If 1.5-flash-latest fails, this is the most reliable string.
+        const model = genAI.getGenerativeModel({ 
+            model: "gemini-1.5-flash",
+        });
+
         const prompt = `
             TASK: Moderate this post for an Anime/Gaming blog named 'Oreblogda'.
             RULES:
-            1. Reject nudity, gore, scams, or hate speech. Understand context (e.g., fictional anime battles are okay, real violence is not).
+            1. Reject nudity, gore, scams, or hate speech. 
             2. The post MUST be related to Anime, Manga, or Gaming.
-            3. Decide to "approve", "reject", or "flag" (for borderline cases).
+            3. Context matters: Anime battles/swords are okay; real-world violence is not.
             
             INPUT:
             Title: "${title}"
             Message: "${message}"
             Category: "${category}"
 
-            OUTPUT: Return ONLY valid JSON in this format: 
-            {"action": "approve" | "reject" | "flag", "reason": "short explanation"}
+            OUTPUT: Return ONLY a JSON object.
+            Format: {"action": "approve" | "reject" | "flag", "reason": "short explanation"}
         `;
 
         const parts = [{ text: prompt }];
 
         // 🔹 Handle Image Analysis
-        // Note: For Gemini, it's best to fetch the image and pass as base64 if it's a local buffer, 
-        // but since you have a URL, we will assume you can fetch it or use the File API.
         if (mediaUrl && (mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i))) {
             try {
                 const response = await fetch(mediaUrl);
-                const buffer = await response.arrayBuffer();
-                parts.push({
-                    inlineData: {
-                        data: Buffer.from(buffer).toString("base64"),
-                        mimeType: "image/jpeg"
-                    }
-                });
+                if (response.ok) {
+                    const arrayBuffer = await response.arrayBuffer();
+                    const base64Data = Buffer.from(arrayBuffer).toString("base64");
+                    
+                    parts.push({
+                        inlineData: {
+                            data: base64Data,
+                            mimeType: "image/jpeg" // Adjust if you want to be dynamic, but jpeg is safe for Gemini
+                        }
+                    });
+                }
             } catch (imgErr) {
-                console.error("Failed to fetch image for Gemini analysis:", imgErr);
-                // Continue with just text if image fetch fails
+                console.error("Image fetch failed, proceeding with text only:", imgErr);
             }
         }
 
+        // Generate content using the stable method
         const result = await model.generateContent(parts);
-        const responseText = result.response.text();
+        const response = await result.response;
+        let text = response.text();
         
-        // Clean and parse the JSON
-        const moderationResult = JSON.parse(responseText);
+        // Safety: Sometimes AI returns markdown like ```json ... ```, let's clean it
+        text = text.replace(/```json|```/g, "").trim();
+        
+        const moderationResult = JSON.parse(text);
         
         console.log("Moderation Outcome:", moderationResult);
         return moderationResult;
 
     } catch (err) {
         console.error("Gemini Moderator Failed:", err);
-        // Fallback to flag so humans can review it
-        return { action: "flag", reason: "AI Service Error" };
+        // Fallback to flag so you don't lose posts during testing
+        return { action: "flag", reason: "AI Service Error: Check model version or quota" };
     }
 }
-
 // ----------------------
 // Helper to add CORS headers
 // ----------------------
