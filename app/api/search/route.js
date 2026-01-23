@@ -24,7 +24,7 @@ export async function GET(req) {
         // 3. Execute Search across both collections in parallel
         const [users, posts] = await Promise.all([
             // Search Users: by username, description, or clan name
-            User.find({
+            MobileUser.find({
                 $or: [
                     { username: searchRegex },
                     { description: searchRegex },
