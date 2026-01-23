@@ -1,15 +1,22 @@
-import ClientPostPage from "./ClientPostPage"; // client component
-import Head from "next/head";
-
-export const revalidate = 60; // Re-generate the page at most once every 60 seconds
-
+import ClientPostPage from "./ClientPostPage";
 import { notFound } from "next/navigation";
+
+export const revalidate = 60;
+
+// Security headers to bypass your middleware operative check
+const INTERNAL_HEADERS = {
+  "x-oreblogda-secret": process.env.APP_INTERNAL_SECRET,
+  "Content-Type": "application/json",
+};
 
 export async function generateMetadata({ params }) {
   const awaitParams = await params;
-	const { id } = awaitParams;
+  const { id } = awaitParams;
 
-  const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/posts/${id}`);
+  const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/posts/${id}`, {
+    headers: INTERNAL_HEADERS,
+  });
+  
   if (!res.ok) return notFound();
 
   const post = await res.json();
@@ -17,14 +24,9 @@ export async function generateMetadata({ params }) {
   const description = post.message?.slice(0, 150) || "Read this post on Oreblogda";
   const postUrl = `https://oreblogda.com/post/${post.slug || post._id}`;
   let postImage = "https://oreblogda.com/ogimage.png";
-  if (post.mediaUrl) {
-	if (post.mediaUrl.includes("res.cloudinary.com")) {
-		postImage = post.mediaUrl;
-	}else{
-		postImage = "https://oreblogda.com/ogimage.png";
-	}
-  }else {
-	postImage = "https://oreblogda.com/ogimage.png";
+
+  if (post.mediaUrl && post.mediaUrl.includes("res.cloudinary.com")) {
+    postImage = post.mediaUrl;
   }
 
   return {
@@ -33,8 +35,6 @@ export async function generateMetadata({ params }) {
     ],
     title: post.title,
     description,
-
-    // Open Graph for social previews
     openGraph: {
       title: post.title,
       description,
@@ -50,8 +50,6 @@ export async function generateMetadata({ params }) {
       ],
       type: "article",
     },
-
-    // Twitter card
     twitter: {
       card: "summary_large_image",
       site: "https://oreblogda.com",
@@ -60,19 +58,15 @@ export async function generateMetadata({ params }) {
       images: [postImage],
       creator: "@oreblogda",
     },
-
     alternates: {
       canonical: postUrl,
     },
-
-    // ✅ Article JSON-LD
     metadataBase: new URL("https://oreblogda.com"),
     icons: {
       icon: "https://oreblogda.com/iconblue.png",
     },
-    // For structured data, Next.js app router supports this field:
     other: {
-      "application/ld+json": {
+      "application/ld+json": JSON.stringify({
         "@context": "https://schema.org",
         "@type": "BlogPosting",
         headline: post.title,
@@ -87,97 +81,55 @@ export async function generateMetadata({ params }) {
         url: postUrl,
         datePublished: new Date(post.createdAt).toISOString(),
         dateModified: new Date(post.updatedAt || post.createdAt).toISOString(),
-      },
+      }),
     },
   };
 }
 
 export default async function PostPage({ params }) {
-	const awaitParams = await params;
-	const { id } = awaitParams;
+  const awaitParams = await params;
+  const { id } = awaitParams;
 
-	// Fetch main post
-	const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/posts/${id}`, {
-		next: { revalidate: 30 },
-	});
-	if (!res.ok) return <p className="text-center mt-8 min-h-[50vh]">Post not found</p>;
-	const post = await res.json();
+  // 1. Fetch main post with internal secret
+  const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL}/api/posts/${id}`, {
+    headers: INTERNAL_HEADERS,
+    next: { revalidate: 30 },
+  });
 
-	// Fetch similar posts
-	const simRes = await fetch(
-		`${process.env.NEXT_PUBLIC_SITE_URL}/api/posts?category=${post.category}&limit=6`,
-		{ next: { revalidate: 120 } }
-	);
-	const simData = await simRes.json();
-	const similarPosts = (simData.posts || []).filter((p) => p._id !== id);
+  if (!res.ok) {
+    console.error(`⛔ Post fetch failed: ${res.status}`);
+    return <p className="text-center mt-8 min-h-[50vh]">Post not found</p>;
+  }
+  
+  const post = await res.json();
 
-	// Prepare SEO info
-	const description = post.message?.slice(0, 150) || "Read this post on Oreblogda";
-	const postUrl = `https://oreblogda.com/post/${post._id}`;
-	const postImage = post.mediaUrl || "https://oreblogda.com/ogimage.png";
+  // 2. Fetch similar posts with internal secret
+  const simRes = await fetch(
+    `${process.env.NEXT_PUBLIC_SITE_URL}/api/posts?category=${post.category}&limit=6`,
+    { 
+      headers: INTERNAL_HEADERS,
+      next: { revalidate: 120 } 
+    }
+  );
 
-	return (
-		<>
-			{/* ------------------ SERVER-RENDERED SEO ------------------ */}
-			<Head>
-				{/* Basic Meta */}
-				<title>{post.title} | Oreblogda</title>
-				<meta name="description" content={description} />
+  let similarPosts = [];
+  if (simRes.ok) {
+    const simData = await simRes.json();
+    similarPosts = (simData.posts || []).filter((p) => p._id !== id);
+  }
 
-				{/* Open Graph */}
-				<meta property="og:type" content="article" />
-				<meta property="og:title" content={post.title} />
-				<meta property="og:description" content={description} />
-				<meta property="og:image" content={postImage} />
-				<meta property="og:image:width" content="1200" />
-				<meta property="og:image:height" content="630" />
-				<meta property="og:url" content={postUrl} />
-				<meta property="og:site_name" content="Oreblogda" />
+  // Prepare metadata for the client component
+  const description = post.message?.slice(0, 150) || "Read this post on Oreblogda";
+  const postUrl = `https://oreblogda.com/post/${post._id}`;
+  const postImage = post.mediaUrl || "https://oreblogda.com/ogimage.png";
 
-				{/* Twitter Card */}
-				<meta name="twitter:card" content="summary_large_image" />
-				<meta name="twitter:title" content={post.title} />
-				<meta name="twitter:description" content={description} />
-				<meta name="twitter:image" content={postImage} />
-
-				{/* Canonical */}
-				<link rel="canonical" href={postUrl} />
-
-				{/* JSON-LD Structured Data */}
-				<script
-					type="application/ld+json"
-					dangerouslySetInnerHTML={{
-						__html: JSON.stringify({
-							"@context": "https://schema.org",
-							"@type": "BlogPosting",
-							headline: post.title,
-							image: [postImage],
-							url: postUrl,
-							datePublished: new Date(post.createdAt).toISOString(),
-							dateModified: new Date(post.updatedAt || post.createdAt).toISOString(),
-							author: { "@type": "Person", name: post.authorName || "Oreblogda" },
-							description,
-							publisher: {
-								"@type": "Organization",
-								name: "Oreblogda",
-								logo: {
-									"@type": "ImageObject",
-									url: "https://oreblogda.com/ogimage.png",
-								},
-							},
-						}),
-					}}
-				/>
-			</Head>
-
-			{/* ------------------ CLIENT COMPONENT ------------------ */}
-			<ClientPostPage
-				post={post}
-				similarPosts={similarPosts}
-				description={description}
-				postUrl={postUrl}
-				postImage={postImage}
-			/>
-		</>
-	);
+  return (
+    <ClientPostPage
+      post={post}
+      similarPosts={similarPosts}
+      description={description}
+      postUrl={postUrl}
+      postImage={postImage}
+    />
+  );
 }
