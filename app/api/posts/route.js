@@ -14,7 +14,6 @@ import { GoogleGenAI } from "@google/genai";
  * 🔹 UPDATED 2026 MODERATOR
  * Uses the new @google/genai SDK and Gemini 2.5 Flash
  */
-
 async function runAIModerator(title, message, category, mediaUrl, mediaType) {
     const API_KEY = process.env.GEMINI_API_KEY;
     if (!API_KEY) {
@@ -40,14 +39,12 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
         const contents = [{ role: 'user', parts: [{ text: prompt }] }];
 
         // 🔹 CLOUDINARY & IMAGE LOGIC
-        // Check if it's a direct image or a Cloudinary asset, but NOT a social link
         const isSocial = mediaUrl?.match(/(tiktok|youtube|instagram|facebook)\.com/i);
         
-        if (mediaUrl == "image" && mediaUrl.includes("cloudinary.com")) {
+        // FIX: Changed mediaUrl == "image" to mediaType == "image"
+        if (mediaUrl && !isSocial && (mediaType === "image" || mediaUrl.includes("cloudinary.com"))) {
             try {
                 const imgRes = await fetch(mediaUrl);
-                
-                // Get real MimeType (Cloudinary might return webp/avif even if the URL says jpg)
                 const contentType = imgRes.headers.get("content-type");
                 
                 if (contentType && contentType.startsWith("image/")) {
@@ -65,24 +62,31 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
         }
 
         // 🔹 2026 SDK GENERATION
-        const response = await client.models.generateContent({
+        const result = await client.models.generateContent({
             model: modelId,
             contents: contents,
-            // Forces the AI to strictly output JSON for cleaner parsing
             generationConfig: {
                 responseMimeType: "application/json"
             }
         });
 
-        // Parse natively from the response object
-        const resultText = response.response.text();
-        return JSON.parse(resultText);
+        // FIX: The 2026 SDK returns 'result.text' or 'result.response.text()' 
+        // depending on your exact import version. This is the safest way:
+        const text = result.response ? result.response.text() : result.text;
+        
+        if (!text) {
+            throw new Error("Empty response from AI");
+        }
+
+        return JSON.parse(text);
 
     } catch (err) {
         console.error("❌ 2026 Moderator Error:", err.message);
+        // Fallback to manual flagging so you don't lose the post
         return { action: "flag", reason: "Neural link processing timeout" };
     }
 }
+
 
 // ----------------------
 // 🛡️ SECURITY: Request Signature Verification
