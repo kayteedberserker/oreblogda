@@ -27,7 +27,7 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
     try {
         const prompt = `
             TASK: Moderate this post for 'Oreblogda' (Anime/Gaming blog).
-            RULES: Reject nudity, gore, or non-anime/gaming content. 
+            RULES: Reject nudity, gore, or non-anime/gaming content. But be lax on content in meme category, and since the posts are for 18+ users you can allow content with Gore not full Gore like that but if it's animated, then also adult jokes, if it's meme category
             INPUT:
             Title: "${title}"
             Message: "${message}"
