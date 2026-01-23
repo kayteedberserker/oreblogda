@@ -14,66 +14,75 @@ import { GoogleGenAI } from "@google/genai";
  * 🔹 UPDATED 2026 MODERATOR
  * Uses the new @google/genai SDK and Gemini 2.5 Flash
  */
+
 async function runAIModerator(title, message, category, mediaUrl, mediaType) {
     const API_KEY = process.env.GEMINI_API_KEY;
     if (!API_KEY) {
         return { action: "flag", reason: "AI Config Error" };
     }
 
-    // Initialize the new 2026 Client
     const client = new GoogleGenAI({ apiKey: API_KEY });
 
     try {
         const prompt = `
             TASK: Moderate this post for 'Oreblogda' (Anime/Gaming blog).
-            RULES: Reject nudity, gore, or non-anime/gaming content. 
+            RULES: Reject nudity, gore, or non-anime/gaming content and posts with wrong/inaccurate category. 
             INPUT:
             Title: "${title}"
             Message: "${message}"
             Category: "${category}"
+            Media Link: "${mediaUrl || 'None'}"
 
             OUTPUT: Return ONLY JSON: {"action": "approve" | "reject" | "flag", "reason": "..."}
         `;
 
-        // Using Gemini 2.5 Flash - The best price/performance for 2026
         const modelId = "gemini-2.5-flash"; 
-
         const contents = [{ role: 'user', parts: [{ text: prompt }] }];
 
-        // 🔹 Add Image Support (2026 SDK style)
-        if (mediaUrl && (mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i))) {
+        // 🔹 CLOUDINARY & IMAGE LOGIC
+        // Check if it's a direct image or a Cloudinary asset, but NOT a social link
+        const isSocial = mediaUrl?.match(/(tiktok|youtube|instagram|facebook)\.com/i);
+        
+        if (mediaUrl && !isSocial && (mediaType === "image" || mediaUrl.includes("cloudinary.com"))) {
             try {
                 const imgRes = await fetch(mediaUrl);
-                const arrayBuffer = await imgRes.arrayBuffer();
-                contents[0].parts.push({
-                    inlineData: {
-                        data: Buffer.from(arrayBuffer).toString("base64"),
-                        mimeType: "image/jpeg"
-                    }
-                });
+                
+                // Get real MimeType (Cloudinary might return webp/avif even if the URL says jpg)
+                const contentType = imgRes.headers.get("content-type");
+                
+                if (contentType && contentType.startsWith("image/")) {
+                    const arrayBuffer = await imgRes.arrayBuffer();
+                    contents[0].parts.push({
+                        inlineData: {
+                            data: Buffer.from(arrayBuffer).toString("base64"),
+                            mimeType: contentType 
+                        }
+                    });
+                }
             } catch (e) {
-                console.error("Image analysis failed, continuing with text.");
+                console.error("⚠️ Image fetch failed, bypassing visual check:", e.message);
             }
         }
 
-        // New SDK Method
+        // 🔹 2026 SDK GENERATION
         const response = await client.models.generateContent({
             model: modelId,
             contents: contents,
+            // Forces the AI to strictly output JSON for cleaner parsing
+            generationConfig: {
+                responseMimeType: "application/json"
+            }
         });
 
-        // The new SDK returns text directly in a cleaner way
-        let text = response.text;
-        const cleanJson = text.replace(/```json|```/g, "").trim();
-        
-        return JSON.parse(cleanJson);
+        // Parse natively from the response object
+        const resultText = response.response.text();
+        return JSON.parse(resultText);
 
     } catch (err) {
         console.error("❌ 2026 Moderator Error:", err.message);
-        return { action: "flag", reason: "Service unavailable" };
+        return { action: "flag", reason: "Neural link processing timeout" };
     }
 }
-
 
 // ----------------------
 // 🛡️ SECURITY: Request Signature Verification
