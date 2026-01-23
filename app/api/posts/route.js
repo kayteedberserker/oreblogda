@@ -110,76 +110,7 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
         // If it's STILL a 404, the API Key might be restricted to a specific region or project
         return { action: "flag", reason: `AI Error: ${err.message}` };
     }
-}async function runAIModerator(title, message, category, mediaUrl, mediaType) {
-    const API_KEY = process.env.GEMINI_API_KEY;
-    if (!API_KEY) {
-        return { action: "flag", reason: "AI Config Error: Missing Gemini Key" };
-    }
-
-    try {
-        // Force the API version to 'v1' instead of letting the SDK default to 'v1beta'
-        const genAI = new GoogleGenerativeAI(API_KEY);
-        
-        // Using 'gemini-1.5-flash-latest' is the most stable path in 2026
-        // Alternatively, use 'gemini-2.0-flash' for even better speed
-        const model = genAI.getGenerativeModel({ 
-            model: "gemini-1.5-flash-latest" 
-        }, { apiVersion: 'v1' }); 
-
-        const prompt = `
-            TASK: Moderate this post for an Anime/Gaming blog named 'Oreblogda'.
-            RULES:
-            1. Reject nudity, gore, scams, or hate speech.
-            2. The post MUST be related to Anime, Manga, or Gaming.
-            3. Message might be vague if it's describing the image.
-            
-            INPUT:
-            Title: "${title}"
-            Message: "${message}"
-            Category: "${category}"
-
-            OUTPUT: Return ONLY valid JSON: {"action": "approve" | "reject" | "flag", "reason": "..."}
-        `;
-
-        const parts = [{ text: prompt }];
-
-        // 🔹 Image Handling
-        if (mediaUrl && (mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i))) {
-            try {
-                const imgRes = await fetch(mediaUrl);
-                if (imgRes.ok) {
-                    const arrayBuffer = await imgRes.arrayBuffer();
-                    parts.push({
-                        inlineData: {
-                            data: Buffer.from(arrayBuffer).toString("base64"),
-                            mimeType: "image/jpeg"
-                        }
-                    });
-                }
-            } catch (e) {
-                console.error("Image fetch failed, skipping image analysis.");
-            }
-        }
-
-        const result = await model.generateContent(parts);
-        const response = await result.response;
-        let text = response.text();
-        
-        // Strip out markdown code blocks if the AI includes them
-        const cleanJson = text.replace(/```json|```/g, "").trim();
-        const moderationResult = JSON.parse(cleanJson);
-        
-        console.log("✅ Moderation Success:", moderationResult.action);
-        return moderationResult;
-
-    } catch (err) {
-        console.error("❌ Gemini Moderator Failed Again:", err.message);
-        
-        // If it's STILL a 404, the API Key might be restricted to a specific region or project
-        return { action: "flag", reason: `AI Error: ${err.message}` };
-    }
 }
-// ----------------------
 // Helper to add CORS headers
 // ----------------------
 function addCorsHeaders(response) {
