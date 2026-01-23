@@ -1,27 +1,43 @@
-// app/page.jsx
 import PostsViewer from "@/app/components/PostsViewer";
 import { ToastContainer } from "react-toastify";
 
 /**
  * HOME PAGE (SSR SERVER COMPONENT)
- * NO 'use client' - NO 'style jsx'
- * ALL STYLING VIA TAILWIND ARBITRARY VALUES
+ * Security: Internal operative headers added to bypass middleware.
  */
+
+// Define the headers to satisfy middleware security
+const INTERNAL_HEADERS = {
+  "x-oreblogda-secret": process.env.APP_INTERNAL_SECRET,
+  "Content-Type": "application/json",
+};
+
 export default async function HomePage() {
   const limit = 10;
 
-  // Fetch posts on the server BEFORE rendering
-  const res = await fetch(
-    `${process.env.NEXT_PUBLIC_SITE_URL}/api/posts?page=1&limit=${limit}`,
-    {
-      next: { revalidate: 600 }, // Revalidate every 10 minutes
-    }
-  );
+  let initialPosts = [];
 
-  const initialData = await res.json();
-  const initialPosts = Array.isArray(initialData)
-    ? initialData
-    : initialData.posts || [];
+  try {
+    // Fetch posts on the server with the internal operative secret
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_SITE_URL}/api/posts?page=1&limit=${limit}`,
+      {
+        headers: INTERNAL_HEADERS,
+        next: { revalidate: 600 }, // Revalidate every 10 minutes
+      }
+    );
+
+    if (res.ok) {
+      const initialData = await res.json();
+      initialPosts = Array.isArray(initialData)
+        ? initialData
+        : initialData.posts || [];
+    } else {
+      console.error(`⛔ Home Feed fetch failed: ${res.status}`);
+    }
+  } catch (error) {
+    console.error("⛔ Home Feed Fetch Error:", error);
+  }
 
   return (
     /* FIX: Changed 'overflow-hidden' to 'overflow-clip'. 
