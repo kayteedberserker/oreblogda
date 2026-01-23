@@ -4,8 +4,8 @@ import Post from "@/app/models/PostModel";
 import MobileUser from "@/app/models/MobileUserModel";
 
 /**
- * SMART SEARCH ENGINE v2.0
- * Features: Pagination, Relevance Scoring, Filtered Fields
+ * SMART SEARCH ENGINE v2.1
+ * Features: Pagination, Relevance Scoring, Dynamic Author Post Counts
  */
 export async function GET(req) {
     try {
@@ -21,23 +21,22 @@ export async function GET(req) {
             return NextResponse.json({ success: false, message: "Input required" }, { status: 400 });
         }
 
-        // --- THE "SMART" BIT ---
-        // We use a regex but anchor it or weight it.
+        // --- SEARCH LOGIC ---
         const searchRegex = new RegExp(query, "i");
 
         const [users, posts, totalPosts] = await Promise.all([
-            // 1. AUTHOR SEARCH (Username is priority)
+            // 1. AUTHOR SEARCH
             MobileUser.find({
                 $or: [
                     { username: searchRegex },
-                    { clanName: searchRegex } // Included for future-proofing
+                    { clanName: searchRegex }
                 ]
             })
-            .select("username profilePic weeklyAura lastStreak previousRank")
-            .limit(5) // Keep author results small and top-tier
+            .select("username profilePic weeklyAura lastStreak previousRank description")
+            .limit(5)
             .lean(),
 
-            // 2. SMART POST SEARCH (Title & Category priority)
+            // 2. SMART POST SEARCH
             Post.find({
                 status: "approved",
                 $or: [
@@ -46,8 +45,8 @@ export async function GET(req) {
                     { authorName: searchRegex }
                 ]
             })
-            .select("title message category mediaUrl authorName createdAt likes comments shares views")
-            .sort({ createdAt: -1 }) // We can also sort by { score: { $meta: "textScore" } } if you add indexes
+            .select("title message category mediaUrl authorName authorId createdAt likes comments shares views")
+            .sort({ createdAt: -1 })
             .skip(skip)
             .limit(limit)
             .lean(),
@@ -62,6 +61,19 @@ export async function GET(req) {
             })
         ]);
 
+        // --- ENHANCEMENT: Fetch Post Counts for each User ---
+        // We do this here because the MobileUser model doesn't store a live count
+        const usersWithCounts = await Promise.all(users.map(async (user) => {
+            const count = await Post.countDocuments({ 
+                authorName: user.username, // Or use authorId if your schema links by ID
+                status: "approved" 
+            });
+            return {
+                ...user,
+                postsCount: count
+            };
+        }));
+
         // Process Posts for Mobile Analytics
         const processedPosts = posts.map(post => ({
             ...post,
@@ -69,7 +81,7 @@ export async function GET(req) {
             commentsCount: post.comments?.length || 0,
             sharesCount: post.shares || 0,
             viewsCount: post.views || 0,
-            message: post.message.substring(0, 100) + "...", // Trim message to save data
+            message: post.message.substring(0, 100) + "...", 
             likes: undefined,
             comments: undefined
         }));
@@ -77,7 +89,7 @@ export async function GET(req) {
         return NextResponse.json(
             {
                 success: true,
-                users: users || [],
+                users: usersWithCounts || [],
                 posts: processedPosts || [],
                 pagination: {
                     total: totalPosts,
