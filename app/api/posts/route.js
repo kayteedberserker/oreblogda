@@ -42,7 +42,7 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
         const contents = [{ role: 'user', parts: [{ text: prompt }] }];
 
         // 🔹 Add Image Support (2026 SDK style)
-        if (mediaUrl && (mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i)) && mediaUrl.includes("cloudinary") {
+        if (mediaUrl && (mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i)) && mediaUrl.includes("cloudinary") ) {
             try {
                 const imgRes = await fetch(mediaUrl);
                 const arrayBuffer = await imgRes.arrayBuffer();
