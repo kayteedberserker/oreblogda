@@ -25,25 +25,24 @@ export async function generateMetadata({ params }) {
   const postUrl = `https://oreblogda.com/post/${post.slug || post._id}`;
   
   // --- SMART MEDIA PREVIEW LOGIC ---
-  let postImage = "https://oreblogda.com/ogimage.png";
+  // --- INSIDE YOUR generateMetadata FUNCTION ---
 
-  if (post.mediaUrl && post.mediaUrl.includes("res.cloudinary.com")) {
-    const isVideo = post.mediaType === "video" || post.mediaUrl.match(/\.(mp4|mov|webm|mkv)$/i);
-    
-    if (isVideo) {
-      // 1. Replace the file extension with .jpg
-      // 2. Insert Cloudinary transformations: 
-      //    so_auto (selects the best frame)
-      //    c_pad,w_1200,h_630 (resizes to perfect OG size)
-      //    b_black (adds black bars if the video aspect ratio is different)
-      postImage = post.mediaUrl
-        .replace(/\.[^/.]+$/, ".jpg")
-        .replace("/upload/", "/upload/so_auto,c_pad,w_1200,h_630,b_black,f_auto,q_auto/");
-    } else {
-      // For standard images, just ensure they are optimized for OG cards
-      postImage = post.mediaUrl.replace("/upload/", "/upload/c_fill,w_1200,h_630,f_auto,q_auto/");
-    }
+let postImage = "https://oreblogda.com/ogimage.png";
+
+if (post.mediaUrl && post.mediaUrl.includes("res.cloudinary.com")) {
+  const isVideo = post.mediaType === "video" || post.mediaUrl.match(/\.(mp4|mov|webm|mkv)$/i);
+  
+  if (isVideo) {
+    // We strip out 'q_auto,vc_auto' and replace with OG-friendly image settings
+    // This ensures bots don't see video-related parameters in an image URL
+    postImage = post.mediaUrl
+      .replace("/q_auto,vc_auto/", "/f_jpg,q_auto,so_auto,c_pad,w_1200,h_630,b_black/")
+      .replace(/\.[^/.]+$/, ".jpg");
+  } else {
+    postImage = post.mediaUrl.replace("/upload/", "/upload/c_fill,w_1200,h_630,f_auto,q_auto/");
   }
+}
+
 
   return {
     authors: [
