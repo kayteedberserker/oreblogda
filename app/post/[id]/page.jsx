@@ -36,7 +36,7 @@ if (post.mediaUrl && post.mediaUrl.includes("res.cloudinary.com")) {
     // We strip out 'q_auto,vc_auto' and replace with OG-friendly image settings
     // This ensures bots don't see video-related parameters in an image URL
     postImage = post.mediaUrl
-      .replace("/q_auto,vc_auto/", "/f_jpg,q_auto,so_auto,c_pad,w_1200,h_630,b_black/")
+      .replace("/q_auto,vc_auto/", "/f_jpg,q_auto,so_auto,c_pad,b_black/")
       .replace(/\.[^/.]+$/, ".jpg");
   } else {
     postImage = post.mediaUrl.replace("/upload/", "/upload/c_fill,w_1200,h_630,f_auto,q_auto/");
