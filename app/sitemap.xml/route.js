@@ -3,9 +3,11 @@ import Post from "@/app/models/PostModel";
 import User from "@/app/models/UserModel";
 import MobileUser from "@/app/models/MobileUserModel";
 
-
 export async function GET() {
   try {
+    // Note: If you were calling this via a hook in a UI component, 
+    // you would trigger your loading animation here.
+    
     await connectDB();
     const posts = await Post.find().sort({ createdAt: -1 });
     const authors = await User.find().sort({ createdAt: -1 });
@@ -21,6 +23,7 @@ export async function GET() {
       </url>`
       )
       .join("");
+
     const authorUrls = authors
       .map(
         (author) => `
@@ -30,10 +33,10 @@ export async function GET() {
       </url>`
       )
       .join("");
+
     const mobileUserUrls = mobileUsers
       .filter((user) => user.lastStreak) // Only include users with a streak
       .map((user) => {
-        // Explicitly return the string
         return `
     <url>
       <loc>${baseUrl}/author/${user._id}</loc>
@@ -41,7 +44,8 @@ export async function GET() {
     </url>`;
       })
       .join("");
-    const categories = ["memes", "videos-edits", "news", "polls", "review", "gaming"]
+
+    const categories = ["memes", "videos-edits", "news", "polls", "review", "gaming"];
     const otherUrls = categories
       .map(
         (category) => `
@@ -50,6 +54,7 @@ export async function GET() {
       </url>`
       )
       .join("");
+
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
     <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
       <url>
@@ -57,7 +62,7 @@ export async function GET() {
         <lastmod>${new Date().toISOString()}</lastmod>
       </url>
       <url>
-        <loc>${baseUrl/leaderboard}</loc>
+        <loc>${baseUrl}/leaderboard</loc>
         <lastmod>${new Date().toISOString()}</lastmod>
       </url>
       ${authorUrls}
@@ -70,6 +75,7 @@ export async function GET() {
       headers: { "Content-Type": "application/xml" },
     });
   } catch (err) {
+    console.error("Sitemap Generation Error:", err);
     const fallback = `<?xml version="1.0" encoding="UTF-8"?>
     <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
       <url>
