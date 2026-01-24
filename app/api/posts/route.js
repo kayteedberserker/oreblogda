@@ -26,8 +26,14 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
 
     try {
         const prompt = `
-            TASK: Moderate this post for 'Oreblogda' (Anime/Gaming blog).
-            RULES: Reject nudity, gore, or non-anime/gaming content. But be lax on content in meme category, and since the posts are for 18+ users you can allow content with Gore not full Gore like that but if it's animated, then also adult jokes, if it's meme category
+            TASK: Moderate this 'Diary Entry' for 'Oreblogda' (Anime/Gaming blog).
+            RULES: 
+            - Reject real-life nudity or extreme real-life gore.
+            - Allow animated/stylized gore (anime style).
+            - Allow adult jokes and "Ecchi" content, especially if the category is 'meme'.
+            - Reject content that is completely unrelated to anime, gaming, or nerd culture.
+            - If video is provided: Scan the timeline for hidden violations or "flash" nudity.
+
             INPUT:
             Title: "${title}"
             Message: "${message}"
@@ -36,24 +42,29 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
             OUTPUT: Return ONLY JSON: {"action": "approve" | "reject" | "flag", "reason": "..."}
         `;
 
-        // Using Gemini 2.5 Flash - The best price/performance for 2026
         const modelId = "gemini-2.5-flash"; 
-
         const contents = [{ role: 'user', parts: [{ text: prompt }] }];
 
-        // 🔹 Add Image Support (2026 SDK style)
-        if (mediaUrl && (mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i)) && mediaUrl.includes("cloudinary") ) {
-            try {
-                const imgRes = await fetch(mediaUrl);
-                const arrayBuffer = await imgRes.arrayBuffer();
-                contents[0].parts.push({
-                    inlineData: {
-                        data: Buffer.from(arrayBuffer).toString("base64"),
-                        mimeType: "image/jpeg"
-                    }
-                });
-            } catch (e) {
-                console.error("Image analysis failed, continuing with text.");
+        // 🔹 MODIFIED: Multimodal Support (Images & Videos)
+        if (mediaUrl && mediaUrl.includes("cloudinary")) {
+            const isVideo = mediaType === "video" || mediaUrl.match(/\.(mp4|mov|webm|mkv)$/i);
+            const isImage = mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i);
+
+            if (isVideo || isImage) {
+                try {
+                    const mediaRes = await fetch(mediaUrl);
+                    const arrayBuffer = await mediaRes.arrayBuffer();
+                    
+                    contents[0].parts.push({
+                        inlineData: {
+                            data: Buffer.from(arrayBuffer).toString("base64"),
+                            // 2026 Native Handling: Automatically samples video if mimeType is video/mp4
+                            mimeType: isVideo ? "video/mp4" : "image/jpeg"
+                        }
+                    });
+                } catch (e) {
+                    console.error("Media fetch failed, falling back to text-only scanning.");
+                }
             }
         }
 
@@ -63,7 +74,6 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
             contents: contents,
         });
 
-        // The new SDK returns text directly in a cleaner way
         let text = response.text;
         const cleanJson = text.replace(/```json|```/g, "").trim();
         
