@@ -27,7 +27,10 @@ export function middleware(req: NextRequest) {
     // 1. Search Engines (SEO Protection)
     const isSearchEngine = /Googlebot|Bingbot|Slurp|DuckDuckBot|Baiduspider|YandexBot/i.test(userAgent);
 
-    // 2. Internal Site Requests
+    // 2. Vercel Cron Jobs (Allow automated resets)
+    const isCronJob = userAgent.includes("vercel-cron");
+
+    // 3. Internal Site Requests
     const referer = req.headers.get('referer');
     const origin = req.headers.get('origin');
     const isInternal = 
@@ -35,14 +38,14 @@ export function middleware(req: NextRequest) {
       (origin && origin.includes(MY_DOMAIN));
 
     // C. SECURITY ENFORCEMENT
-    // If it's NOT a search engine AND it's NOT from our own website...
-    if (!isSearchEngine && !isInternal) {
+    // If it's NOT a search engine, NOT an internal request, and NOT a Cron Job...
+    if (!isSearchEngine && !isInternal && !isCronJob) {
       const clientSecret = req.headers.get('x-oreblogda-secret');
       
       // ...then it MUST be the Mobile App with the correct secret
       if (!clientSecret || clientSecret !== APP_SECRET) {
         // Log it to Vercel so you can track attempts
-        console.error(`⛔ BLOCKED: Unauthorized external request to ${pathname}`);
+        console.error(`⛔ BLOCKED: Unauthorized external request to ${pathname} | UA: ${userAgent}`);
         
         return new NextResponse(
           JSON.stringify({ 
