@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/aura-reset",
-      "schedule": "0 0 * * 0" 
+      "schedule": "5 23 * * 0"
     }
   ]
 }
