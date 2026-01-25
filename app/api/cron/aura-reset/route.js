@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/app/lib/mongodb";
 import MobileUser from "@/app/models/MobileUserModel";
+import { sendPushNotification } from "@/app/lib/pushNotifications";
 
 export async function GET(req) {
-  // 🛡️ SECURITY: Verify this is an actual Vercel Cron request
-  // Vercel sends a specific header you can check
   const authHeader = req.headers.get('authorization');
+  
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return new Response('Unauthorized', { status: 401 });
   }
@@ -15,55 +15,88 @@ export async function GET(req) {
 
     const now = new Date();
     const currentYear = now.getFullYear();
-    // Simple way to get a week number
-    const weekNumber = Math.ceil(now.getDate() / 7); 
+    const weekNumber = Math.ceil((((now - new Date(now.getFullYear(), 0, 1)) / 8.64e7) + 1) / 7);
 
-    // 1️⃣ Find the Top 10 users with Aura > 0
+    // 1️⃣ Find Top 10
     const leaders = await MobileUser.find({ weeklyAura: { $gt: 0 } })
       .sort({ weeklyAura: -1 })
       .limit(10);
 
     if (leaders.length === 0) {
-      return NextResponse.json({ message: "No Aura activity this week." });
+      await MobileUser.updateMany({}, { $set: { weeklyAura: 0, previousRank: null } });
+      return NextResponse.json({ message: "Reset complete." });
     }
 
-    // 2️⃣ Reset ALL users' previousRank and current weeklyAura
-    // We do this first so only the new winners get the rank
-    await MobileUser.updateMany({}, { 
-      $set: { previousRank: null, weeklyAura: 0 } 
-    });
+    const winnerName = leaders[0].username || "A Mysterious User";
+    const winnerAura = leaders[0].weeklyAura;
 
-    // 3️⃣ Award the Top Users and Save History
+    // 2️⃣ Reset Everyone
+    await MobileUser.updateMany({}, { $set: { previousRank: null, weeklyAura: 0 } });
+
+    // 3️⃣ Award Top 10
     const awardPromises = leaders.map(async (user, index) => {
       const rank = index + 1;
-      
       return MobileUser.updateOne(
         { _id: user._id },
         { 
-          $set: { previousRank: rank <= 3 ? rank : null }, // Only track Top 3 for special UI
+          $set: { previousRank: rank }, 
           $push: { 
-            auraHistory: {
-              weekNumber: weekNumber,
-              year: currentYear,
-              points: user.weeklyAura,
-              rank: rank
-            }
+            auraHistory: { weekNumber, year: currentYear, points: user.weeklyAura, rank }
           }
         }
       );
     });
-
     await Promise.all(awardPromises);
 
-    return NextResponse.json({ 
-      success: true, 
-      message: `Weekly Tournament Ended. ${leaders.length} users processed.`,
-      winner: leaders[0].username 
-    });
+    // 4️⃣ 📣 CHUNKED GLOBAL NOTIFICATION
+    try {
+      const usersWithTokens = await MobileUser.find({ 
+        pushToken: { $exists: true, $ne: "" } 
+      }).select('pushToken');
+
+      if (usersWithTokens.length > 0) {
+        const tokens = usersWithTokens.map(u => u.pushToken);
+        
+        // --- CHUNKING LOGIC ---
+        const CHUNK_SIZE = 100;
+        const chunks = [];
+        for (let i = 0; i < tokens.length; i += CHUNK_SIZE) {
+          chunks.push(tokens.slice(i, i + CHUNK_SIZE));
+        }
+
+        const notificationTitle = '🏆 Tournament Concluded!';
+        const notificationBody = `${winnerName} dominated with ${winnerAura} Aura! ⚡ Points reset. Let the AURA farming begin!`;
+
+        // Send each chunk to Expo
+        const chunkPromises = chunks.map(async (chunk) => {
+          const messages = chunk.map(token => ({
+            to: token,
+            sound: 'default',
+            title: notificationTitle,
+            body: notificationBody,
+            data: { screen: 'Leaderboard' },
+          }));
+
+          return fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: {
+              'Accept': 'application/json',
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(messages),
+          });
+        });
+
+        await Promise.all(chunkPromises);
+      }
+    } catch (notifErr) {
+      console.error("Notification chunking failed:", notifErr);
+    }
+
+    return NextResponse.json({ success: true, winner: winnerName });
 
   } catch (err) {
-    console.error("CRON Error:", err);
+    console.error("❌ CRON Error:", err);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
   }
 }
-
