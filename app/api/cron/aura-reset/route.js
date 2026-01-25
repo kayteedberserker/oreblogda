@@ -4,9 +4,15 @@ import MobileUser from "@/app/models/MobileUserModel";
 import { sendPushNotification } from "@/app/lib/pushNotifications";
 
 export async function GET(req) {
-  const authHeader = req.headers.get('authorization');
+  const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
   
+  // LOGGING: This will show up in your Vercel "Logs" tab
+  console.log("--- Cron Debug ---");
+  console.log("Received Header:", authHeader ? "Present" : "Missing");
+  console.log("Secret Configured:", process.env.CRON_SECRET ? "Yes" : "No");
+
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
+    console.error("❌ Auth Match Failed");
     return new Response('Unauthorized', { status: 401 });
   }
 
