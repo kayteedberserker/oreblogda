@@ -43,8 +43,8 @@ export async function GET(req) {
         aura: winnerAura 
     });
 
-  } catch (err) {
-    console.error("❌ CRON Critical Error:", err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
-  }
+  //} catch (err) {
+ //   console.error("❌ CRON Critical Error:", err);
+   // return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  //}
 }
