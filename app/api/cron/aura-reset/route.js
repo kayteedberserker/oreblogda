@@ -25,7 +25,7 @@ export async function GET(req) {
         const tokens = usersWithTokens.map(u => u.pushToken);
         
         const title = '🏆 Tournament Concluded!';
-        const body = `${winnerName} dominated with ${winnerAura} Aura! ⚡ Points reset. Start farming now!`;
+        const body = `THE SYSTEM dominated with 122 Aura points! ⚡ Points has been reset. Start farming now!`;
         const data = { screen: 'Leaderboard' };
 
         // Use our clean utility function
