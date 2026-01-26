@@ -1,11 +1,9 @@
-// app/lib/pushNotifications.js
-
 /**
  * Sends a single push notification (Best for 1-to-1 alerts)
  */
 export async function sendPushNotification(pushToken, title, message, data = {}) {
-  if (!pushToken) {
-    console.log("🔔 Push Logic: No token found. Skipping.");
+  if (!pushToken || !pushToken.startsWith('ExponentPushToken')) {
+    console.log("🔔 Push Logic: Invalid or missing token. Skipping.");
     return;
   }
 
@@ -29,7 +27,7 @@ export async function sendPushNotification(pushToken, title, message, data = {})
     });
 
     const result = await response.json();
-    console.log("✅ Single Push Sent:", result);
+    console.log("✅ Single Push Response:", JSON.stringify(result));
     return result;
   } catch (error) {
     console.error("❌ Single Push Error:", error);
@@ -37,26 +35,28 @@ export async function sendPushNotification(pushToken, title, message, data = {})
 }
 
 /**
- * Sends notifications to multiple tokens using Expo's chunking (Best for Global alerts)
+ * Sends notifications to multiple tokens using Expo's chunking
  * @param {Array} tokens - Array of push token strings
  */
 export async function sendMultiplePushNotifications(tokens, title, message, data = {}) {
-  if (!tokens || tokens.length === 0) {
-    console.log("🔔 Push Logic: No tokens provided for broadcast.");
+  // Filter out nulls, empty strings, or non-expo tokens
+  const validTokens = tokens.filter(t => t && t.startsWith('ExponentPushToken'));
+
+  if (validTokens.length === 0) {
+    console.log("🔔 Push Logic: No valid Expo tokens found for broadcast.");
     return;
   }
 
-  // Expo limit is 100 messages per batch
   const CHUNK_SIZE = 100;
   const chunks = [];
   
-  for (let i = 0; i < tokens.length; i += CHUNK_SIZE) {
-    chunks.push(tokens.slice(i, i + CHUNK_SIZE));
+  for (let i = 0; i < validTokens.length; i += CHUNK_SIZE) {
+    chunks.push(validTokens.slice(i, i + CHUNK_SIZE));
   }
 
-  console.log(`🚀 Push Logic: Sending broadcast to ${tokens.length} users in ${chunks.length} chunks.`);
+  console.log(`🚀 Push Logic: Sending broadcast to ${validTokens.length} users in ${chunks.length} chunks.`);
 
-  const chunkPromises = chunks.map(async (chunk) => {
+  const chunkPromises = chunks.map(async (chunk, index) => {
     const messages = chunk.map(token => ({
       to: token,
       sound: 'default',
@@ -75,9 +75,11 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
         },
         body: JSON.stringify(messages),
       });
-      return await response.json();
+      const result = await response.json();
+      console.log(`📦 Chunk ${index + 1} Result:`, JSON.stringify(result));
+      return result;
     } catch (error) {
-      console.error("❌ Chunk Push Error:", error);
+      console.error(`❌ Chunk ${index + 1} Push Error:`, error);
       return null;
     }
   });
