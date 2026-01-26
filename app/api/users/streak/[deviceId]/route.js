@@ -11,7 +11,7 @@ export async function GET(req, { params }) {
     
     // 🛡️ Security Check (Optional but recommended since your frontend sends the secret)
     const secret = req.headers.get("x-oreblogda-secret");
-    if (secret !== process.env.STREAK_SECRET && secret !== "thisismyrandomsuperlongsecretkey") {
+    if (secret !== "thisismyrandomsuperlongsecretkey") {
         return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
     }
 
