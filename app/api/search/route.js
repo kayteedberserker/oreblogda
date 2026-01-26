@@ -153,7 +153,7 @@ export async function GET(req) {
                         { clanName: { $in: searchRegexes } }
                     ]
                 })
-                .select("username profilePic weeklyAura consecutiveStreak previousRank description")
+                .select("username profilePic weeklyAura lastStreak previousRank description")
                 .limit(5)
                 .lean(),
 
