@@ -64,9 +64,11 @@ export async function GET(req) {
     // 4️⃣ Global Broadcast Notification
     try {
       const usersWithTokens = await MobileUser.find({ 
-        pushToken: { $exists: true, $ne: "" } 
+        pushToken: { 
+          $nin: [null, ""], 
+          $exists: true 
+        } 
       }).select('pushToken');
-
       if (usersWithTokens.length > 0) {
         const tokens = usersWithTokens.map(u => u.pushToken);
         
