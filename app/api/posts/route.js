@@ -6,7 +6,7 @@ import Newsletter from "@/app/models/Newsletter";
 import nodemailer from "nodemailer";
 import MobileUser from "@/app/models/MobileUserModel";
 import Notification from "@/app/models/NotificationModel";
-import { sendPushNotification } from "@/app/lib/pushNotifications";
+import { sendPushNotification, sendMultiplePushNotifications} from "@/app/lib/pushNotifications";
 import crypto from "crypto"; // 🛡️ Needed for Security Signature
 import { GoogleGenAI } from "@google/genai";
 
@@ -200,33 +200,46 @@ export async function GET(req) {
 // ----------------------
 // Helper Functions
 // ----------------------
-
+/**
+ * Efficiently notifies all users about a new post using chunked broadcasting.
+ */
 async function notifyAllMobileUsersAboutPost(newPost, authorName) {
+    // 1. Fetch only valid tokens (Not null and Not empty)
     const mobileUsers = await MobileUser.find(
-        { pushToken: { $exists: true, $ne: null } },
+        { pushToken: { $nin: [null, ""], $exists: true } },
         "pushToken"
     );
 
-    if (!mobileUsers.length) return;
+    if (!mobileUsers.length) {
+        console.log("ℹ️ No users with valid push tokens found.");
+        return;
+    }
 
-    for (const user of mobileUsers) {
-        try {
-            await sendPushNotification(
-                user.pushToken,
-                "📰 New post on Oreblogda",
-                `${authorName} just posted: ${newPost.title.length > 50
-                    ? newPost.title.slice(0, 50) + "…"
-                    : newPost.title}`,
-                {
-                    postId: newPost._id.toString(),
-                    slug: newPost.slug 
-                }
-            );
-        } catch (err) {
-            console.error("Push notify mobile user failed:", err);
-        }
+    // 2. Extract tokens into a flat array
+    const allTokens = mobileUsers.map(user => user.pushToken);
+
+    // 3. Prepare the notification content
+    const title = "📰 New post on Oreblogda";
+    const body = `${authorName} just posted: ${
+        newPost.title.length > 50 
+        ? newPost.title.slice(0, 50) + "…" 
+        : newPost.title
+    }`;
+    const data = {
+        postId: newPost._id.toString(),
+        slug: newPost.slug 
+    };
+
+    try {
+        // 4. Use the bulk helper to handle chunking (100 at a time)
+        // This replaces the loop and prevents your server from timing out
+        await sendMultiplePushNotifications(allTokens, title, body, data);
+        console.log(`✅ Bulk notification sent to ${allTokens.length} users.`);
+    } catch (err) {
+        console.error("❌ Bulk Push Notification failed:", err);
     }
 }
+
 
 function normalizePostContent(content) {
   if (!content || typeof content !== "string") return content;
@@ -404,7 +417,7 @@ export async function POST(req) {
         }
 
         if (finalStatus === "pending") {
-            const adminTokens = ["ExponentPushToken[3FSqZVKR-FcHAJhkMfMZhL]", "ExponentPushToken[yVOCOqGlXfyemsk_GAwH6G]"];
+            const adminTokens = ["ExponentPushToken[9BjlnUFfkruMVtx3Ee3yiT]"];
             for (const token of adminTokens) {
                 try {
                     await sendPushNotification(token, "New post!", "A post is awaiting your approval.", { postId: newPost._id.toString() });
