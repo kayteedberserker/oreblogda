@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 
 const APP_SECRET = process.env.APP_INTERNAL_SECRET;
 const MY_DOMAIN = "oreblogda.com";
-const MY_SecondDOMAIN = " oreblogda.vercel.app"
+const MY_SecondDOMAIN = "oreblogda.vercel.app"
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const userAgent = req.headers.get('user-agent') || '';
@@ -34,16 +34,16 @@ export function middleware(req: NextRequest) {
     const referer = req.headers.get('referer');
     const origin = req.headers.get('origin');
     const isInternal = 
-      (referer && referer.includes(MY_DOMAIN)) || 
-      (origin && origin.includes(MY_DOMAIN)) || (referer && referer.includes(MY_SecondDOMAIN)) || 
-      (origin && origin.includes(MY_SecondDOMAIN))
+      (referer && referer.includes(MY_DOMAIN || MY_SecondDOMAIN)) || 
+      (origin && origin.includes(MY_DOMAIN || MY_SecondDOMAIN))
+    console.log(isInternal) 
 
 
     // C. SECURITY ENFORCEMENT
     // If it's NOT a search engine, NOT an internal request, and NOT a Cron Job...
     if (!isSearchEngine && !isInternal && !isCronJob) {
       const clientSecret = req.headers.get('x-oreblogda-secret');
-      
+      console.log(clientSecret) 
       // ...then it MUST be the Mobile App with the correct secret
       if (!clientSecret || clientSecret !== APP_SECRET) {
         // Log it to Vercel so you can track attempts
