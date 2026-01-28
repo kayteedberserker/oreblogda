@@ -1,18 +1,17 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import useSWRInfinite from "swr/infinite";
 import PostCard from "@/app/components/PostCard";
 import RecentPollsCard from "@/app/components/RecentPollsCard";
 import { FaPoll } from "react-icons/fa";
 import { useScrollAnimation } from "@/app/components/useScrollAnimation";
-import { motion } from "framer-motion";
 import FeedAd from "@/app/components/FeedAd";
 
 const limit = 5;
 const fetcher = (url) => fetch(url, { cache: "no-store" }).then((res) => res.json());
 
 export default function ClientCategoryPage({ category, initialPosts }) {
-  const { ref, controls, variants } = useScrollAnimation();
+  const { ref } = useScrollAnimation();
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   // SWR Infinite Pagination
@@ -22,74 +21,69 @@ export default function ClientCategoryPage({ category, initialPosts }) {
     return `/api/posts?category=${category}&page=${pageIndex + 1}&limit=${limit}`;
   };
 
-  /**
-   * FIX: Changed 'initialData' to 'fallbackData'.
-   * In SWR 2.x, fallbackData is required for proper hydration.
-   */
-  const { data, size, setSize, isLoading, isValidating, error } = useSWRInfinite(getKey, fetcher, {
+  const { data, size, setSize, isLoading, isValidating } = useSWRInfinite(getKey, fetcher, {
     fallbackData: initialPosts ? [{ posts: initialPosts }] : [],
     revalidateFirstPage: false,
     persistSize: true,
   });
 
-  // Combine & deduplicate with safety checks to prevent crashes
-  const posts = data ? data.flatMap((p) => (Array.isArray(p?.posts) ? p.posts : [])) : [];
-  const uniquePosts = Array.from(
-    new Map(posts.filter(p => p && p._id).map((p) => [p._id, p])).values()
-  );
+  // MEMOIZED: Prevent expensive re-renders during scroll
+  const uniquePosts = useMemo(() => {
+    const posts = data ? data.flatMap((p) => (Array.isArray(p?.posts) ? p.posts : [])) : [];
+    return Array.from(new Map(posts.filter(p => p && p._id).map((p) => [p._id, p])).values());
+  }, [data]);
   
   const hasMore = data && data[data.length - 1]?.posts?.length === limit;
 
-  // Infinite scroll
+  // Optimized Infinite scroll with Throttling check
   useEffect(() => {
+    let isFetching = false;
     const handleScroll = () => {
+      if (isFetching) return;
       if (
-        window.innerHeight + window.scrollY >= document.body.offsetHeight - 800 &&
-        hasMore &&
-        !isLoading &&
-        !isValidating
+        window.innerHeight + window.scrollY >= document.body.offsetHeight - 1000 &&
+        hasMore && !isLoading && !isValidating
       ) {
+        isFetching = true;
         setSize((prev) => prev + 1);
       }
     };
-    window.addEventListener("scroll", handleScroll);
+    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, [hasMore, isLoading, isValidating, setSize]);
 
   return (
-    <div 
-      ref={ref} 
-      className="bg-transparent rounded-2xl shadow-md"
-    >
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 relative min-h-[75vh]">
+    <div ref={ref} className="bg-transparent">
+      <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 relative min-h-screen">
 
-        {/* --- ATMOSPHERIC BACKGROUND EFFECTS --- */}
-        <div className="absolute top-10 left-10 w-48 h-48 bg-blue-400 dark:bg-indigo-900 opacity-10 rounded-full blur-[100px] animate-pulse pointer-events-none" />
-        <div className="absolute bottom-10 right-10 w-56 h-56 bg-blue-300 dark:bg-blue-700 opacity-10 rounded-full blur-[120px] animate-pulse pointer-events-none" />
+        {/* --- PERFORMANCE-FIRST BACKGROUND --- */}
+        <div className="fixed inset-0 pointer-events-none">
+          <div className="absolute top-0 left-0 w-full h-64 bg-gradient-to-b from-blue-500/5 to-transparent dark:from-blue-600/5" />
+          {/* Subtle grid like the app */}
+          <div className="absolute inset-0 opacity-[0.02] dark:opacity-[0.03]" 
+               style={{ backgroundImage: `radial-gradient(#2563eb 0.5px, transparent 0.5px)`, backgroundSize: '30px 30px' }} />
+        </div>
 
-        <div className="md:flex md:gap-12 items-start overflow-visible">
+        <div className="md:flex md:gap-12 items-start relative z-10">
           
           {/* --- MAIN CONTENT AREA --- */}
-          <div
-            id="postsContainer"
-            className="md:flex-1 pr-2 scrollbar-hide"
-          >
+          <div id="postsContainer" className="md:flex-1">
             {/* Category HUD Header */}
-            <div className="relative mb-10 pb-4 border-b-2 border-gray-100 dark:border-gray-800">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="h-2 w-2 bg-blue-600 rounded-full animate-ping" />
-                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-blue-600">Archive Sector</span>
+            <div className="relative mb-12 pb-6">
+              <div className="flex items-center gap-2 mb-2">
+                <div className="h-1.5 w-1.5 bg-blue-600 rounded-full" />
+                <span className="text-[9px] font-black uppercase tracking-[0.4em] text-blue-600">Sector_Access</span>
               </div>
-              <h1 className="text-4xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white">
-                Folder: <span className="text-blue-600">{category}</span>
+              <h1 className="text-4xl md:text-5xl font-black italic tracking-tighter uppercase text-zinc-900 dark:text-white">
+                {category}
               </h1>
-              <div className="absolute bottom-0 left-0 h-[2px] w-20 bg-blue-600" />
+              <div className="mt-4 h-1 w-12 bg-blue-600 rounded-full" />
             </div>
 
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-8">
               {uniquePosts.length > 0 ? (
                 uniquePosts.map((post, index) => (
-                  <div key={post._id || index} className="break-inside-avoid">
+                  <div key={post._id || index}>
                     <PostCard 
                       post={post} 
                       posts={uniquePosts} 
@@ -98,108 +92,85 @@ export default function ClientCategoryPage({ category, initialPosts }) {
                       isPriority={index < 2} 
                     />
                     
-                    {(index + 1) % 2 === 0 && (
-                       <div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex flex-col items-center gap-1 justify-center bg-gray-50/50 dark:bg-white/5">
-                        <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
+                    {(index + 1) % 3 === 0 && (
+                       <div className="my-12 w-full p-6 border border-zinc-200 dark:border-zinc-800 rounded-[2.5rem] bg-zinc-50/50 dark:bg-zinc-900/20">
+                         <div className="flex items-center gap-2 mb-4">
+                            <div className="w-1 h-1 bg-zinc-400 rounded-full" />
+                            <span className="text-[8px] font-bold text-zinc-400 uppercase tracking-widest">Sponsored_Stream</span>
+                         </div>
                          <FeedAd /> 
                       </div>
                     )}
                   </div>
                 ))
               ) : !isLoading && (
-                <div className="text-center py-20 border-2 border-dashed border-gray-100 dark:border-gray-800 rounded-3xl w-full">
-                  <p className="text-gray-500 font-black uppercase italic tracking-widest">
-                    No posts found in <span className="text-blue-600">{category}</span>
+                <div className="py-32 flex flex-col items-center border-2 border-dashed border-zinc-100 dark:border-zinc-900 rounded-[3rem]">
+                  <p className="text-zinc-400 font-black uppercase italic tracking-widest text-sm">
+                    Empty Archive: <span className="text-blue-600">{category}</span>
                   </p>
                 </div>
               )}
             </div>
 
             {/* --- LOADING & FEEDBACK --- */}
-            <div className="py-12 min-h-[140px] flex flex-col items-center justify-center">
+            <div className="py-20 flex flex-col items-center">
               {(isLoading || (isValidating && size > (data?.length || 0))) ? (
-                <div className="flex flex-col items-center gap-3">
-                   <div className="w-16 h-1 bg-gray-100 dark:bg-gray-800 overflow-hidden rounded-full relative">
-                      <div className="absolute inset-0 bg-blue-600 animate-[loading_1.5s_infinite]" />
+                <div className="flex flex-col items-center gap-4">
+                   <div className="flex gap-1.5">
+                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                      <div className="w-2 h-2 bg-blue-600 rounded-full animate-bounce" />
                    </div>
-                   <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 animate-pulse">
-                      Retrieving Data...
+                   <p className="text-[9px] font-black uppercase tracking-[0.5em] text-blue-600">
+                      Syncing_Sector...
                    </p>
                 </div>
-              ) : hasMore ? (
-                <div className="text-center mt-6">
-                  <button
-                    aria-label="Load more"
-                    onClick={() => setSize((prev) => prev + 1)}
-                    className="group relative px-8 py-3 bg-gray-900 dark:bg-white rounded-xl overflow-hidden transition-all hover:scale-105 active:scale-95"
-                  >
-                    <div className="absolute inset-0 bg-blue-600 translate-y-full group-hover:translate-y-0 transition-transform" />
-                    <span className="relative z-10 text-white dark:text-black group-hover:text-white font-black uppercase italic tracking-widest text-xs">
-                      Fetch More Records
-                    </span>
-                  </button>
+              ) : !hasMore && uniquePosts.length > 0 && (
+                <div className="flex flex-col items-center gap-4 opacity-30">
+                  <div className="h-[1px] w-12 bg-zinc-500" />
+                  <p className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-500">
+                    Transmission_End
+                  </p>
                 </div>
-              ) : uniquePosts.length > 0 && (
-                <p className="text-center text-[10px] font-black uppercase tracking-[0.5em] text-gray-400 mt-4">
-                  END OF ARCHIVE
-                </p>
               )}
             </div>
           </div>
 
           {/* --- DESKTOP SIDEBAR --- */}
-          <aside className="hidden md:flex flex-col gap-6 md:w-[350px] lg:w-[450px] sticky top-24 h-fit">
-            <div className="flex items-center gap-2 mb-4">
-              <div className="h-1 w-4 bg-blue-600" />
-              <span className="text-[10px] font-black uppercase tracking-widest">Sidebar Widgets</span>
+          <aside className="hidden lg:flex flex-col gap-8 w-[400px] sticky top-28 h-fit">
+            <div className="p-1 border-b border-zinc-100 dark:border-zinc-900 mb-2">
+              <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Tactical_Widgets</span>
             </div>
             <RecentPollsCard />
           </aside>
 
-          {/* --- TACTICAL MINI DRAWER (Mobile Only) --- */}
+          {/* --- TACTICAL MINI DRAWER (Mobile) --- */}
           <div className="md:hidden">
             <button
-              aria-label="Open drawer"
               onClick={() => setDrawerOpen((prev) => !prev)}
-              className={`fixed top-1/2 -right-2 transform -translate-y-1/2 z-50 w-14 h-14 rounded-l-2xl flex items-center justify-center shadow-2xl transition-all ${
-                drawerOpen ? "bg-red-600" : "bg-blue-600"
+              className={`fixed bottom-10 right-6 z-50 w-16 h-16 rounded-full flex items-center justify-center shadow-2xl transition-all duration-300 ${
+                drawerOpen ? "bg-zinc-900 dark:bg-white rotate-90" : "bg-blue-600"
               }`}
             >
-              <div className="relative">
-                {drawerOpen ? <span className="text-xl text-white">✕</span> : <FaPoll className="text-xl text-white" />}
-                {!drawerOpen && <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full border-2 border-blue-600 animate-ping" />}
-              </div>
+              {drawerOpen ? (
+                <span className="text-xl text-white dark:text-black">✕</span>
+              ) : (
+                <FaPoll className="text-xl text-white" />
+              )}
             </button>
 
-            {/* Drawer Sliding Panel */}
-            <div
-              className={`fixed top-0 right-0 z-40 h-full w-[85%] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-xl border-l border-blue-600/20 p-6 shadow-[-20px_0_50px_rgba(0,0,0,0.3)] transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                drawerOpen ? "translate-x-0" : "translate-x-full"
-              }`}
-            >
-              <div className="mt-20">
-                <div className="flex items-center justify-between mb-8">
-                  <h2 className="text-2xl font-black italic uppercase tracking-tighter">Tactical HUD</h2>
-                  <span className="text-[8px] font-mono opacity-40 italic">SECURE_LINK</span>
-                </div>
+            <div className={`fixed inset-0 z-40 transition-opacity duration-300 ${drawerOpen ? "opacity-100 pointer-events-auto" : "opacity-0 pointer-events-none"}`}>
+              <div onClick={() => setDrawerOpen(false)} className="absolute inset-0 bg-white/80 dark:bg-black/80 backdrop-blur-md" />
+              <div className={`absolute bottom-0 left-0 w-full bg-white dark:bg-[#0a0a0a] rounded-t-[3rem] p-8 pb-20 border-t border-blue-600/20 transform transition-transform duration-500 ease-out ${drawerOpen ? "translate-y-0" : "translate-y-full"}`}>
+                <div className="w-12 h-1.5 bg-zinc-200 dark:bg-zinc-800 rounded-full mx-auto mb-8" />
+                <h2 className="text-3xl font-black italic uppercase tracking-tighter mb-8">Poll_Center</h2>
                 <RecentPollsCard />
               </div>
             </div>
-
-            {/* FIXED: Conditional rendering using && instead of if */}
-            {drawerOpen && (
-              <div 
-                onClick={() => setDrawerOpen(false)}
-                className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30" 
-              />
-            )}
           </div>
         </div>
 
         <style jsx>{`
-          .scrollbar-hide::-webkit-scrollbar { width: 0px; }
-          .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-          
           @keyframes loading {
             0% { transform: translateX(-100%); }
             100% { transform: translateX(100%); }
@@ -208,4 +179,4 @@ export default function ClientCategoryPage({ category, initialPosts }) {
       </div>
     </div>
   );
-                         }
+}
