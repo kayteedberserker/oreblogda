@@ -2,8 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 const APP_SECRET = process.env.APP_INTERNAL_SECRET;
-const MY_DOMAIN = "oreblogda.com";
-const MY_SecondDOMAIN = "oreblogda.vercel.app"
+const MY_DOMAIN = "oreblogda";
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const userAgent = req.headers.get('user-agent') || '';
@@ -33,9 +32,11 @@ export function middleware(req: NextRequest) {
     // 3. Internal Site Requests
     const referer = req.headers.get('referer');
     const origin = req.headers.get('origin');
+    console.log(referer)
+    console.log(origin) 
     const isInternal = 
-      (referer && referer.includes(MY_DOMAIN || MY_SecondDOMAIN)) || 
-      (origin && origin.includes(MY_DOMAIN || MY_SecondDOMAIN))
+      (referer && referer.includes(MY_DOMAIN)) || 
+      (origin && origin.includes(MY_DOMAIN))
     console.log(isInternal) 
 
 
