@@ -13,7 +13,7 @@ export function middleware(req: NextRequest) {
     
     // A. CORS Headers (Crucial for Mobile App)
     response.headers.set("Access-Control-Allow-Origin", "*"); 
-    response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
+    response.headers.set("Access-Control-Allow-Methods", "POST, PUT, PATCH, DELETE, OPTIONS");
     response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-oreblogda-secret");
 
     // Handle Preflight (OPTIONS)
@@ -24,8 +24,9 @@ export function middleware(req: NextRequest) {
     // B. IDENTIFY TRUSTED SOURCES
     
     // 1. Search Engines (SEO Protection)
-    const isSearchEngine = /Googlebot|Bingbot|Slurp|DuckDuckBot|Baiduspider|YandexBot/i.test(userAgent);
-
+    const isSearchEngine =
+  /Googlebot|AdsBot-Google|Mediapartners-Google|Google-Ads|AdWords|Bingbot|Slurp|DuckDuckBot|Baiduspider|YandexBot/i
+    .test(userAgent);
     // 2. Vercel Cron Jobs (Allow automated resets)
     const isCronJob = userAgent.includes("vercel-cron");
 
