@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 const APP_SECRET = process.env.APP_INTERNAL_SECRET;
-const MY_DOMAIN = "oreblogda.com" || "oreblogda.vercel.app";
-
+const MY_DOMAIN = "oreblogda.com";
+const MY_SecondDOMAIN = " oreblogda.vercel.app"
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const userAgent = req.headers.get('user-agent') || '';
@@ -35,7 +35,9 @@ export function middleware(req: NextRequest) {
     const origin = req.headers.get('origin');
     const isInternal = 
       (referer && referer.includes(MY_DOMAIN)) || 
-      (origin && origin.includes(MY_DOMAIN));
+      (origin && origin.includes(MY_DOMAIN)) || (referer && referer.includes(MY_SecondDOMAIN)) || 
+      (origin && origin.includes(MY_SecondDOMAIN))
+
 
     // C. SECURITY ENFORCEMENT
     // If it's NOT a search engine, NOT an internal request, and NOT a Cron Job...
