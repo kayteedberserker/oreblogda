@@ -95,7 +95,6 @@ export default async function HomePage() {
         position="bottom-right" 
         autoClose={3000} 
         hideProgressBar
-        theme={isDark ? "dark" : "light"}
       />
     </div>
   );
