@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 const APP_SECRET = process.env.APP_INTERNAL_SECRET;
-const MY_DOMAIN = "oreblogda.com";
+const MY_DOMAIN = "oreblogda.com" || "oreblogda.vercel.app";
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
