@@ -31,20 +31,18 @@ export function middleware(req: NextRequest) {
 
     // 3. Internal Site Requests
     const referer = req.headers.get('referer');
-    const origin = req.headers.get('origin');
-    console.log(referer)
-    console.log(origin) 
+    const origin = req.headers.get('origin')
     const isInternal = 
       (referer && referer.includes(MY_DOMAIN)) || 
       (origin && origin.includes(MY_DOMAIN))
-    console.log(isInternal) 
+     
 
 
     // C. SECURITY ENFORCEMENT
     // If it's NOT a search engine, NOT an internal request, and NOT a Cron Job...
     if (!isSearchEngine && !isInternal && !isCronJob) {
       const clientSecret = req.headers.get('x-oreblogda-secret');
-      console.log(clientSecret) 
+       
       // ...then it MUST be the Mobile App with the correct secret
       if (!clientSecret || clientSecret !== APP_SECRET) {
         // Log it to Vercel so you can track attempts
