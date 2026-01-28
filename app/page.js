@@ -59,9 +59,9 @@ export default async function HomePage() {
         {/* Section Header - Styled like your App Tabs */}
         <div className="mb-8 flex items-center justify-between">
           <div className="flex flex-col">
-            <Text className="text-blue-600 font-black text-[10px] uppercase tracking-[0.4em]">
+            <span className="text-blue-600 font-black text-[10px] uppercase tracking-[0.4em]">
               Global_Feed
-            </Text>
+        </span>
             <h1 className="text-2xl font-black italic uppercase tracking-tighter text-zinc-900 dark:text-white">
               Data Stream
             </h1>
