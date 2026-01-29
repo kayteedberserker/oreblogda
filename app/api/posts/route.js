@@ -33,6 +33,8 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
             - Allow adult jokes and "Ecchi" content, especially if the category is 'meme'.
             - Reject content that is completely unrelated to anime, gaming, or nerd culture.
             - If video is provided: Scan the timeline for hidden violations or "flash" nudity.
+            - Check for incorrect categories especially for News and Reviews, a meme post shouldn't be posted in any other category except for the meme category, if this isn't followed reject the post for incorrect category and saying the error
+            - NOTE the above rule should be strict on meme posts it must always be under the meme category unless you deem it might be eligible to be in another category like poll or gaming. if the meme is under gaming category then it has to be a gaming meme else should be rejected
 
             INPUT:
             Title: "${title}"
