@@ -6,14 +6,23 @@
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#1D4ED8",
+  "prefer_related_applications": true,
+  "related_applications": [
+    {
+      "platform": "play",
+      "id": "com.kaytee.oreblogda",
+      "url": "https://play.google.com/store/apps/details?id=com.kaytee.oreblogda"
+    }
+  ],
   "icons": [
     {
-      "src": "/icons/iconblue.png",
+      "src": "/iconblue.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "/icons/iconwhite.ico",
+      "src": "/iconblue.png",
       "sizes": "512x512",
       "type": "image/png"
     }
