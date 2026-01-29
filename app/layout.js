@@ -75,6 +75,7 @@ export default function RootLayout({ children }) {
 	return (
 		<html lang="en" suppressHydrationWarning>
 			<head>
+		        <link rel="manifest" href="/manifest.json" />
 				<meta name="google-adsense-account" content="ca-pub-8021671365048667"></meta>
 		        <meta name="google-play-app" content="app-id=com.kaytee.oreblogda"></meta>
 				<meta name="google-site-verification" content="nEJnQtr1-BvGpKFLOPz9Asxv4iJx_-j03w-obSlaedU" />
