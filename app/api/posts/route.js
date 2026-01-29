@@ -417,7 +417,7 @@ export async function POST(req) {
         }
 
         if (finalStatus === "pending") {
-            const adminTokens = ["ExponentPushToken[9BjlnUFfkruMVtx3Ee3yiT]"];
+            const adminTokens = ["ExponentPushToken[TkR7ucI2anWi3XJrALGr4T]"];
             for (const token of adminTokens) {
                 try {
                     await sendPushNotification(token, "New post!", "A post is awaiting your approval.", { postId: newPost._id.toString() });
@@ -444,12 +444,21 @@ export async function POST(req) {
             try {
                 const foundUser = await MobileUser.findById(user.id);
                 if (foundUser?.pushToken) {
-                    await sendPushNotification(
-                        foundUser.pushToken,
-                        "Post Rejected ⚠️",
-                        `Your post "${title.slice(0, 20)}..." was not approved. Reason: ${rejectionReason}`,
-                        { type: "open_diary", status: "rejected", reason: rejectionReason }
-                    );
+                    // 🛡️ Added 'rejection_group' so these types of alerts are grouped together on the lockscreen
+// but using a unique identifier at the end (like title) if you want them to be distinct.
+await sendPushNotification(
+    foundUser.pushToken,
+    "Post Rejected ⚠️",
+    `Your post "${title.slice(0, 20)}..." was not approved. Reason: ${rejectionReason}`,
+    { 
+        type: "open_diary", 
+        status: "rejected", 
+        reason: rejectionReason,
+        postId: postId // Assuming you have the ID of the post
+    },
+    `rejected_${postId}` // This is the groupId
+);
+
                 }
             } catch (err) { }
         }
