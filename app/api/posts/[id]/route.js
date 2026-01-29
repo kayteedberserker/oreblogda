@@ -131,7 +131,14 @@ export async function PATCH(req, { params }) {
                 await Notification.create({ recipientId: post.authorId, senderName: "Someone", type: "like", postId: post._id, message: msg });
                 const author = await MobileUser.findOne({ deviceId: post.authorId });
                 if (author?.pushToken) {
-                    await sendPushNotification(author.pushToken, "New Vote! ✅", msg, { postId: post._id.toString(), type: "post_detail" });
+                    // 🔔 GROUPING ADDED: Uses "vote_<PostID>" so votes stack
+                    await sendPushNotification(
+                        author.pushToken, 
+                        "New Vote! ✅", 
+                        msg, 
+                        { postId: post._id.toString(), type: "post_detail" }, 
+                        `vote_${post._id}` 
+                    );
                 }
             }
 
@@ -161,7 +168,14 @@ export async function PATCH(req, { params }) {
                 await Notification.create({ recipientId: updatedPost.authorId, senderName: "Someone", type: "like", priority: "high", postId: updatedPost._id, message: msg });
                 const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
                 if (author?.pushToken) {
-                    await sendPushNotification(author.pushToken, "New Like! ❤️", msg, { postId: updatedPost._id.toString(), type: "post_detail" });
+                    // 🔔 GROUPING ADDED: Uses "like_<PostID>" so likes stack
+                    await sendPushNotification(
+                        author.pushToken, 
+                        "New Like! ❤️", 
+                        msg, 
+                        { postId: updatedPost._id.toString(), type: "post_detail" }, 
+                        `like_${updatedPost._id}` 
+                    );
                 }
             }
 
@@ -172,7 +186,14 @@ export async function PATCH(req, { params }) {
                 await Notification.create({ recipientId: updatedPost.authorId, senderName: "System", type: "trending", postId: updatedPost._id, message: mMsg });
                 const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
                 if (author?.pushToken) {
-                    await sendPushNotification(author.pushToken, "Going Viral!", mMsg, { postId: updatedPost._id.toString(), type: "post_detail" });
+                    // 🔔 GROUPING ADDED: Uses "milestone_<PostID>" 
+                    await sendPushNotification(
+                        author.pushToken, 
+                        "Going Viral!", 
+                        mMsg, 
+                        { postId: updatedPost._id.toString(), type: "post_detail" }, 
+                        `milestone_${updatedPost._id}`
+                    );
                 }
             }
 
