@@ -1,7 +1,12 @@
 /**
- * Sends a single push notification (Best for 1-to-1 alerts)
+ * Sends a single push notification with Grouping support
+ * @param {string} pushToken - The recipient's Expo push token
+ * @param {string} title - The notification title
+ * @param {string} message - The notification body
+ * @param {object} data - Extra data (screen, post ID, etc.)
+ * @param {string} groupId - (Optional) Use a unique ID (like post ID) to group notifications together
  */
-export async function sendPushNotification(pushToken, title, message, data = {}) {
+export async function sendPushNotification(pushToken, title, message, data = {}, groupId = null) {
   if (!pushToken || !pushToken.startsWith('ExponentPushToken')) {
     console.log("🔔 Push Logic: Invalid or missing token. Skipping.");
     return;
@@ -13,6 +18,11 @@ export async function sendPushNotification(pushToken, title, message, data = {})
     title: title,
     body: message,
     data: data,
+    // 🛡️ GROUPING LOGIC
+    // iOS: Groups by threadId
+    threadId: groupId || 'default_group',
+    // Android: Setting mutableContent allows the system to be smarter about updates
+    mutableContent: true,
   };
 
   try {
@@ -35,11 +45,9 @@ export async function sendPushNotification(pushToken, title, message, data = {})
 }
 
 /**
- * Sends notifications to multiple tokens using Expo's chunking
- * @param {Array} tokens - Array of push token strings
+ * Sends notifications to multiple tokens with Grouping support
  */
-export async function sendMultiplePushNotifications(tokens, title, message, data = {}) {
-  // Filter out nulls, empty strings, or non-expo tokens
+export async function sendMultiplePushNotifications(tokens, title, message, data = {}, groupId = null) {
   const validTokens = tokens.filter(t => t && t.startsWith('ExponentPushToken'));
 
   if (validTokens.length === 0) {
@@ -54,8 +62,6 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
     chunks.push(validTokens.slice(i, i + CHUNK_SIZE));
   }
 
-  console.log(`🚀 Push Logic: Sending broadcast to ${validTokens.length} users in ${chunks.length} chunks.`);
-
   const chunkPromises = chunks.map(async (chunk, index) => {
     const messages = chunk.map(token => ({
       to: token,
@@ -63,6 +69,9 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
       title: title,
       body: message,
       data: data,
+      // 🛡️ GROUPING LOGIC
+      threadId: groupId || 'broadcast_group',
+      mutableContent: true,
     }));
 
     try {
@@ -76,7 +85,6 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
         body: JSON.stringify(messages),
       });
       const result = await response.json();
-      console.log(`📦 Chunk ${index + 1} Result:`, JSON.stringify(result));
       return result;
     } catch (error) {
       console.error(`❌ Chunk ${index + 1} Push Error:`, error);
@@ -85,6 +93,5 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
   });
 
   const results = await Promise.all(chunkPromises);
-  console.log(`✅ Broadcast Complete. Processed ${results.length} chunks.`);
   return results;
 }
