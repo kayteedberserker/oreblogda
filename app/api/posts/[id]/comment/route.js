@@ -228,7 +228,7 @@ export async function POST(req, { params }) {
       }
     }
 
-    // Process Notifications
+    // Process Notifications with Grouping
     await Promise.all(notifications.map(async (n) => {
       const query = n.isMongoId ? { _id: n.recipientId } : { deviceId: n.recipientId };
       const user = await MobileUser.findOne(query);
@@ -243,10 +243,19 @@ export async function POST(req, { params }) {
         });
 
         if (user.pushToken) {
-          await sendPushNotification(user.pushToken, n.title, n.message, { 
-            postId: post._id.toString(), 
-            type: n.type 
-          });
+          // 🔔 UPDATED GROUPING LOGIC
+          // We combine the Type + PostID. 
+          // Example: "reply_64f123abc..." -> All replies for THIS post stack together.
+          // Example: "comment_64f123abc..." -> All main comments stack together.
+          const groupId = `${n.type}_${post._id}`;
+
+          await sendPushNotification(
+              user.pushToken, 
+              n.title, 
+              n.message, 
+              { postId: post._id.toString(), type: n.type }, 
+              groupId // <-- The new Group ID
+          );
         }
       }
     }));
