@@ -35,7 +35,8 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
             - If video is provided: Scan the timeline for hidden violations or "flash" nudity.
             - Check for incorrect categories especially for News and Reviews, a meme post shouldn't be posted in any other category except for the meme category, if this isn't followed reject the post for incorrect category and saying the error
             - NOTE the above rule should be strict on meme posts it must always be under the meme category unless you deem it might be eligible to be in another category like poll or gaming. if the meme is under gaming category then it has to be a gaming meme else should be rejected
-
+            - Here are all my categories, News, Memes, Polls, Review, Gaming -So let the review category be like a general category that can accommodate any kind of posts, the same for gaming category, but it has to be game related
+            -News is strictly for Anime/Gaming News, Polls is strictly for polls, Memes is strictly for memes, Gaming is strictly for anything gaming, Review is for more general content as long as it's anime/gaming related
             INPUT:
             Title: "${title}"
             Message: "${message}"
