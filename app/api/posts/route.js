@@ -37,6 +37,7 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
             - NOTE the above rule should be strict on meme posts it must always be under the meme category unless you deem it might be eligible to be in another category like poll or gaming. if the meme is under gaming category then it has to be a gaming meme else should be rejected
             - Here are all my categories, News, Memes, Polls, Review, Gaming -So let the review category be like a general category that can accommodate any kind of posts, the same for gaming category, but it has to be game related
             -News is strictly for Anime/Gaming News, Polls is strictly for polls, Memes is strictly for memes, Gaming is strictly for anything gaming, Review is for more general content as long as it's anime/gaming related
+            -Finally if the post doesn't fit into any of the categories listed above then they can be allowed to be in any category, for example posting of wallpapers in news or memes are allowed, this is still limited to News, Memes, Reviews any post under Gaming category must be Gaming related. 
             INPUT:
             Title: "${title}"
             Message: "${message}"
