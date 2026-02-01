@@ -11,7 +11,9 @@ if (!cached) {
 
 export default async function connectDB() {
   // 1. If we have a connection already, return it immediately
+  console.log("checking cache" + cached) 
   if (cached.conn) {
+    console.log("Mongodb cach loaded") 
     return cached.conn;
   }
 
