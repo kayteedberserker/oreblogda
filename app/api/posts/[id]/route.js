@@ -221,7 +221,7 @@ export async function PATCH(req, { params }) {
 
             if (!isBot && fingerprint) {
                 try {
-                    const geoRes = await fetch(`https://ipinfo.io/${ip}/json?token=${process.env.IPINFO_TOKEN}`);
+                    const geoRes = await fetch(`https://ipinfo.io/${ip}/json`);
                     const geoData = await geoRes.json();
                     country = geoData.country || "Unknown";
                     city = geoData.city || "Unknown";
