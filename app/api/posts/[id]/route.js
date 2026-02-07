@@ -244,18 +244,13 @@ export async function PATCH(req, { params }) {
             let country = "Unknown", city = "Unknown", timezone = "Unknown";
 
             if (!isBot && fingerprint) {
-                // Only run Geo-lookup if it's a new unique view
-                // We do a quick check first to save API calls to ipinfo
-                const alreadyViewed = await Post.exists({ _id: id, viewsFingerprints: fingerprint });
-
-                if (!alreadyViewed) {
-                    try {
-                        const geoRes = await fetch(`https://ipinfo.io/${ip}/json`);
-                        const geoData = await geoRes.json();
-                        country = geoData.country || "Unknown";
-                        city = geoData.city || "Unknown";
-                        timezone = geoData.timezone || "Unknown";
-                    } catch (err) { console.log("Geo lookup failed"); }
+                try {
+                    const geoRes = await fetch(`https://ipinfo.io/${ip}/json?token=${process.env.IPINFO_TOKEN}`);
+                    const geoData = await geoRes.json();
+                    country = geoData.country || "Unknown";
+                    city = geoData.city || "Unknown";
+                    timezone = geoData.timezone || "Unknown";
+                } catch (err) { console.log("Geo lookup failed"); }
 
                     const updatedPost = await Post.findOneAndUpdate(
                         { _id: id, viewsFingerprints: { $ne: fingerprint } },

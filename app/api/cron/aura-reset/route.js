@@ -9,19 +9,25 @@ export async function GET(req) {
   // LOGGING: Cron Health Check
   console.log("--- Cron Execution Started ---");
 
+  // Verify Cron Secret
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     console.error("❌ Auth Match Failed");
     return new Response('Unauthorized', { status: 401 });
   }
 
   try {
+    // Ensure DB is connected
     await connectDB();
 
     const now = new Date();
     const currentYear = now.getFullYear();
-    // Calculate Week Number
+    
+    // Calculate Week Number (Standard ISO-like week calculation)
     const startOfYear = new Date(now.getFullYear(), 0, 1);
-    const weekNumber = Math.ceil((((now - startOfYear) / 8.64e7) + 1) / 7);
+    const diff = now.getTime() - startOfYear.getTime();
+    const oneDay = 1000 * 60 * 60 * 24;
+    const dayOfYear = Math.floor(diff / oneDay);
+    const weekNumber = Math.ceil((dayOfYear + 1) / 7);
 
     // 1️⃣ Find Top 10 Leaders
     const leaders = await MobileUser.find({ weeklyAura: { $gt: 0 } })
@@ -38,6 +44,7 @@ export async function GET(req) {
     const winnerAura = leaders[0].weeklyAura;
 
     // 2️⃣ Reset Everyone's Weekly Stats
+    // Important: We do this before awarding history so the "previousRank" logic is clean
     await MobileUser.updateMany({}, { $set: { previousRank: null, weeklyAura: 0 } });
 
     // 3️⃣ Award the Top 10 their new ranks and history
@@ -58,6 +65,7 @@ export async function GET(req) {
         }
       );
     });
+    
     await Promise.all(awardPromises);
     console.log("✅ Database Ranks Updated.");
 
@@ -69,6 +77,7 @@ export async function GET(req) {
           $exists: true 
         } 
       }).select('pushToken');
+      
       if (usersWithTokens.length > 0) {
         const tokens = usersWithTokens.map(u => u.pushToken);
         
@@ -76,19 +85,22 @@ export async function GET(req) {
         const body = `${winnerName} dominated with ${winnerAura} Aura! ⚡ Points reset. Start farming now!`;
         const data = { screen: 'Leaderboard' };
 
-        // Use our clean utility function
+        // Clean utility function for push
         await sendMultiplePushNotifications(tokens, title, body, data);
+        console.log(`📡 Notifications sent to ${tokens.length} users.`);
       } else {
         console.log("⚠️ No push tokens found in database.");
       }
     } catch (notifErr) {
       console.error("❌ Notification Phase Error:", notifErr);
+      // We don't return error here so the DB reset still counts as a success
     }
 
     return NextResponse.json({ 
         success: true, 
         winner: winnerName, 
-        aura: winnerAura 
+        aura: winnerAura,
+        week: weekNumber
     });
 
   } catch (err) {
