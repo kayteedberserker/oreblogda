@@ -9,6 +9,7 @@ import Notification from "@/app/models/NotificationModel";
 import { sendPushNotification, sendMultiplePushNotifications} from "@/app/lib/pushNotifications";
 import crypto from "crypto"; // 🛡️ Needed for Security Signature
 import { GoogleGenAI } from "@google/genai";
+import geoip from "geoip-lite";
 
 /**
  * 🔹 UPDATED 2026 MODERATOR
@@ -272,12 +273,17 @@ export async function POST(req) {
     try {
         const body = await req.json(); 
         
-        // 🛡️ SECURITY CHECK 1: Verify Request Integrity
-        /*
-        if (!verifyRequestSignature(req, body)) {
-             return addCorsHeaders(NextResponse.json({ message: "Forbidden: Invalid Signature" }, { status: 403 }));
+        // --- 🔹 COUNTRY DETECTION 🔹 ---
+        // 1. Try to get country from the custom header we added in apiFetch
+        let country = req.headers.get("x-user-country");
+
+        // 2. Fallback: If header is "Unknown" or missing, detect via IP
+        if (!country || country === "Unknown") {
+            const forwarded = req.headers.get("x-forwarded-for");
+            const ip = forwarded ? forwarded.split(/, /)[0] : "127.0.0.1";
+            const geo = geoip.lookup(ip);
+            country = geo ? geo.country : "Global";
         }
-        */
 
         const token = req.cookies.get("token")?.value;
         const {
