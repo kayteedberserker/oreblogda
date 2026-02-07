@@ -2,7 +2,19 @@
   "crons": [
     {
       "path": "/api/cron/aura-reset",
-      "schedule": "5 23 * * 0"
+      "schedule": "0 23 * * 0"
+    },
+    {
+      "path": "/api/cron/weekly-clan-reset",
+      "schedule": "0 23 * * 0"
+    },
+    {
+      "path": "/api/cron/daily-clan-check",
+      "schedule": "0 23 * * *"
+    },
+    {
+      "path": "/api/cron/daily-allocation",
+      "schedule": "0 23 * * *"
     }
   ]
 }

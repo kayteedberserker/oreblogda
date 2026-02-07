@@ -121,6 +121,8 @@ const postSchema = new mongoose.Schema(
     /* ---------- INTERACTIONS ---------- */
 
     likes: [likeSchema],
+    // New: Total count for display and rank calculations
+    likeCount: { type: Number, default: 0 },
 
     comments: [commentSchema],
 
@@ -154,8 +156,22 @@ const postSchema = new mongoose.Schema(
 
     category: {
       type: String,
-      enum: ["News", "Memes", "Videos/Edits", "Polls", "Review", "Gaming"],
+      // We remove the strict enum because "Clan:News:Tag" is dynamic.
+      // Instead, we can add a custom validator if we want to keep it safe.
       default: "News"
+    },
+
+    // I suggest adding a dedicated field for the Clan ID/Tag if it's a clan post.
+    // This makes indexing and point-tracking MUCH faster than string parsing.
+    clanId: {
+      type: String, // Storing the unique Clan Tag here (e.g., "OREB1")
+      default: null,
+      index: true // Very important for performance
+    },
+    country: {
+      type: String,
+      default: "Global",
+      index: true
     },
 
     status: {
@@ -165,16 +181,16 @@ const postSchema = new mongoose.Schema(
     },
 
     // NEW: Locked timestamp for cooldowns
-    statusChangedAt: { 
-      type: Date, 
-      default: Date.now 
+    statusChangedAt: {
+      type: Date,
+      default: Date.now
     },
-     rejectionReason: { type: String, default:""}, 
+    rejectionReason: { type: String, default: "" },
 
-    expiresAt: { 
-    type: Date, 
-    index: { expires: 0 } 
-  }
+    expiresAt: {
+      type: Date,
+      index: { expires: 0 }
+    }
   },
   { timestamps: true }
 );
@@ -183,7 +199,7 @@ const postSchema = new mongoose.Schema(
    6. MIDDLEWARE: Only update statusChangedAt on status change
 ===================================================== */
 
-postSchema.pre('save', function(next) {
+postSchema.pre('save', function (next) {
   // If the 'status' field was modified, update our custom timestamp
   if (this.isModified('status')) {
     this.statusChangedAt = new Date();

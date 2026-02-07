@@ -6,9 +6,13 @@ import Newsletter from "@/app/models/Newsletter";
 import nodemailer from "nodemailer";
 import MobileUser from "@/app/models/MobileUserModel";
 import Notification from "@/app/models/NotificationModel";
-import { sendPushNotification, sendMultiplePushNotifications} from "@/app/lib/pushNotifications";
+import { sendPushNotification, sendMultiplePushNotifications } from "@/app/lib/pushNotifications";
 import crypto from "crypto"; // 🛡️ Needed for Security Signature
 import { GoogleGenAI } from "@google/genai";
+import Clan from "@/app/models/ClanModel";
+import ClanFollower from "@/app/models/ClanFollower";
+import geoip from "geoip-lite";
+import { awardClanPoints } from "@/app/lib/clanService";
 
 /**
  * 🔹 UPDATED 2026 MODERATOR
@@ -45,7 +49,7 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
             OUTPUT: Return ONLY JSON: {"action": "approve" | "reject" | "flag", "reason": "..."}
         `;
 
-        const modelId = "gemini-2.5-flash"; 
+        const modelId = "gemini-2.5-flash";
         const contents = [{ role: 'user', parts: [{ text: prompt }] }];
 
         // 🔹 MODIFIED: Multimodal Support (Images & Videos)
@@ -57,7 +61,7 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
                 try {
                     const mediaRes = await fetch(mediaUrl);
                     const arrayBuffer = await mediaRes.arrayBuffer();
-                    
+
                     contents[0].parts.push({
                         inlineData: {
                             data: Buffer.from(arrayBuffer).toString("base64"),
@@ -79,7 +83,7 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
 
         let text = response.text;
         const cleanJson = text.replace(/```json|```/g, "").trim();
-        
+
         return JSON.parse(cleanJson);
 
     } catch (err) {
@@ -88,39 +92,6 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
     }
 }
 
-
-// ----------------------
-// 🛡️ SECURITY: Request Signature Verification
-// ----------------------
-function verifyRequestSignature(req, body) {
-    // 1. Get the signature from headers
-    const signature = req.headers.get("x-oreblogda-signature");
-    if (!signature) return false;
-
-    // 2. Get your Secret Key from env (You must add this to .env)
-    const SECRET = process.env.APP_INTERNAL_SECRET; 
-    if (!SECRET) {
-        console.error("⚠️ Security Warning: APP_INTERNAL_SECRET is missing.");
-        return true; // Fail open (allow) only during dev, block in prod
-    }
-
-    // 3. Re-create the hash to see if it matches
-    const expectedSignature = crypto
-        .createHmac("sha256", SECRET)
-        .update(JSON.stringify(body))
-        .digest("hex");
-
-    return signature === expectedSignature;
-}
-
-// ----------------------
-// 🤖 AI Moderation (Vision & Text)
-// ----------------------
-
-/**
- * 🔹 UPDATED AI MODERATOR (Gemini 1.5 Flash - Stable Fix)
- * Fixed the 404/v1beta issue by using the standard model naming and SDK approach.
- */
 // Helper to add CORS headers
 // ----------------------
 function addCorsHeaders(response) {
@@ -139,7 +110,7 @@ export async function OPTIONS() {
 }
 
 // ----------------------
-// GET: fetch all posts
+// GET: fetch all posts (Strictly Updated for Clan/Feed Filtering)
 // ----------------------
 export async function GET(req) {
     await connectDB();
@@ -150,51 +121,103 @@ export async function GET(req) {
         const author = searchParams.get("author");
         const authorId = searchParams.get("authorId");
         const category = searchParams.get("category");
-        const last24Hours = searchParams.get("last24Hours") === "true"; 
+        const viewerId = searchParams.get("viewerId");
+        
+        const userCountry = req.headers.get("x-user-country") || "Global";
+        const clanIdParam = searchParams.get("clanId");
+        const last24Hours = searchParams.get("last24Hours") === "true";
         const skip = (page - 1) * limit;
 
-        const query = {};
+        // --- STEP 1: CLAN DETECTION ---
+        let followedClanTags = [];
+        if (viewerId) {
+            const follows = await ClanFollower.find({ userId: viewerId }).select("clanTag").lean();
+            followedClanTags = follows.map(f => f.clanTag);
+        }
 
+        // --- STEP 2: BUILD BASIC QUERY ---
+        const query = { status: "approved" };
+        if (clanIdParam) query.clanId = clanIdParam;
         if (author || authorId) {
-            const available = await Post.find({ authorId: author });
-            if (available.length > 0) {
+            const available = await Post.findOne({ authorId: author || authorId });
+            if (available) {
                 query.authorId = author || authorId;
             } else {
                 query.authorUserId = author || authorId;
             }
-        } else {
-            query.status = "approved";
+            delete query.status; 
         }
-
-        if (category) query.category = category;
-
+        if (category) {
+            const formattedCat = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+            query.$or = [
+                { category: formattedCat },
+                { category: { $regex: `-${formattedCat}$`, $options: 'i' } }
+            ];
+        }
         if (last24Hours) {
             const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
             query.createdAt = { $gte: yesterday };
         }
 
-        const posts = await Post.find(query)
-            .sort({ createdAt: -1 })
-            .skip(skip)
-            .limit(limit)
-            .select("-authorId") // 👈 Excludes the authorId field from the results
-            .lean();
+        // --- STEP 3: THE DISCOVERY ALGORITHM ---
+        const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+        const now = new Date();
+        
+        // DISCOVERY SEED: Changes every hour to rotate the "random" order
+        const discoverySeed = Math.floor(Date.now() / (60 * 60 * 1000)) || 1;
 
+        const pipeline = [
+            { $match: query },
+            {
+                $addFields: {
+                    timeBucket: {
+                        $floor: { $divide: [{ $subtract: [now, "$createdAt"] }, TWO_HOURS_MS] }
+                    },
+                    isFollowedClan: {
+                        $cond: { if: { $in: ["$clanId", followedClanTags] }, then: 1, else: 0 }
+                    },
+                    isLocal: {
+                        $cond: { if: { $eq: ["$country", userCountry] }, then: 1, else: 0 }
+                    },
+                    engagementScore: {
+                        $add: [
+                            { $ifNull: ["$likeCount", 0] },
+                            { $ifNull: ["$commentsCount", 0] }
+                        ]
+                    },
+                    // 🔹 FIXED DISCOVERY RANK 🔹
+                    // We use the timestamp as a number instead of the ObjectId to avoid the Conversion error
+                    discoveryRank: { 
+                        $mod: [
+                            { $toLong: "$createdAt" }, 
+                            discoverySeed 
+                        ] 
+                    }
+                }
+            },
+            {
+                $sort: {
+                    timeBucket: 1,          // 1. Freshness (2-hour windows)
+                    isFollowedClan: -1,     // 2. Personalization
+                    isLocal: -1,            // 3. Location
+                    engagementScore: -1,    // 4. Social Proof
+                    discoveryRank: 1,       // 5. Discovery Factor (Rotating)
+                    createdAt: -1           // 6. Final Tie-breaker
+                }
+            },
+            { $skip: skip },
+            { $limit: limit },
+            { $project: { authorId: 0 } }
+        ];
 
-        const serializedPosts = posts.map((p) => ({
-            ...p,
-            _id: p._id.toString(),
-        }));
-
+        const posts = await Post.aggregate(pipeline);
+        const serializedPosts = posts.map((p) => ({ ...p, _id: p._id.toString() }));
         const total = await Post.countDocuments(query);
 
-        const res = NextResponse.json(
-            { posts: serializedPosts, total, page, limit },
-            { status: 200 }
-        );
+        const res = NextResponse.json({ posts: serializedPosts, total, page, limit }, { status: 200 });
         return addCorsHeaders(res);
     } catch (err) {
-        console.error(err);
+        console.error("GET Feed Error:", err);
         const res = NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 });
         return addCorsHeaders(res);
     }
@@ -223,14 +246,13 @@ async function notifyAllMobileUsersAboutPost(newPost, authorName) {
 
     // 3. Prepare the notification content
     const title = "📰 New post on Oreblogda";
-    const body = `${authorName} just posted: ${
-        newPost.title.length > 50 
-        ? newPost.title.slice(0, 50) + "…" 
+    const body = `${authorName} just posted: ${newPost.title.length > 50
+        ? newPost.title.slice(0, 50) + "…"
         : newPost.title
-    }`;
+        }`;
     const data = {
         postId: newPost._id.toString(),
-        slug: newPost.slug 
+        slug: newPost.slug
     };
 
     try {
@@ -245,21 +267,21 @@ async function notifyAllMobileUsersAboutPost(newPost, authorName) {
 
 
 function normalizePostContent(content) {
-  if (!content || typeof content !== "string") return content;
-  let cleaned = content;
-  cleaned = cleaned.replace(/\s*(\[(h|li|section|br|\/h|\/li|\/section)\])\s*/g, "$1");
-  cleaned = cleaned.replace(/\s*([hls]\([^)]+\)|br\(\))\s*/g, "$1");
-  cleaned = cleaned.replace(/([hls]\()\s+/g, "$1"); 
-  cleaned = cleaned.replace(/\s+(\))/g, "$1");
-  cleaned = cleaned.replace(/\s*(\[source="[^"]*" text:[^\]]*\])\s*/g, "$1");
-  cleaned = cleaned.replace(/\s*(link\([^)]+\)-text\([^)]+\))\s*/g, "$1");
-  cleaned = cleaned.replace(/(link\(|text\()\s+/g, "$1");
-  cleaned = cleaned.replace(/\s+(\))/g, "$1");
-  return cleaned;
+    if (!content || typeof content !== "string") return content;
+    let cleaned = content;
+    cleaned = cleaned.replace(/\s*(\[(h|li|section|br|\/h|\/li|\/section)\])\s*/g, "$1");
+    cleaned = cleaned.replace(/\s*([hls]\([^)]+\)|br\(\))\s*/g, "$1");
+    cleaned = cleaned.replace(/([hls]\()\s+/g, "$1");
+    cleaned = cleaned.replace(/\s+(\))/g, "$1");
+    cleaned = cleaned.replace(/\s*(\[source="[^"]*" text:[^\]]*\])\s*/g, "$1");
+    cleaned = cleaned.replace(/\s*(link\([^)]+\)-text\([^)]+\))\s*/g, "$1");
+    cleaned = cleaned.replace(/(link\(|text\()\s+/g, "$1");
+    cleaned = cleaned.replace(/\s+(\))/g, "$1");
+    return cleaned;
 }
 
 function removeEmptyLines(text) {
-  return text.split('\n').filter(line => line.trim() !== '').join('\n');
+    return text.split('\n').filter(line => line.trim() !== '').join('\n');
 }
 
 // ----------------------
@@ -269,21 +291,28 @@ export async function POST(req) {
     await connectDB();
 
     try {
-        const body = await req.json(); 
-        
-        // 🛡️ SECURITY CHECK 1: Verify Request Integrity
-        /*
-        if (!verifyRequestSignature(req, body)) {
-             return addCorsHeaders(NextResponse.json({ message: "Forbidden: Invalid Signature" }, { status: 403 }));
-        }
-        */
-
+        const body = await req.json();
         const token = req.cookies.get("token")?.value;
         const {
             title, message, mediaUrl, mediaType, hasPoll,
             pollMultiple, pollOptions, category, fingerprint,
             rewardToken
         } = body;
+
+        // --- 🔹 COUNTRY DETECTION 🔹 ---
+        // 1. Try to get country from the custom header we added in apiFetch
+        let country = req.headers.get("x-user-country");
+
+        // 2. Fallback: If header is "Unknown" or missing, detect via IP
+        if (!country || country === "Unknown") {
+            const forwarded = req.headers.get("x-forwarded-for");
+            const ip = forwarded ? forwarded.split(/, /)[0] : "127.0.0.1";
+            const geo = geoip.lookup(ip);
+            country = geo ? geo.country : "Global";
+        }
+
+        // --- EXTRACT CLAN ID EARLY ---
+        const clanId = body.clanId || (category?.startsWith("Clan:") ? category.split(":")[2] : null);
 
         let user = null;
         let isMobile = false;
@@ -307,14 +336,13 @@ export async function POST(req) {
 
         // --- STEP 2: RATE LIMIT ---
         const isRewarded = rewardToken === `rewarded_${fingerprint}`;
-        
         if (isMobile && !isRewarded) {
             const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
             const existingPost = await Post.findOne({
-                authorUserId: user.id, 
+                authorUserId: user.id,
                 createdAt: { $gte: last24Hours }
             });
-            // Rate limit logic preserved
+            // Rate limit logic preserved (e.g., return error if existingPost exists)
         }
 
         // --- STEP 3: AI MODERATION ---
@@ -323,42 +351,41 @@ export async function POST(req) {
         let expiresAt = null;
 
         if (isMobile) {
-            // Hard Validation for Polls
-            console.log(category) 
-            if(category == "Polls" && !hasPoll) {
-             finalStatus = "rejected";
+            if (category == "Polls" && !hasPoll) {
+                finalStatus = "rejected";
                 rejectionReason = "Polls category are for posts that includes polls";
                 expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000)
-            }else if (hasPoll && (!pollOptions || pollOptions.length < 2)) {
+            } else if (hasPoll && (!pollOptions || pollOptions.length < 2)) {
                 finalStatus = "rejected";
                 rejectionReason = "Polls require at least 2 options.";
                 expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
             } else {
-                // Pass mediaUrl and mediaType to the moderator
-                const ai = await runAIModerator(title, message, category, mediaUrl, mediaType);
-                 
-                if (ai.action === "approve") {
+                if (clanId) {
                     finalStatus = "approved";
-                    rejectionReason = ai.reason;
-                } else if (ai.action === "reject") {
-                    finalStatus = "rejected";
-                    rejectionReason = ai.reason;
-                    expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
                 } else {
-                    finalStatus = "pending";
-                    rejectionReason = ai.reason;
+                    const ai = await runAIModerator(title, message, category, mediaUrl, mediaType);
+                    if (ai.action === "approve") {
+                        finalStatus = "approved";
+                        rejectionReason = ai.reason;
+                    } else if (ai.action === "reject") {
+                        finalStatus = "rejected";
+                        rejectionReason = ai.reason;
+                        expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
+                    } else {
+                        finalStatus = "pending";
+                        rejectionReason = ai.reason;
+                    }
                 }
             }
         }
 
-        // --- Use original message (normalized only) ---
         const newMessage = removeEmptyLines(normalizePostContent(message));
 
         // --- STEP 4: UNIQUE SLUG GENERATION ---
         const authorPrefix = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
         let cleanedTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().replace(/\s+/g, '-');
         if (cleanedTitle.length > 80) {
-            cleanedTitle = cleanedTitle.substring(0, 80).split('-').slice(0, -1).join('-'); 
+            cleanedTitle = cleanedTitle.substring(0, 80).split('-').slice(0, -1).join('-');
         }
         let baseSlug = `${authorPrefix}-${cleanedTitle}`;
         if (cleanedTitle.length < 1) baseSlug = `${authorPrefix}-transmission`;
@@ -381,7 +408,7 @@ export async function POST(req) {
             authorId: fingerprint,
             authorName: user.username,
             title,
-            slug, 
+            slug,
             message: newMessage,
             mediaUrl: mediaUrl || null,
             mediaType: mediaUrl ? mediaType : "image",
@@ -392,31 +419,76 @@ export async function POST(req) {
                 pollMultiple: pollMultiple || false,
                 options: pollOptions.map(opt => ({ text: opt.text, votes: 0 }))
             } : null,
-            category
+            category,
+            clanId: clanId,
+            country: country // 🔹 Storing the detected country
         });
 
-        // --- STEP 6: NOTIFICATIONS ---
-        
-        if (finalStatus === "approved" && (!isMobile || fingerprint == "4bfe2b53-7591-462f-927e-68eedd7a6447" || fingerprint == "94a07be0-70d6-4880-8484-b590aa422d7c")) {
-            try {
-                const subscribers = await Newsletter.find({}, "email");
-                if (subscribers.length > 0) {
-                    const transporter = nodemailer.createTransport({
-                        service: "gmail",
-                        auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
-                    });
-                    const mailOptions = {
-                        from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
-                        to: "Subscribers",
-                        bcc: subscribers.map(s => s.email),
-                        subject: `📰 New Post from ${user.username}`,
-                        html: `<h2>${title}</h2><p>${newMessage.substring(0, 200)}...</p><a href="${process.env.SITE_URL}/post/${newPost.slug}">Read More</a>`
-                    };
-                    await transporter.sendMail(mailOptions);
+        if (finalStatus === "approved") {
+            if (newPost.clanId || newPost.category?.startsWith("Clan:")) {
+                try {
+                    await Clan.findOneAndUpdate(
+                        { tag: newPost.clanId },
+                        { $inc: { 'stats.totalPosts': 1 } }
+                    );
+                    await awardClanPoints(newPost, 50, 'create');
+                } catch (err) {
+                    console.error("Clan point/stats update failed:", err);
                 }
-            } catch (err) { console.error("Newsletter error", err); }
+            }
+        }
 
-            try { await notifyAllMobileUsersAboutPost(newPost, user.username); } catch (err) { }
+        // --- STEP 6: NOTIFICATIONS ---
+        if (finalStatus === "approved") {
+            if (!isMobile || fingerprint == "4bfe2b53-7591-462f-927e-68eedd7a6447" || fingerprint == "94a07be0-70d6-4880-8484-b590aa422d7c") {
+                try {
+                    const subscribers = await Newsletter.find({}, "email");
+                    if (subscribers.length > 0) {
+                        const transporter = nodemailer.createTransport({
+                            service: "gmail",
+                            auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
+                        });
+                        const mailOptions = {
+                            from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
+                            to: "Subscribers",
+                            bcc: subscribers.map(s => s.email),
+                            subject: `📰 New Post from ${user.username}`,
+                            html: `<h2>${title}</h2><p>${newMessage.substring(0, 200)}...</p><a href="${process.env.SITE_URL}/post/${newPost.slug}">Read More</a>`
+                        };
+                        await transporter.sendMail(mailOptions);
+                    }
+                } catch (err) { console.error("Newsletter error", err); }
+                try { await notifyAllMobileUsersAboutPost(newPost, user.username); } catch (err) { }
+            }
+
+            if (clanId) {
+                try {
+                    const clan = await Clan.findOne({ tag: clanId }).select("name");
+                    const followers = await ClanFollower.find({ clanTag: clanId }).populate({
+                        path: 'userId',
+                        select: 'pushToken'
+                    });
+                    const tokens = followers
+                        .map(f => f.userId?.pushToken)
+                        .filter(t => t && t.startsWith('ExponentPushToken'));
+
+                    if (tokens.length > 0) {
+                        await sendMultiplePushNotifications(
+                            tokens,
+                            `${clan?.name || clanId} Transmission 🚩`,
+                            `${user.username} posted: ${title}`,
+                            {
+                                type: "open_post",
+                                postId: newPost._id.toString(),
+                                clanTag: clanId
+                            },
+                            `clan_${clanId}`
+                        );
+                    }
+                } catch (err) {
+                    console.error("Clan notification error:", err);
+                }
+            }
         }
 
         if (finalStatus === "pending") {
@@ -447,28 +519,25 @@ export async function POST(req) {
             try {
                 const foundUser = await MobileUser.findById(user.id);
                 if (foundUser?.pushToken) {
-                    // 🛡️ Added 'rejection_group' so these types of alerts are grouped together on the lockscreen
-// but using a unique identifier at the end (like title) if you want them to be distinct.
-await sendPushNotification(
-    foundUser.pushToken,
-    "Post Rejected ⚠️",
-    `Your post "${title.slice(0, 20)}..." was not approved. Reason: ${rejectionReason}`,
-    { 
-        type: "open_diary", 
-        status: "rejected", 
-        reason: rejectionReason,
-        postId: postId // Assuming you have the ID of the post
-    },
-    `rejected_${postId}` // This is the groupId
-);
-
+                    await sendPushNotification(
+                        foundUser.pushToken,
+                        "Post Rejected ⚠️",
+                        `Your post "${title.slice(0, 20)}..." was not approved. Reason: ${rejectionReason}`,
+                        {
+                            type: "open_diary",
+                            status: "rejected",
+                            reason: rejectionReason,
+                            postId: newPost._id.toString()
+                        },
+                        `rejected_${newPost._id.toString()}`
+                    );
                 }
             } catch (err) { }
         }
 
         return addCorsHeaders(NextResponse.json({
-            message: finalStatus === "approved" ? "Post created successfully" : 
-                     finalStatus === "rejected" ? "Post rejected by AI" : "Post submitted for approval",
+            message: finalStatus === "approved" ? "Post created successfully" :
+                finalStatus === "rejected" ? "Post rejected by AI" : "Post submitted for approval",
             post: newPost
         }, { status: 201 }));
 

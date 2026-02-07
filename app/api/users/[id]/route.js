@@ -17,7 +17,7 @@ export async function GET(req, { params }) {
         // 1. Try finding in Web Admin (UserModel)
         // We check if 'id' is a valid ObjectId before using findById to avoid unnecessary cast errors
         if (mongoose.Types.ObjectId.isValid(id)) {
-            user = await UserModel.findById(id).select("-password").lean();
+            user = await UserModel.findById(id).select("-password").lean()
         }
 
         // 2. If not found by _id, try by newId in UserModel
