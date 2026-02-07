@@ -129,25 +129,33 @@ export async function GET(req) {
         const last24Hours = searchParams.get("last24Hours") === "true";
         const skip = (page - 1) * limit;
 
-        // --- STEP 1: CLAN DETECTION ---
+        const targetAuthor = author || authorId;
+
+        // --- STEP 1: CLAN DETECTION (Only needed for Discovery Feed) ---
         let followedClanTags = [];
-        if (viewerId) {
+        if (viewerId && !targetAuthor) {
             const follows = await ClanFollower.find({ userId: viewerId }).select("clanTag").lean();
             followedClanTags = follows.map(f => f.clanTag);
         }
 
-        // --- STEP 2: BUILD BASIC QUERY ---
-        const query = { status: "approved" };
-        if (clanIdParam) query.clanId = clanIdParam;
-        if (author || authorId) {
-            const available = await Post.findOne({ authorId: author || authorId });
-            if (available) {
-                query.authorId = author || authorId;
-            } else {
-                query.authorUserId = author || authorId;
-            }
+        // --- STEP 2: BUILD QUERY ---
+        let query = { status: "approved" };
+        
+        if (targetAuthor) {
+            // For Profiles/Author Feeds: Check both potential ID fields
+            query = {
+                $or: [
+                    { authorId: targetAuthor },
+                    { authorUserId: targetAuthor }
+                ]
+            };
+            // On profiles, we usually want to see everything (even pending)
+            // If you only want approved posts on profiles, comment the line below
             delete query.status; 
         }
+
+        if (clanIdParam) query.clanId = clanIdParam;
+        
         if (category) {
             const formattedCat = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
             query.$or = [
@@ -155,75 +163,92 @@ export async function GET(req) {
                 { category: { $regex: `-${formattedCat}$`, $options: 'i' } }
             ];
         }
+
         if (last24Hours) {
             const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
             query.createdAt = { $gte: yesterday };
         }
 
-        // --- STEP 3: THE DISCOVERY ALGORITHM ---
-        const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
-        const now = new Date();
-        
-        // DISCOVERY SEED: Changes every hour to rotate the "random" order
-        const discoverySeed = Math.floor(Date.now() / (60 * 60 * 1000)) || 1;
-
-        const pipeline = [
-            { $match: query },
-            {
-                $addFields: {
-                    timeBucket: {
-                        $floor: { $divide: [{ $subtract: [now, "$createdAt"] }, TWO_HOURS_MS] }
-                    },
-                    isFollowedClan: {
-                        $cond: { if: { $in: ["$clanId", followedClanTags] }, then: 1, else: 0 }
-                    },
-                    isLocal: {
-                        $cond: { if: { $eq: ["$country", userCountry] }, then: 1, else: 0 }
-                    },
-                    engagementScore: {
-                        $add: [
-                            { $ifNull: ["$likeCount", 0] },
-                            { $ifNull: ["$commentsCount", 0] }
-                        ]
-                    },
-                    // 🔹 FIXED DISCOVERY RANK 🔹
-                    // We use the timestamp as a number instead of the ObjectId to avoid the Conversion error
-                    discoveryRank: { 
-                        $mod: [
-                            { $toLong: "$createdAt" }, 
-                            discoverySeed 
-                        ] 
-                    }
-                }
-            },
-            {
-                $sort: {
-                    timeBucket: 1,          // 1. Freshness (2-hour windows)
-                    isFollowedClan: -1,     // 2. Personalization
-                    isLocal: -1,            // 3. Location
-                    engagementScore: -1,    // 4. Social Proof
-                    discoveryRank: 1,       // 5. Discovery Factor (Rotating)
-                    createdAt: -1           // 6. Final Tie-breaker
-                }
-            },
-            { $skip: skip },
-            { $limit: limit },
-            { $project: { authorId: 0 } }
-        ];
-
-        const posts = await Post.aggregate(pipeline);
-        const serializedPosts = posts.map((p) => ({ ...p, _id: p._id.toString() }));
+        let posts;
         const total = await Post.countDocuments(query);
 
-        const res = NextResponse.json({ posts: serializedPosts, total, page, limit }, { status: 200 });
+        // --- STEP 3: EXECUTION BRANCH ---
+        if (targetAuthor) {
+            // AUTHOR FEED: Simple chronological list (fixes the [] return issue)
+            posts = await Post.find(query)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean();
+        } else {
+            // DISCOVERY FEED: Complex Algorithm
+            const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+            const now = new Date();
+            const discoverySeed = Math.floor(Date.now() / (60 * 60 * 1000)) || 1;
+
+            const pipeline = [
+                { $match: query },
+                {
+                    $addFields: {
+                        timeBucket: {
+                            $floor: { $divide: [{ $subtract: [now, "$createdAt"] }, TWO_HOURS_MS] }
+                        },
+                        isFollowedClan: {
+                            $cond: { if: { $in: ["$clanId", followedClanTags] }, then: 1, else: 0 }
+                        },
+                        isLocal: {
+                            $cond: { if: { $eq: ["$country", userCountry] }, then: 1, else: 0 }
+                        },
+                        engagementScore: {
+                            $add: [
+                                { $ifNull: ["$likeCount", 0] },
+                                { $ifNull: ["$commentsCount", 0] }
+                            ]
+                        },
+                        discoveryRank: { 
+                            $mod: [ { $toLong: "$createdAt" }, discoverySeed ] 
+                        }
+                    }
+                },
+                {
+                    $sort: {
+                        timeBucket: 1,
+                        isFollowedClan: -1,
+                        isLocal: -1,
+                        engagementScore: -1,
+                        discoveryRank: 1,
+                        createdAt: -1
+                    }
+                },
+                { $skip: skip },
+                { $limit: limit }
+            ];
+            posts = await Post.aggregate(pipeline);
+        }
+
+        // Ensure all IDs are strings for the frontend
+        const serializedPosts = posts.map((p) => ({ 
+            ...p, 
+            _id: p._id.toString(),
+            // Ensure authorId is present if frontend needs it, 
+            // but keep it hidden if it's sensitive
+            authorId: p.authorId?.toString() 
+        }));
+
+        const res = NextResponse.json({ 
+            posts: serializedPosts, 
+            total, 
+            page, 
+            limit 
+        }, { status: 200 });
+
         return addCorsHeaders(res);
+
     } catch (err) {
         console.error("GET Feed Error:", err);
-        const res = NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 });
-        return addCorsHeaders(res);
+        return NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 });
     }
 }
-
 // ----------------------
 // Helper Functions
 // ----------------------
