@@ -112,7 +112,7 @@ export async function OPTIONS() {
 
 // ----------------------
 // GET: fetch all posts (Strictly Updated for Clan/Feed Filtering)
-// ----------------------
+// ---------------------- 
 export async function GET(req) {
     await connectDB();
     try {
@@ -136,10 +136,12 @@ export async function GET(req) {
 
         // Status Logic: Only show all status if viewing a specific author
         if (targetAuthor) {
-            query.$or = [
-                { authorId: targetAuthor },
-                { authorUserId: targetAuthor }
-            ];
+            const available = await Post.find({ authorId: author });
+            if (available.length > 0) {
+                query.authorId = author || authorId;
+            } else {
+                query.authorUserId = author || authorId;
+            }
         } else {
             query.status = "approved";
         }
