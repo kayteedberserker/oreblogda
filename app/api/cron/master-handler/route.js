@@ -234,7 +234,7 @@ export async function GET(req) {
 
   const now = new Date();
   // Sunday is 0 in JS Date
-  const isSunday = now.getDay() === 0;
+  const isSunday = now.getDay() === 1;
 
   try {
     await connectDB();
