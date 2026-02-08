@@ -112,7 +112,7 @@ export async function OPTIONS() {
 
 // ----------------------
 // GET: fetch all posts (Strictly Updated for Clan/Feed Filtering)
-// ----------------------
+// ---------------------- 
 export async function GET(req) {
     await connectDB();
     try {
@@ -131,37 +131,28 @@ export async function GET(req) {
 
         const targetAuthor = author || authorId;
 
-        // --- STEP 1: CLAN DETECTION (Only needed for Discovery Feed) ---
-        let followedClanTags = [];
-        if (viewerId && !targetAuthor) {
-            const follows = await ClanFollower.find({ userId: viewerId }).select("clanTag").lean();
-            followedClanTags = follows.map(f => f.clanTag);
-        }
+        // --- STEP 1: BUILD QUERY (ADDITIVE) ---
+        let query = {};
 
-        // --- STEP 2: BUILD QUERY ---
-        let query = { status: "approved" };
-        
+        // Status Logic: Only show all status if viewing a specific author
         if (targetAuthor) {
-            // For Profiles/Author Feeds: Check both potential ID fields
-            query = {
-                $or: [
-                    { authorId: targetAuthor },
-                    { authorUserId: targetAuthor }
-                ]
-            };
-            // On profiles, we usually want to see everything (even pending)
-            // If you only want approved posts on profiles, comment the line below
-            delete query.status; 
+            const available = await Post.find({ authorId: author });
+            if (available.length > 0) {
+                query.authorId = author || authorId;
+            } else {
+                query.authorUserId = author || authorId;
+            }
+        } else {
+            query.status = "approved";
         }
 
-        if (clanIdParam) query.clanId = clanIdParam;
-        
+        if (clanIdParam) {
+            query.clanId = clanIdParam;
+        }
+
         if (category) {
-            const formattedCat = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
-            query.$or = [
-                { category: formattedCat },
-                { category: { $regex: `-${formattedCat}$`, $options: 'i' } }
-            ];
+            // Reverting to your working simple category check or a safe version
+            query.category = category; 
         }
 
         if (last24Hours) {
@@ -169,25 +160,33 @@ export async function GET(req) {
             query.createdAt = { $gte: yesterday };
         }
 
+        // --- STEP 2: CLAN DETECTION (For Discovery Ranking) ---
+        let followedClanTags = [];
+        if (viewerId && !targetAuthor) {
+            const follows = await ClanFollower.find({ userId: viewerId }).select("clanTag").lean();
+            followedClanTags = follows.map(f => f.clanTag);
+        }
+
         let posts;
+        // Accurate Total Count based on the constructed query
         const total = await Post.countDocuments(query);
 
         // --- STEP 3: EXECUTION BRANCH ---
         if (targetAuthor) {
-            // AUTHOR FEED: Simple chronological list (fixes the [] return issue)
+            // AUTHOR FEED: Simple list as requested
             posts = await Post.find(query)
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
                 .lean();
         } else {
-            // DISCOVERY FEED: Complex Algorithm
+            // DISCOVERY FEED: Using the Algorithm
             const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
             const now = new Date();
             const discoverySeed = Math.floor(Date.now() / (60 * 60 * 1000)) || 1;
 
             const pipeline = [
-                { $match: query },
+                { $match: query }, // Filter by our built query
                 {
                     $addFields: {
                         timeBucket: {
@@ -226,13 +225,12 @@ export async function GET(req) {
             posts = await Post.aggregate(pipeline);
         }
 
-        // Ensure all IDs are strings for the frontend
+        // --- STEP 4: SERIALIZATION ---
         const serializedPosts = posts.map((p) => ({ 
             ...p, 
             _id: p._id.toString(),
-            // Ensure authorId is present if frontend needs it, 
-            // but keep it hidden if it's sensitive
-            authorId: p.authorId?.toString() 
+            // Keeping authorId out of return if you previously selected "-authorId"
+            // But if your frontend needs it for navigation, keep it.
         }));
 
         const res = NextResponse.json({ 
@@ -246,10 +244,10 @@ export async function GET(req) {
 
     } catch (err) {
         console.error("GET Feed Error:", err);
-        return NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 });
+        const res = NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 });
+        return addCorsHeaders(res);
     }
 }
-
 // ----------------------
 // Helper Functions
 // ----------------------
