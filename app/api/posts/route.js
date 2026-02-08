@@ -317,26 +317,20 @@ export async function POST(req) {
 
     try {
         const body = await req.json(); 
-        
-        // 🛡️ SECURITY CHECK 1: Verify Request Integrity
-        /*
-        if (!verifyRequestSignature(req, body)) {
-             return addCorsHeaders(NextResponse.json({ message: "Forbidden: Invalid Signature" }, { status: 403 }));
-        }
-        */
 
         const token = req.cookies.get("token")?.value;
         const {
-            title, message, mediaUrl, mediaType, hasPoll,
+            title, message, 
+            mediaUrl, mediaType, // Old single fields
+            media,               // NEW: Array of {url, type}
+            hasPoll,
             pollMultiple, pollOptions, category, fingerprint,
             rewardToken
         } = body;
 
         // --- 🔹 COUNTRY DETECTION 🔹 ---
-        // 1. Try to get country from the custom header we added in apiFetch
         let country = req.headers.get("x-user-country");
 
-        // 2. Fallback: If header is "Unknown" or missing, detect via IP
         if (!country || country === "Unknown") {
             const forwarded = req.headers.get("x-forwarded-for");
             const ip = forwarded ? forwarded.split(/, /)[0] : "127.0.0.1";
@@ -375,7 +369,6 @@ export async function POST(req) {
                 authorUserId: user.id,
                 createdAt: { $gte: last24Hours }
             });
-            // Rate limit logic preserved (e.g., return error if existingPost exists)
         }
 
         // --- STEP 3: AI MODERATION ---
@@ -383,11 +376,15 @@ export async function POST(req) {
         let rejectionReason = "";
         let expiresAt = null;
 
+        // Prepare primary media for AI check (Fallback to array first item if single field is missing)
+        const primaryMediaUrl = mediaUrl || (media && media.length > 0 ? media[0].url : null);
+        const primaryMediaType = mediaType || (media && media.length > 0 ? media[0].type : "image");
+
         if (isMobile) {
             if (category == "Polls" && !hasPoll) {
                 finalStatus = "rejected";
                 rejectionReason = "Polls category are for posts that includes polls";
-                expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000)
+                expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
             } else if (hasPoll && (!pollOptions || pollOptions.length < 2)) {
                 finalStatus = "rejected";
                 rejectionReason = "Polls require at least 2 options.";
@@ -396,7 +393,8 @@ export async function POST(req) {
                 if (clanId) {
                     finalStatus = "approved";
                 } else {
-                    const ai = await runAIModerator(title, message, category, mediaUrl, mediaType);
+                    // AI checks the main media item
+                    const ai = await runAIModerator(title, message, category, primaryMediaUrl, primaryMediaType);
                     if (ai.action === "approve") {
                         finalStatus = "approved";
                         rejectionReason = ai.reason;
@@ -443,8 +441,11 @@ export async function POST(req) {
             title,
             slug,
             message: newMessage,
-            mediaUrl: mediaUrl || null,
-            mediaType: mediaUrl ? mediaType : "image",
+            // Sync single fields for backward compatibility
+            mediaUrl: primaryMediaUrl,
+            mediaType: primaryMediaType,
+            // Save the full array
+            media: media || (primaryMediaUrl ? [{ url: primaryMediaUrl, type: primaryMediaType }] : []),
             status: finalStatus,
             rejectionReason: rejectionReason || null,
             expiresAt: expiresAt || null,
@@ -454,7 +455,7 @@ export async function POST(req) {
             } : null,
             category,
             clanId: clanId,
-            country: country // 🔹 Storing the detected country
+            country: country
         });
 
         if (finalStatus === "approved") {

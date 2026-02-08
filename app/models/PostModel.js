@@ -88,7 +88,16 @@ const viewDataSchema = new mongoose.Schema({
 });
 
 /* =====================================================
-   5. MAIN POST SCHEMA
+   5. NEW: MEDIA ITEM SCHEMA
+===================================================== */
+
+const mediaItemSchema = new mongoose.Schema({
+  url: { type: String, required: true },
+  type: { type: String, default: "image" } // e.g., "image", "video", "gif"
+}, { _id: false });
+
+/* =====================================================
+   6. MAIN POST SCHEMA
 ===================================================== */
 
 const postSchema = new mongoose.Schema(
@@ -115,8 +124,15 @@ const postSchema = new mongoose.Schema(
     title: { type: String, required: true },
     message: { type: String, required: true },
 
+    // Existing fields kept for backward compatibility
     mediaUrl: { type: String },
     mediaType: { type: String },
+
+    // NEW: Array for multiple images/videos
+    media: { 
+      type: [mediaItemSchema], 
+      default: [] 
+    },
 
     /* ---------- INTERACTIONS ---------- */
 
@@ -156,17 +172,13 @@ const postSchema = new mongoose.Schema(
 
     category: {
       type: String,
-      // We remove the strict enum because "Clan:News:Tag" is dynamic.
-      // Instead, we can add a custom validator if we want to keep it safe.
       default: "News"
     },
 
-    // I suggest adding a dedicated field for the Clan ID/Tag if it's a clan post.
-    // This makes indexing and point-tracking MUCH faster than string parsing.
     clanId: {
-      type: String, // Storing the unique Clan Tag here (e.g., "OREB1")
+      type: String, 
       default: null,
-      index: true // Very important for performance
+      index: true 
     },
     country: {
       type: String,
@@ -196,19 +208,31 @@ const postSchema = new mongoose.Schema(
 );
 
 /* =====================================================
-   6. MIDDLEWARE: Only update statusChangedAt on status change
+   7. MIDDLEWARE: Sync status and multi-media compatibility
 ===================================================== */
 
 postSchema.pre('save', function (next) {
-  // If the 'status' field was modified, update our custom timestamp
+  // Logic 1: Update statusChangedAt on status change
   if (this.isModified('status')) {
     this.statusChangedAt = new Date();
   }
+
+  // Logic 2: Handle Multi-Media Backward Compatibility
+  // If we have multiple media items, ensure the first one is mirrored to the old mediaUrl field
+  if (this.media && this.media.length > 0) {
+    this.mediaUrl = this.media[0].url;
+    this.mediaType = this.media[0].type;
+  } 
+  // If this is an old post being saved and it only has mediaUrl, wrap it in the media array
+  else if (this.mediaUrl && (!this.media || this.media.length === 0)) {
+    this.media = [{ url: this.mediaUrl, type: this.mediaType || "image" }];
+  }
+
   next();
 });
 
 /* =====================================================
-   7. HOT RELOAD SAFE EXPORT
+   8. HOT RELOAD SAFE EXPORT
 ===================================================== */
 
 if (process.env.NODE_ENV === "development") {
