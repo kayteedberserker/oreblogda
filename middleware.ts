@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 const APP_SECRET = process.env.APP_INTERNAL_SECRET;
-const MY_DOMAIN = "oreblogda";
+const MY_DOMAIN = "localhost";
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const userAgent = req.headers.get('user-agent') || '';
@@ -36,7 +36,7 @@ export function middleware(req: NextRequest) {
     const isInternal = 
       (referer && referer.includes(MY_DOMAIN)) || 
       (origin && origin.includes(MY_DOMAIN))
-     
+    
 
 
     // C. SECURITY ENFORCEMENT
@@ -76,3 +76,5 @@ export function middleware(req: NextRequest) {
 export const config = {
   matcher: ["/authorsdiary/:path*", "/api/:path*"], 
 };
+
+
