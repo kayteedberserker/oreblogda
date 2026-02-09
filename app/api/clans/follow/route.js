@@ -27,7 +27,7 @@ export async function POST(req) {
             // Check if already following to prevent index errors
             const existing = await ClanFollower.findOne({ clanTag, userId });
             if (existing) {
-                return NextResponse.json({ message: "Already following" }, { status: 400 });
+                return NextResponse.json({ message: "Already following" }, { status: 419 });
             }
 
             // Create follower record

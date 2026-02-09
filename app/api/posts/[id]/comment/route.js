@@ -59,6 +59,8 @@ export async function GET(req, { params }) {
     return NextResponse.json({ message: "Server error" }, { status: 500 });
   }
 }
+// ... (keep all imports and helpers)
+
 export async function POST(req, { params }) {
   await connectDB();
   const { id } = await params;
@@ -103,42 +105,25 @@ export async function POST(req, { params }) {
       }
     };
 
-    // 1. DISTRIBUTE AURA FOR THE COMMENTER (Active User Reward)
     if (mobileUserId) {
       await MobileUser.updateOne({ _id: mobileUserId }, { $inc: { weeklyAura: 1 } });
-      // 🛡️ CLAN: Point for activity
       await awardClanPoints(post, 1, 'comment');
     }
 
     if (!parentCommentId) {
-      // TOP LEVEL COMMENT
       post.comments.unshift(newComment);
       immediateRecipientId = post.authorUserId;
-
-      // ✨ AURA: +3 to Post Author
       if (post.authorUserId && post.authorUserId.toString() !== mobileUserId?.toString()) {
-        await MobileUser.updateOne(
-          { _id: post.authorUserId },
-          { $inc: { weeklyAura: 3 } }
-        );
-        // 🛡️ CLAN: +3 for getting a new Signal
+        await MobileUser.updateOne({ _id: post.authorUserId }, { $inc: { weeklyAura: 3 } });
         await awardClanPoints(post, 3, 'comment');
       }
     } else {
-      // REPLY
       immediateRecipientId = findAndReply(post.comments);
-      if (!immediateRecipientId) {
-        return NextResponse.json({ message: "Signal lost" }, { status: 404 });
-      }
+      if (!immediateRecipientId) return NextResponse.json({ message: "Signal lost" }, { status: 404 });
       post.markModified("comments");
 
-      // ✨ AURA: +3 to the Comment Author being replied to
       if (immediateRecipientId.toString() !== mobileUserId?.toString()) {
-        await MobileUser.updateOne(
-          { _id: immediateRecipientId },
-          { $inc: { weeklyAura: 3 } }
-        );
-        // 🛡️ CLAN: +3 for engagement
+        await MobileUser.updateOne({ _id: immediateRecipientId }, { $inc: { weeklyAura: 3 } });
         await awardClanPoints(post, 2, 'comment');
       }
     }
@@ -147,13 +132,14 @@ export async function POST(req, { params }) {
 
     const notifications = [];
 
-    // Notification Logic
+    // --- NOTIFICATION LOGIC UPDATED TO INCLUDE commentId ---
     if (parentCommentId && immediateRecipientId?.toString() !== mobileUserId?.toString()) {
       notifications.push({
         recipientId: immediateRecipientId,
         title: "New Reply 💬",
         message: `${name} replied: "${text.substring(0, 20)}..."`,
         type: "reply",
+        commentId: targetRootComment?._id || parentCommentId, // 👈 KEY ADDITION
         isMongoId: true
       });
     }
@@ -164,30 +150,18 @@ export async function POST(req, { params }) {
         title: "New Signal 📝",
         message: `${name} started a new signal (#${post.comments.length})`,
         type: "comment",
+        commentId: newComment._id, // 👈 KEY ADDITION
         isMongoId: true
       });
     }
 
     if (parentCommentId && targetRootComment) {
-      // Logic for branch data (assuming getBranchData is available)
       const { participants, totalMessages } = getBranchData(targetRootComment);
 
-      // ✨ AURA & CLAN: Discussion Bonus (Every 5 replies)
       if (totalMessages > 0 && totalMessages % 5 === 0) {
         if (targetRootComment.authorUserId && targetRootComment.authorUserId.toString() !== mobileUserId?.toString()) {
-          await MobileUser.updateOne(
-            { _id: targetRootComment.authorUserId },
-            { $inc: { weeklyAura: 1 } }
-          );
-          // 🛡️ CLAN: +2 points for prolonged discussion
+          await MobileUser.updateOne({ _id: targetRootComment.authorUserId }, { $inc: { weeklyAura: 1 } });
           await awardClanPoints(post, 2, 'comment');
-        }
-        
-        if (post.authorUserId && post.authorUserId.toString() !== mobileUserId?.toString()) {
-          await MobileUser.updateOne(
-            { _id: post.authorUserId },
-            { $inc: { weeklyAura: 1 } }
-          );
         }
       }
 
@@ -200,6 +174,7 @@ export async function POST(req, { params }) {
               title: "Discussion Active 🔥",
               message: discussionMsg,
               type: "discussion",
+              commentId: targetRootComment._id, // 👈 KEY ADDITION
               isMongoId: true
             });
           }
@@ -207,7 +182,6 @@ export async function POST(req, { params }) {
       }
     }
 
-    // Process Notifications
     await Promise.all(notifications.map(async (n) => {
       const query = n.isMongoId ? { _id: n.recipientId } : { deviceId: n.recipientId };
       const user = await MobileUser.findOne(query);
@@ -227,7 +201,11 @@ export async function POST(req, { params }) {
             user.pushToken,
             n.title,
             n.message,
-            { postId: post._id.toString(), type: n.type },
+            { 
+              postId: post._id.toString(), 
+              type: n.type, 
+              commentId: n.commentId?.toString() // 👈 PASSING TO PUSH
+            },
             groupId
           );
         }

@@ -17,10 +17,13 @@ export async function sendPushNotification(pushToken, title, message, data = {},
     sound: 'default',
     title: title,
     body: message,
-    data: data,
+    data: {
+      ...data,
+      groupId: groupId, // put it inside data
+    },
     // 🛡️ GROUPING LOGIC
     // iOS: Groups by threadId
-    threadId: groupId || 'default_group',
+    threadIdentifier: groupId || 'default_group',
     // Android: Setting mutableContent allows the system to be smarter about updates
     mutableContent: true,
   };
@@ -71,6 +74,7 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
       data: data,
       // 🛡️ GROUPING LOGIC
       threadId: groupId || 'broadcast_group',
+      groupId: groupId,
       mutableContent: true,
     }));
 
