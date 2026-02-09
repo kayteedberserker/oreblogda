@@ -23,7 +23,7 @@ export default async function connectDB() {
     const opts = {
       bufferCommands: false, // Fails fast if connection is lost
       // --- ADDED PERFORMANCE & CONNECTION LIMITS BELOW ---
-      maxPoolSize: 10,       // Limits each Vercel instance to 10 connections instead of 100
+      maxPoolSize: 100,       // Limits each Vercel instance to 10 connections instead of 100
       serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
       socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
       family: 4              // Use IPv4, skip trying IPv6 (faster connection)
