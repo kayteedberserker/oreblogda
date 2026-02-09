@@ -181,7 +181,7 @@ export async function GET(req) {
                 .lean();
         } else {
             // DISCOVERY FEED: Using the Algorithm
-            const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
+            const TWO_HOURS_MS = 0.5 * 60 * 60 * 1000;
             const now = new Date();
             const discoverySeed = Math.floor(Date.now() / (60 * 60 * 1000)) || 1;
 
