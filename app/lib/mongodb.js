@@ -36,7 +36,7 @@ export default async function connectDB() {
        * as it will constantly have to "re-connect" from scratch.
        */
       maxIdleTimeMS: 60000, 
-      serverSelectionTimeoutMS: 5000,
+      serverSelectionTimeoutMS: 10000,
       socketTimeoutMS: 45000,
       family: 4
     };
