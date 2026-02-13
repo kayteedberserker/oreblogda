@@ -29,7 +29,7 @@ export default async function connectDB() {
       /* * LEAN POOL: Set to 2.
        * This allows 250+ Vercel instances to run without hitting the 500 limit.
        */
-      maxPoolSize: 2,       
+      maxPoolSize: 4,       
       minPoolSize: 1,
       /* * IDLE CLEANUP: 60 seconds is the sweet spot. 
        * 10 seconds is too aggressive and will make your site feel slow 
