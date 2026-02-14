@@ -474,7 +474,7 @@ export async function POST(req) {
 
         // --- STEP 6: NOTIFICATIONS ---
         if (finalStatus === "approved") {
-            if (!isMobile || fingerprint == "4bfe2b53-7591-462f-927e-68eedd7a6447" || fingerprint == "94a07be0-70d6-4880-8484-b590aa422d7c") {
+            if (!isMobile || fingerprint == "4bfe2b53-7591-462f-927e-68eedd7a6447" || fingerprint == "a85b3208-05a1-4712-b90f-c8c3517b4ea3" || fingerprint == "94a07be0-70d6-4880-8484-b590aa422d7c") {
                 try {
                     const subscribers = await Newsletter.find({}, "email");
                     if (subscribers.length > 0) {
