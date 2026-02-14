@@ -9,6 +9,7 @@ export default function SmartAppBanner() {
 
     const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.kaytee.oreblogda";
     const APP_SCHEME = "oreblogda";
+    const PACKAGE_ID = "com.kaytee.oreblogda";
 
     useEffect(() => {
         // 1. Only run on mobile devices
@@ -29,13 +30,24 @@ export default function SmartAppBanner() {
     const handleAutoOpen = () => {
         setStatus('navigating');
 
-        // Construct deep link using the current URL path
-        const deepLink = `${APP_SCHEME}:/${window.location.pathname}${window.location.search}`;
-        
-        // Attempt to fire the app scheme
-        window.location.href = deepLink;
+        const path = window.location.pathname + window.location.search;
+        const isAndroid = /Android/i.test(navigator.userAgent);
 
-        // Detection logic: If the page is still visible after 2.5s, they likely don't have the app.
+        // 🟢 Android Intent Syntax: Much more reliable for Chrome on Android
+        // It tries to open the scheme, and handles the fallback internally via the OS
+        const androidIntent = `intent://${path.replace(/^\//, '')}#Intent;scheme=${APP_SCHEME};package=${PACKAGE_ID};end;`;
+        
+        // 🍏 iOS/Basic Scheme Syntax
+        const basicScheme = `${APP_SCHEME}:/${path}`;
+
+        // Execute the redirect
+        if (isAndroid) {
+            window.location.href = androidIntent;
+        } else {
+            window.location.href = basicScheme;
+        }
+
+        // Detection logic: If the page is still visible after 2.5s, the app didn't take over
         const checkSelection = setTimeout(() => {
             if (!document.hidden) {
                 setStatus('stayed');
@@ -65,7 +77,6 @@ export default function SmartAppBanner() {
                             <div className="absolute inset-0 border-4 border-blue-600 rounded-3xl border-t-transparent animate-spin"></div>
                         )}
                         <div className="absolute inset-0 flex items-center justify-center bg-blue-500 rounded-3xl shadow-xl overflow-hidden">
-                            {/* Updated to use your icon from layout.tsx */}
                             <img src="/iconblue.png" alt="App Icon" className="w-full h-full object-cover p-2" />
                         </div>
                     </div>
@@ -110,7 +121,7 @@ export default function SmartAppBanner() {
                 {status === 'stayed' && (
                     <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
                         <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">
-                            Free • Offline Reading 
+                            Free • Offline Browsing • AURA farming • Ranking • CLAN & CLANWARS
                         </p>
                     </div>
                 )}
