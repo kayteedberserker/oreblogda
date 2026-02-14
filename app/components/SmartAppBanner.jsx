@@ -3,15 +3,15 @@
 import React, { useState, useEffect } from 'react';
 
 export default function SmartAppBanner() {
-    // idle -> navigating (trying app) -> stay (app failed, show promo)
-    const [status, setStatus] = useState<'idle' | 'navigating' | 'stayed'>('idle');
+    // Status can be: 'idle', 'navigating' (trying app), or 'stayed' (app failed, show promo)
+    const [status, setStatus] = useState('idle');
     const [currentPath, setCurrentPath] = useState('');
 
     const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.kaytee.oreblogda";
     const APP_SCHEME = "oreblogda";
 
     useEffect(() => {
-        // 1. Only run on mobile
+        // 1. Only run on mobile devices
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         if (!isMobile) return;
 
@@ -19,6 +19,7 @@ export default function SmartAppBanner() {
         const hasOptedOut = sessionStorage.getItem('appPromoDismissed') === 'true';
         if (hasOptedOut) return;
 
+        // Set the path for deep linking
         setCurrentPath(window.location.pathname + window.location.search);
         
         // Auto-trigger the app attempt
@@ -28,13 +29,13 @@ export default function SmartAppBanner() {
     const handleAutoOpen = () => {
         setStatus('navigating');
 
-        // Construct deep link
+        // Construct deep link using the current URL path
         const deepLink = `${APP_SCHEME}:/${window.location.pathname}${window.location.search}`;
         
-        // Attempt to fire the scheme
+        // Attempt to fire the app scheme
         window.location.href = deepLink;
 
-        // Detection logic: If the page is still visible after 2.5s, they don't have the app.
+        // Detection logic: If the page is still visible after 2.5s, they likely don't have the app.
         const checkSelection = setTimeout(() => {
             if (!document.hidden) {
                 setStatus('stayed');
@@ -49,11 +50,11 @@ export default function SmartAppBanner() {
         sessionStorage.setItem('appPromoDismissed', 'true');
     };
 
-    // UI Logic
+    // UI Logic: Don't render anything if status is idle
     if (status === 'idle') return null;
 
     return (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/95 dark:bg-black/95 backdrop-blur-md p-6 text-center">
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/95 dark:bg-[#050505]/95 backdrop-blur-md p-6 text-center">
             <div className="max-w-xs w-full space-y-8 animate-in fade-in zoom-in duration-300">
                 
                 {/* Visual Header */}
@@ -64,8 +65,8 @@ export default function SmartAppBanner() {
                             <div className="absolute inset-0 border-4 border-blue-600 rounded-3xl border-t-transparent animate-spin"></div>
                         )}
                         <div className="absolute inset-0 flex items-center justify-center bg-blue-500 rounded-3xl shadow-xl overflow-hidden">
-                            {/* Replace with your actual app icon */}
-                            <img src="/logo.png" alt="App Icon" className="w-full h-full object-cover" />
+                            {/* Updated to use your icon from layout.tsx */}
+                            <img src="/iconblue.png" alt="App Icon" className="w-full h-full object-cover p-2" />
                         </div>
                     </div>
                     
@@ -75,8 +76,8 @@ export default function SmartAppBanner() {
                         </h2>
                         <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 px-4">
                             {status === 'navigating' 
-                                ? "Checking if you have Otaku Archives installed..." 
-                                : "Read your favorite blogs faster with our official Android app."}
+                                ? "Checking if you have Oreblogda installed..." 
+                                : "Read your favorite anime blogs faster with our official Android app."}
                         </p>
                     </div>
                 </div>
@@ -109,7 +110,7 @@ export default function SmartAppBanner() {
                 {status === 'stayed' && (
                     <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
                         <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">
-                            Free • No Ads • Offline Reading
+                            Free • Offline Reading 
                         </p>
                     </div>
                 )}
