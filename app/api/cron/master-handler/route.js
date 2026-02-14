@@ -76,7 +76,7 @@ async function dailyClanCheck() {
 
 async function dailyAllocation() {
     const clans = await Clan.find({});
-    const rankMap = { 6: 5000, 5: 2500, 4: 1000, 3: 500, 2: 200, 1: 50 };
+    const rankMap = { 6: 5000, 5: 2500, 4: 1000, 3: 600, 2: 300, 1: 150 };
 
     const updatePromises = clans.map(clan => {
         const allowance = rankMap[clan.rank] || 0;
