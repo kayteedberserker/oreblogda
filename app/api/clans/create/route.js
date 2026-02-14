@@ -104,8 +104,8 @@ export async function POST(req) {
             isRecruiting: true,
             rank: 1, 
             country: country, // 🔹 Saved Country
-            totalPoints: 0,
-            spendablePoints: 0,
+            totalPoints: 200,
+            spendablePoints: 200,
             stats: {
                 totalPosts: 0,
                 views: 0,
