@@ -32,6 +32,7 @@ export async function GET(req) {
                 }).select("tag name leader viceLeader");
 
                 if (clan) {
+                    console.log("user found in clan" + clan?.name)
                     // Determine role hierarchy
                     let userRole = "member";
                     if (clan.leader?.toString() === mUser._id.toString()) {
