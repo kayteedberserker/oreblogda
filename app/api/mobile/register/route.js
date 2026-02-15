@@ -4,12 +4,11 @@ import MobileUser from "@/app/models/MobileUserModel";
 import geoip from "geoip-lite";
 import crypto from "crypto";
 
-// 🆔 Helper: Generate a unique referral ID (Keep it consistent with your link format!)
+// 🆔 Helper: Generate a unique referral ID
 const generateReferralCode = (username) => {
-  // Takes first 3 letters of username + 3 random hex chars
   const prefix = username.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, "Z");
-  const random = crypto.randomBytes(2).toString("hex").toUpperCase(); // 4 chars total
-  return `ORE-${prefix}-${random}`; // Example: ORE-KAY-A1B2
+  const random = crypto.randomBytes(2).toString("hex").toUpperCase();
+  return `ORE-${prefix}-${random}`;
 };
 
 export async function POST(req) {
@@ -37,26 +36,36 @@ export async function POST(req) {
       // 🚀 NEW USER REGISTRATION
       const myNewReferralCode = generateReferralCode(username);
       let finalReferrer = null;
+      let auraBonus = 0;
+      let boostDate = null;
+
+      // 🕒 Define the Boost Expiry (72 hours from now)
+      const boostExpiry = new Date();
+      boostExpiry.setHours(boostExpiry.getHours() + 72);
 
       // Check if they were invited by a valid referral code
       if (referredBy && referredBy.trim() !== "") {
-        // Find the person who owns this code
-        const referrer = await MobileUser.findOne({ referralCode: referredBy.trim() });
+        const cleanRef = referredBy.trim();
+        const referrer = await MobileUser.findOne({ referralCode: cleanRef });
         
         // Validation: Referrer must exist AND not be the same device
         if (referrer && referrer.deviceId !== deviceId) {
-          finalReferrer = referredBy.trim();
-          
-          // 🔥 UPDATE REFERRAL COUNT: Reward the inviter
+          finalReferrer = cleanRef;
+          referrer.invitedUsers.push({ username: username, date: new Date() });
+          // 🎁 Reward the Inviter: +20 Aura and 3-Day Double Streak Boost
           referrer.referralCount = (referrer.referralCount || 0) + 1;
+          referrer.weeklyAura = (referrer.weeklyAura || 0) + 20;
+          referrer.doubleStreakUntil = boostExpiry; 
           
-          // OPTIONAL: Add referral bonus points here if you have a balance field
-          // referrer.balance = (referrer.balance || 0) + 100; 
-
           await referrer.save();
-          console.log(`📈 Success: ${referredBy} invited a new operative.`);
+          
+          // Set rewards for the new user
+          auraBonus = 20;
+          boostDate = boostExpiry;
+
+          console.log(`📈 Success: ${cleanRef} invited a new operative. Boosts applied.`);
         } else {
-          console.log(`⚠️ Invalid Referral: Code ${referredBy} not found or self-referral.`);
+          console.log(`⚠️ Invalid Referral: Code ${cleanRef} not found or self-referral.`);
         }
       }
 
@@ -68,6 +77,8 @@ export async function POST(req) {
         referralCode: myNewReferralCode, 
         referredBy: finalReferrer,      
         referralCount: 0,
+        weeklyAura: auraBonus, // 🔹 +20 Aura immediately if referred
+        doubleStreakUntil: boostDate, // 🔹 3-day window for 2X streak
         lastActive: new Date()
       });
     } else {
@@ -75,7 +86,6 @@ export async function POST(req) {
       user.username = username;
       if (pushToken) user.pushToken = pushToken;
       
-      // Give existing users a code if they don't have one from the old system
       if (!user.referralCode) {
         user.referralCode = generateReferralCode(username);
       }

@@ -6,37 +6,34 @@ import UserStreak from "@/app/models/UserStreak";
 export async function POST(req) {
   try {
     await connectDB();
-
     const { deviceId } = await req.json();
-    if (!deviceId)
-      return NextResponse.json({ message: "Device ID required" }, { status: 400 });
-
     const now = new Date();
 
-    // 1️⃣ Find the user
     const user = await MobileUser.findOne({ deviceId });
-    if (!user)
-      return NextResponse.json({ message: "User not found" }, { status: 404 });
+    if (!user) return NextResponse.json({ message: "User not found" }, { status: 404 });
 
-    // 2️⃣ Atomically find streak or create if missing
     let streakDoc = await UserStreak.findOne({ userId: user._id });
 
+    // ⚡ Determine Boost Amount
+    // If doubleStreakUntil exists and hasn't expired yet
+    const isBoosted = user.doubleStreakUntil && new Date(user.doubleStreakUntil) > now;
+    const incrementAmount = isBoosted ? 2 : 1;
+
     if (!streakDoc) {
-      // First post → create streak
+      // First post ever
       streakDoc = await UserStreak.create({
         userId: user._id,
-        streak: 1,
+        streak: incrementAmount,
         lastPostDate: now,
-        expiresAt: new Date(now.getTime() + 48 * 60 * 60 * 1000), // 48h TTL
+        expiresAt: new Date(now.getTime() + 48 * 60 * 60 * 1000),
       });
 
-      // Sync lastStreak on user
-      await MobileUser.updateOne({ _id: user._id }, { $set: { lastStreak: 1 } });
+      await MobileUser.updateOne({ _id: user._id }, { $set: { lastStreak: streakDoc.streak } });
 
       return NextResponse.json({
-        streak: 1,
-        lastPostDate: now.toISOString(),
-        message: "First post, streak started!",
+        streak: streakDoc.streak,
+        isBoosted,
+        message: isBoosted ? "First post! 2X Referral Boost applied!" : "First post, streak started!",
       });
     }
 
@@ -46,17 +43,15 @@ export async function POST(req) {
     if (hoursSinceLastPost < 24) {
       return NextResponse.json({
         streak: streakDoc.streak,
-        lastPostDate: lastPost.toISOString(),
-        message: "Posted too soon, streak not increased",
+        message: "Neural link cooling down. Try again later.",
       });
     }
 
-    // ✅ Increment streak
-    streakDoc.streak += 1;
+    // ✅ Apply increment (either +1 or +2)
+    streakDoc.streak += incrementAmount;
     streakDoc.lastPostDate = now;
     streakDoc.expiresAt = new Date(now.getTime() + 48 * 60 * 60 * 1000);
 
-    // Save streakDoc AND sync lastStreak on user at once
     await Promise.all([
       streakDoc.save(),
       MobileUser.updateOne({ _id: user._id }, { $set: { lastStreak: streakDoc.streak } }),
@@ -64,11 +59,11 @@ export async function POST(req) {
 
     return NextResponse.json({
       streak: streakDoc.streak,
-      lastPostDate: now.toISOString(),
-      message: "Streak increased!",
+      isBoosted,
+      message: isBoosted ? `Double Streak Active! +${incrementAmount} gained.` : "Streak increased!",
     });
+
   } catch (err) {
-    console.error(err);
     return NextResponse.json({ message: "Server error", error: err.message }, { status: 500 });
   }
 }

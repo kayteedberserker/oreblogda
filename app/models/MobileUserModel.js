@@ -31,7 +31,16 @@ const mobileUserSchema = new mongoose.Schema(
     }, // Stores 1, 2, or 3 from the last Cron reset
     // 🆔 This is their OWN special ID (e.g., ORE-X9Y2)
     referralCode: { type: String, unique: true, sparse: true },
-
+    // Add this to your mobileUserSchema in MobileUserModel.js
+    doubleStreakUntil: {
+      type: Date,
+      default: null
+    },
+    // Add this to your mobileUserSchema
+    invitedUsers: [{
+      username: String,
+      date: { type: Date, default: Date.now }
+    }],
     // 🔗 This tracks WHO invited them
     referredBy: { type: String, default: null },
 
