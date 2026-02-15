@@ -4,7 +4,11 @@ const nextConfig = {
     domains: ["res.cloudinary.com", "flagcdn.com"], // allow Cloudinary images
   },
   experimental: {
-    serverComponentsExternalPackages: ["geoip-lite"],
+    /* * Added 'mongoose' here. 
+     * This prevents Next.js from bundling it multiple times, 
+     * ensuring your connection cache stays consistent.
+     */
+    serverComponentsExternalPackages: ["geoip-lite", "mongoose"],
   },
 };
 

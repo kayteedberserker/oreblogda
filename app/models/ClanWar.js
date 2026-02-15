@@ -6,7 +6,6 @@ const ClanWarSchema = new mongoose.Schema({
     warId: {
         type: String,
         required: true,
-        unique: true,
         index: true
     },
 

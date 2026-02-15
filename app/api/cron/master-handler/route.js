@@ -76,7 +76,7 @@ async function dailyClanCheck() {
 
 async function dailyAllocation() {
     const clans = await Clan.find({});
-    const rankMap = { 6: 5000, 5: 2500, 4: 1000, 3: 500, 2: 200, 1: 50 };
+    const rankMap = { 6: 5000, 5: 2500, 4: 1000, 3: 600, 2: 300, 1: 150 };
 
     const updatePromises = clans.map(clan => {
         const allowance = rankMap[clan.rank] || 0;
@@ -233,8 +233,16 @@ export async function GET(req) {
   }
 
   const now = new Date();
-  // Sunday is 0 in JS Date
-  const isSunday = now.getDay() === 1;
+  
+  // Create a formatter to get the day of the week in WAT (Africa/Lagos)
+  // This ensures that even if UTC is behind, we check the local WAT day.
+  const watDay = new Intl.DateTimeFormat('en-GB', {
+    weekday: 'long',
+    timeZone: 'Africa/Lagos',
+  }).format(now);
+
+  // We check for "Monday" specifically for your 12:00 AM WAT requirement
+  const isMondayWAT = watDay === "Monday";
 
   try {
     await connectDB();
@@ -245,8 +253,8 @@ export async function GET(req) {
     await dailyClanCheck();
     await dailyAllocation();
 
-    // 2. Weekly Tasks (Run only on Sundays)
-    if (isSunday) {
+    // 2. Weekly Tasks (Run only on Mondays WAT)
+    if (isMondayWAT) {
       console.log("⏳ Processing Weekly Resets...");
       await auraReset();
       await weeklyClanReset();
@@ -255,7 +263,7 @@ export async function GET(req) {
     console.log("✅ Master Cron Completed Successfully");
     return NextResponse.json({ 
         success: true, 
-        message: `Executed daily tasks${isSunday ? " and weekly tasks" : ""}` 
+        message: `Executed daily tasks${isMondayWAT ? " and weekly tasks" : ""}` 
     });
 
   } catch (error) {

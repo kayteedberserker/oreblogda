@@ -11,31 +11,48 @@ if (!cached) {
 
 export default async function connectDB() {
   // 1. If we have a connection already, return it immediately
-  let aCach = await cached
-  console.log("checking cache" + aCach) 
   if (cached.conn) {
-    console.log("Mongodb cach loaded") 
-    return cached.conn;
+    // Check if the connection is still actually open (1 = connected)
+    if (mongoose.connection.readyState === 1) {
+      console.log("🟢 Using cached MongoDB connection");
+      return cached.conn;
+    }
+    // If connection was lost, reset cache
+    cached.conn = null;
+    cached.promise = null;
   }
 
   // 2. If we don't have a connection promise, create one
   if (!cached.promise) {
     const opts = {
-      bufferCommands: false, // Fails fast if connection is lost
-      // --- ADDED PERFORMANCE & CONNECTION LIMITS BELOW ---
-      maxPoolSize: 10,       // Limits each Vercel instance to 10 connections instead of 100
-      serverSelectionTimeoutMS: 5000, // Timeout after 5s instead of 30s
-      socketTimeoutMS: 45000, // Close sockets after 45s of inactivity
-      family: 4              // Use IPv4, skip trying IPv6 (faster connection)
+      bufferCommands: false, 
+      /* * LEAN POOL: Set to 2.
+       * This allows 250+ Vercel instances to run without hitting the 500 limit.
+       */
+      maxPoolSize: 4,       
+      minPoolSize: 1,
+      /* * IDLE CLEANUP: 60 seconds is the sweet spot. 
+       * 10 seconds is too aggressive and will make your site feel slow 
+       * as it will constantly have to "re-connect" from scratch.
+       */
+      maxIdleTimeMS: 60000, 
+      serverSelectionTimeoutMS: 10000,
+      socketTimeoutMS: 45000,
+      family: 4
     };
 
     cached.isLoading = true; // Trigger loading state
-    console.log("📡 Initializing new MongoDB connection (Limited Pool)...");
+    console.log("📡 Initializing new MongoDB connection (Lean Pool: 2)...");
 
-    cached.promise = mongoose.connect(process.env.MONGODB_URI, opts).then((mongoose) => {
+    cached.promise = mongoose.connect(process.env.MONGODB_URI, opts).then((mongooseInstance) => {
       console.log("✅ MongoDB connected successfully");
       cached.isLoading = false; // Reset loading state
-      return mongoose;
+      return mongooseInstance;
+    }).catch((err) => {
+      cached.isLoading = false;
+      cached.promise = null; // Reset promise so we can try again
+      console.error("❌ MongoDB connection error in promise:", err);
+      throw err;
     });
   }
 
@@ -46,7 +63,7 @@ export default async function connectDB() {
     // 4. If it fails, reset the promise so we can try again next time
     cached.promise = null;
     cached.isLoading = false;
-    console.error("❌ MongoDB connection error:", e);
+    console.error("❌ MongoDB connection failed:", e);
     throw e;
   }
 

@@ -10,6 +10,7 @@ import { Analytics } from "@vercel/analytics/react"
 import { SWRConfig } from "swr";
 import { ToastContainer } from "react-toastify";
 import Adsense from "./components/Adsense";
+import SmartAppBanner from "./components/SmartAppBanner";
 const spaceGrotesk = Space_Grotesk({ subsets: ["latin"] });
 
 export const metadata = {
@@ -93,7 +94,7 @@ export default function RootLayout({ children }) {
 						}}
 					>
 						{/* Global Navigation Hardware */}
-						<Navbar />
+						<Navbar /> <SmartAppBanner />
 
 						{/* MAIN SYSTEM CONTAINER */}
 						{/* We use a relative container with a global grid overlay */}
@@ -135,4 +136,4 @@ export default function RootLayout({ children }) {
 			</body>
 		</html>
 	);
-}
+								}
