@@ -155,6 +155,13 @@ export async function GET(req) {
         if (last24Hours) {
             const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
             query.createdAt = { $gte: yesterday };
+        } else if (!targetAuthor) {
+            // OPTIMIZATION: Limit discovery pool to the last 30 days.
+            // This prevents MongoDB from scanning the entire collection of historical posts,
+            // massively speeding up the aggregation pipeline for big datasets.
+            const TIME_LIMIT_DAYS = 30;
+            const cutoffDate = new Date(Date.now() - TIME_LIMIT_DAYS * 24 * 60 * 60 * 1000);
+            query.createdAt = { $gte: cutoffDate };
         }
 
         // --- STEP 2: CLAN DETECTION ---
@@ -165,6 +172,7 @@ export async function GET(req) {
         }
 
         let posts;
+        // Total document count for pagination (Note: this counts the 30-day bounded query for discovery)
         const total = await Post.countDocuments(query);
 
         // --- STEP 3: EXECUTION BRANCH ---
@@ -175,70 +183,111 @@ export async function GET(req) {
                 .limit(limit)
                 .lean();
         } else {
-            // DISCOVERY FEED: Using the Algorithm
-            const BUCKET_MS = 0.5 * 60 * 60 * 1000; // 30 Minutes
-            const PREFERENCE_WINDOW_MS = 12 * 60 * 60 * 1000; // 12 Hours for deep preference check
+            // DISCOVERY FEED: Using the Algorithm (HackerNews/Reddit Gravity Model + Personalization)
             const now = new Date();
-            const discoverySeed = Math.floor(Date.now() / (60 * 60 * 1000)) || 1;
+            
+            // Jitter seed helps randomize posts with exact same scores slightly, 
+            // ensuring a dynamic feel without breaking pagination.
+            const JITTER_SEED = 104729; 
 
             const pipeline = [
                 { $match: query }, 
                 {
                     $addFields: {
-                        // 1. Time Bucket (30 min groups)
-                        timeBucket: {
-                            $floor: { $divide: [{ $subtract: [now, "$createdAt"] }, BUCKET_MS] }
+                        // 1. Calculate Age in Hours (Minimum 1 to avoid division by zero)
+                        ageInHours: {
+                            $max: [1, { $divide: [{ $subtract: [now, "$createdAt"] }, 3600000] }]
                         },
-                        // 2. Preference Match (Check if post's anime/tags match user's favs)
-                        // This applies if the post was created within the last 12 hours
-                        isPreferenceMatch: {
-                            $cond: {
-                                if: {
-                                    $and: [
-                                        { $lt: [{ $subtract: [now, "$createdAt"] }, PREFERENCE_WINDOW_MS] },
-                                        {
-                                            $or: [
-                                                { $in: ["$anime", favAnimes] },
-                                                { $in: ["$category", favGenres] }
-                                            ]
-                                        }
-                                    ]
-                                },
-                                then: 1,
-                                else: 0
-                            }
-                        },
-                        isFollowedClan: {
-                            $cond: { if: { $in: ["$clanId", followedClanTags] }, then: 1, else: 0 }
-                        },
-                        isLocal: {
-                            $cond: { if: { $eq: ["$country", userCountry] }, then: 1, else: 0 }
-                        },
-                        engagementScore: {
+                        
+                        // 2. Base Engagement with "Cold Start" Novelty Boost
+                        baseEngagement: {
                             $add: [
-                                { $ifNull: ["$likeCount", 0] },
-                                { $ifNull: ["$commentsCount", 0] }
+                                { $multiply: [{ $ifNull: ["$likeCount", 0] }, 2] }, // Likes are worth 2 points
+                                { $ifNull: ["$commentsCount", 0] },                 // Comments are worth 1 point
+                                // Novelty Boost: If post is < 3 hours old and has 0 engagement, 
+                                // give it an artificial score of 15 so it gets seen initially.
+                                { 
+                                    $cond: [
+                                        { 
+                                            $and: [
+                                                { $lt: [{ $subtract: [now, "$createdAt"] }, 3 * 3600000] },
+                                                { $eq: [{ $add: [{ $ifNull: ["$likeCount", 0] }, { $ifNull: ["$commentsCount", 0] }] }, 0] }
+                                            ] 
+                                        }, 
+                                        15, 0
+                                    ] 
+                                }
                             ]
                         },
-                        discoveryRank: { 
-                            $mod: [ { $toLong: "$createdAt" }, discoverySeed ] 
+
+                        // 3. Personalization Multipliers
+                        personalizationMultiplier: {
+                            $let: {
+                                vars: {
+                                    // Heavy boost (x2.5) if anime or genre matches user preferences
+                                    prefMatch: { 
+                                        $cond: [
+                                            { 
+                                                $or: [
+                                                    { $in: ["$anime", favAnimes] }, 
+                                                    { $in: ["$category", favGenres] }
+                                                ] 
+                                            }, 2.5, 1
+                                        ] 
+                                    },
+                                    // Heavy boost (x2.0) if part of a followed clan
+                                    clanMatch: { 
+                                        $cond: [{ $in: ["$clanId", followedClanTags] }, 2.0, 1] 
+                                    },
+                                    // Slight boost (x1.2) for local country content
+                                    localMatch: { 
+                                        $cond: [{ $eq: ["$country", userCountry] }, 1.2, 1] 
+                                    }
+                                },
+                                // Multiply them all together
+                                in: { $multiply: ["$$prefMatch", "$$$clanMatch", "$$localMatch"] }
+                            }
+                        },
+
+                        // 4. Deterministic Jitter (0.0 to 0.99)
+                        // Slightly shuffles posts that have similar final scores to prevent stagnation.
+                        jitter: {
+                            $divide: [
+                                { $mod: [{ $toLong: "$createdAt" }, JITTER_SEED] },
+                                JITTER_SEED
+                            ]
                         }
                     }
                 },
                 {
+                    $addFields: {
+                        // FINAL ALGORITHM CALCULATION
+                        // Score = (Base Engagement / Age^1.5) * Personalization + Jitter
+                        // The power of 1.5 simulates "gravity", pulling older posts down the feed naturally over time.
+                        finalScore: {
+                            $add: [
+                                {
+                                    $multiply: [
+                                        { $divide: ["$baseEngagement", { $pow: ["$ageInHours", 1.5] }] },
+                                        "$personalizationMultiplier"
+                                    ]
+                                },
+                                "$jitter"
+                            ]
+                        }
+                    }
+                },
+                {
+                    // Sort smoothly by the final algorithm score
                     $sort: {
-                        timeBucket: 1,           // Priority 1: Keep things relatively fresh (30m buckets)
-                        isPreferenceMatch: -1,   // Priority 2: Within that bucket, show preferred anime first
-                        isFollowedClan: -1,      // Priority 3: Then followed clans
-                        isLocal: -1,             // Priority 4: Then local content
-                        engagementScore: -1,     // Priority 5: Then most popular
-                        discoveryRank: 1,        // Priority 6: Randomize slightly for discovery
-                        createdAt: -1
+                        finalScore: -1,
+                        createdAt: -1 
                     }
                 },
                 { $skip: skip },
                 { $limit: limit }
             ];
+            
             posts = await Post.aggregate(pipeline);
         }
 
