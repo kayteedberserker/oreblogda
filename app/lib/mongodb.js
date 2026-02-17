@@ -10,60 +10,60 @@ if (!cached) {
 }
 
 export default async function connectDB() {
-  // 1. If we have a connection already, return it immediately
+  // 1. Check if the connection is already active
   if (cached.conn) {
-    // Check if the connection is still actually open (1 = connected)
     if (mongoose.connection.readyState === 1) {
-      console.log("🟢 Using cached MongoDB connection");
+      // Intentionally quiet to keep logs clean, or use: console.log("🟢 Cached Link Active");
       return cached.conn;
     }
-    // If connection was lost, reset cache
+    // If connection was lost or in a weird state, reset
     cached.conn = null;
     cached.promise = null;
   }
 
-  // 2. If we don't have a connection promise, create one
-  if (!cached.promise) {
-    const opts = {
-      bufferCommands: false, 
-      /* * LEAN POOL: Set to 2.
-       * This allows 250+ Vercel instances to run without hitting the 500 limit.
-       */
-      maxPoolSize: 4,       
-      minPoolSize: 1,
-      /* * IDLE CLEANUP: 60 seconds is the sweet spot. 
-       * 10 seconds is too aggressive and will make your site feel slow 
-       * as it will constantly have to "re-connect" from scratch.
-       */
-      maxIdleTimeMS: 60000, 
-      serverSelectionTimeoutMS: 10000,
-      socketTimeoutMS: 45000,
-      family: 4
-    };
-
-    cached.isLoading = true; // Trigger loading state
-    console.log("📡 Initializing new MongoDB connection (Lean Pool: 2)...");
-
-    cached.promise = mongoose.connect(process.env.MONGODB_URI, opts).then((mongooseInstance) => {
-      console.log("✅ MongoDB connected successfully");
-      cached.isLoading = false; // Reset loading state
-      return mongooseInstance;
-    }).catch((err) => {
-      cached.isLoading = false;
-      cached.promise = null; // Reset promise so we can try again
-      console.error("❌ MongoDB connection error in promise:", err);
-      throw err;
-    });
+  // 2. The "Race Condition" Shield
+  // If a promise already exists, wait for it instead of starting a new one
+  if (cached.promise) {
+    console.log("⏳ Connection in progress... awaiting existing uplink.");
+    return await cached.promise;
   }
 
+  // 3. Initialize New Connection
+  const opts = {
+    bufferCommands: false, 
+    /* * LEAN POOL: 4. 
+     * This limits THIS SPECIFIC instance. 
+     * Note: Vercel may spin up multiple instances (Lambdas) simultaneously.
+     */
+    maxPoolSize: 4,       
+    minPoolSize: 1,
+    /* * IDLE CLEANUP: 60 seconds.
+     */
+    maxIdleTimeMS: 60000, 
+    serverSelectionTimeoutMS: 10000,
+    socketTimeoutMS: 45000,
+    family: 4
+  };
+
+  cached.isLoading = true;
+  console.log("📡 Initializing new MongoDB connection (Pool: 4)...");
+
+  cached.promise = mongoose.connect(process.env.MONGODB_URI, opts).then((mongooseInstance) => {
+    console.log("✅ MongoDB connected successfully");
+    cached.isLoading = false;
+    return mongooseInstance;
+  }).catch((err) => {
+    cached.isLoading = false;
+    cached.promise = null; // Clear promise so the next request can retry
+    console.error("❌ MongoDB connection error:", err);
+    throw err;
+  });
+
   try {
-    // 3. Wait for the promise to resolve
     cached.conn = await cached.promise;
   } catch (e) {
-    // 4. If it fails, reset the promise so we can try again next time
     cached.promise = null;
     cached.isLoading = false;
-    console.error("❌ MongoDB connection failed:", e);
     throw e;
   }
 
