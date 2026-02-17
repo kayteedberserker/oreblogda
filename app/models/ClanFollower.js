@@ -1,5 +1,6 @@
 // app/models/ClanFollower.js
 import mongoose from 'mongoose';
+import MobileUser from "app/models/MobileUserModel";
 
 const clanFollowerSchema = new mongoose.Schema({
     clanTag: { type: String, required: true, index: true },
