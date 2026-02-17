@@ -60,7 +60,8 @@ const mobileUserSchema = new mongoose.Schema(
 );
 
 // Correctly handle model re-compilation in Next.js
-const MobileUser = mongoose.models.MobileUser || mongoose.model("MobileUser", mobileUserSchema);
+const MobileUser = mongoose.models.MobileUsers || mongoose.model("MobileUsers", mobileUserSchema);
 
 export default MobileUser;
+
 
