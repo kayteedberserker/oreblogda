@@ -263,9 +263,6 @@ export async function GET(req) {
         return addCorsHeaders(res);
     }
 }
-
-And check it well how can i uptimize it well for all these new features, i dont want it to be slow also and i dont want it to likeshow the same thing for everyone(the personalisation) then also i dont really want it that if theres a lot of posts some wont be seen at all
-So is there anyway i can optimize it to work better and be better like how those big social media does it?
 // ----------------------
 // Helper Functions
 // ----------------------
