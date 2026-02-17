@@ -114,204 +114,158 @@ export async function OPTIONS() {
 // GET: fetch all posts (Strictly Updated for Preference & Discovery Ranking)
 // ---------------------- 
 export async function GET(req) {
-    await connectDB();
-    try {
-        const { searchParams } = new URL(req.url);
-        const page = parseInt(searchParams.get("page")) || 1;
-        const limit = parseInt(searchParams.get("limit")) || 30;
-        const author = searchParams.get("author");
-        const authorId = searchParams.get("authorId");
-        const category = searchParams.get("category");
-        const viewerId = searchParams.get("viewerId");
-        
-        // 🔹 Extract Preferences from Headers (Sent by your Mobile App)
-        const userCountry = req.headers.get("x-user-country") || "Global";
-        const favAnimes = req.headers.get("x-user-animes")?.split(",") || []; // e.g. "Naruto,JJK"
-        const favGenres = req.headers.get("x-user-genres")?.split(",") || [];
-        
-        const clanIdParam = searchParams.get("clanId");
-        const last24Hours = searchParams.get("last24Hours") === "true";
-        const skip = (page - 1) * limit;
+    await connectDB();
+    try {
+        const { searchParams } = new URL(req.url);
+        const page = parseInt(searchParams.get("page")) || 1;
+        const limit = parseInt(searchParams.get("limit")) || 30;
+        const author = searchParams.get("author");
+        const authorId = searchParams.get("authorId");
+        const category = searchParams.get("category");
+        const viewerId = searchParams.get("viewerId");
+        
+        // 🔹 Extract Preferences from Headers (Sent by your Mobile App)
+        const userCountry = req.headers.get("x-user-country") || "Global";
+        const favAnimes = req.headers.get("x-user-animes")?.split(",") || []; // e.g. "Naruto,JJK"
+        const favGenres = req.headers.get("x-user-genres")?.split(",") || [];
+        
+        const clanIdParam = searchParams.get("clanId");
+        const last24Hours = searchParams.get("last24Hours") === "true";
+        const skip = (page - 1) * limit;
 
-        const targetAuthor = author || authorId;
+        const targetAuthor = author || authorId;
 
-        // --- STEP 1: BUILD QUERY (ADDITIVE) ---
-        let query = {};
+        // --- STEP 1: BUILD QUERY (ADDITIVE) ---
+        let query = {};
 
-        if (targetAuthor) {
-            const available = await Post.find({ authorId: author });
-            if (available.length > 0) {
-                query.authorId = author || authorId;
-            } else {
-                query.authorUserId = author || authorId;
-            }
-        } else {
-            query.status = "approved";
-        }
+        if (targetAuthor) {
+            const available = await Post.find({ authorId: author });
+            if (available.length > 0) {
+                query.authorId = author || authorId;
+            } else {
+                query.authorUserId = author || authorId;
+            }
+        } else {
+            query.status = "approved";
+        }
 
-        if (clanIdParam) query.clanId = clanIdParam;
-        if (category) query.category = category; 
+        if (clanIdParam) query.clanId = clanIdParam;
+        if (category) query.category = category; 
 
-        if (last24Hours) {
-            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            query.createdAt = { $gte: yesterday };
-        } else if (!targetAuthor) {
-            // OPTIMIZATION: Limit discovery pool to the last 30 days.
-            // This prevents MongoDB from scanning the entire collection of historical posts,
-            // massively speeding up the aggregation pipeline for big datasets.
-            const TIME_LIMIT_DAYS = 30;
-            const cutoffDate = new Date(Date.now() - TIME_LIMIT_DAYS * 24 * 60 * 60 * 1000);
-            query.createdAt = { $gte: cutoffDate };
-        }
+        if (last24Hours) {
+            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            query.createdAt = { $gte: yesterday };
+        }
 
-        // --- STEP 2: CLAN DETECTION ---
-        let followedClanTags = [];
-        if (viewerId && !targetAuthor) {
-            const follows = await ClanFollower.find({ userId: viewerId }).select("clanTag").lean();
-            followedClanTags = follows.map(f => f.clanTag);
-        }
+        // --- STEP 2: CLAN DETECTION ---
+        let followedClanTags = [];
+        if (viewerId && !targetAuthor) {
+            const follows = await ClanFollower.find({ userId: viewerId }).select("clanTag").lean();
+            followedClanTags = follows.map(f => f.clanTag);
+        }
 
-        let posts;
-        // Total document count for pagination (Note: this counts the 30-day bounded query for discovery)
-        const total = await Post.countDocuments(query);
+        let posts;
+        const total = await Post.countDocuments(query);
 
-        // --- STEP 3: EXECUTION BRANCH ---
-        if (targetAuthor) {
-            posts = await Post.find(query)
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean();
-        } else {
-            // DISCOVERY FEED: Using the Algorithm (HackerNews/Reddit Gravity Model + Personalization)
-            const now = new Date();
-            
-            // Jitter seed helps randomize posts with exact same scores slightly, 
-            // ensuring a dynamic feel without breaking pagination.
-            const JITTER_SEED = 104729; 
+        // --- STEP 3: EXECUTION BRANCH ---
+        if (targetAuthor) {
+            posts = await Post.find(query)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean();
+        } else {
+            // DISCOVERY FEED: Using the Algorithm
+            const BUCKET_MS = 0.5 * 60 * 60 * 1000; // 30 Minutes
+            const PREFERENCE_WINDOW_MS = 12 * 60 * 60 * 1000; // 12 Hours for deep preference check
+            const now = new Date();
+            const discoverySeed = Math.floor(Date.now() / (60 * 60 * 1000)) || 1;
 
-            const pipeline = [
-                { $match: query }, 
-                {
-                    $addFields: {
-                        // 1. Calculate Age in Hours (Minimum 1 to avoid division by zero)
-                        ageInHours: {
-                            $max: [1, { $divide: [{ $subtract: [now, "$createdAt"] }, 3600000] }]
-                        },
-                        
-                        // 2. Base Engagement with "Cold Start" Novelty Boost
-                        baseEngagement: {
-                            $add: [
-                                { $multiply: [{ $ifNull: ["$likeCount", 0] }, 2] }, // Likes are worth 2 points
-                                { $ifNull: ["$commentsCount", 0] },                 // Comments are worth 1 point
-                                // Novelty Boost: If post is < 3 hours old and has 0 engagement, 
-                                // give it an artificial score of 15 so it gets seen initially.
-                                { 
-                                    $cond: [
-                                        { 
-                                            $and: [
-                                                { $lt: [{ $subtract: [now, "$createdAt"] }, 3 * 3600000] },
-                                                { $eq: [{ $add: [{ $ifNull: ["$likeCount", 0] }, { $ifNull: ["$commentsCount", 0] }] }, 0] }
-                                            ] 
-                                        }, 
-                                        15, 0
-                                    ] 
-                                }
-                            ]
-                        },
+            const pipeline = [
+                { $match: query }, 
+                {
+                    $addFields: {
+                        // 1. Time Bucket (30 min groups)
+                        timeBucket: {
+                            $floor: { $divide: [{ $subtract: [now, "$createdAt"] }, BUCKET_MS] }
+                        },
+                        // 2. Preference Match (Check if post's anime/tags match user's favs)
+                        // This applies if the post was created within the last 12 hours
+                        isPreferenceMatch: {
+                            $cond: {
+                                if: {
+                                    $and: [
+                                        { $lt: [{ $subtract: [now, "$createdAt"] }, PREFERENCE_WINDOW_MS] },
+                                        {
+                                            $or: [
+                                                { $in: ["$anime", favAnimes] },
+                                                { $in: ["$category", favGenres] }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                then: 1,
+                                else: 0
+                            }
+                        },
+                        isFollowedClan: {
+                            $cond: { if: { $in: ["$clanId", followedClanTags] }, then: 1, else: 0 }
+                        },
+                        isLocal: {
+                            $cond: { if: { $eq: ["$country", userCountry] }, then: 1, else: 0 }
+                        },
+                        engagementScore: {
+                            $add: [
+                                { $ifNull: ["$likeCount", 0] },
+                                { $ifNull: ["$commentsCount", 0] }
+                            ]
+                        },
+                        discoveryRank: { 
+                            $mod: [ { $toLong: "$createdAt" }, discoverySeed ] 
+                        }
+                    }
+                },
+                {
+                    $sort: {
+                        timeBucket: 1,           // Priority 1: Keep things relatively fresh (30m buckets)
+                        isPreferenceMatch: -1,   // Priority 2: Within that bucket, show preferred anime first
+                        isFollowedClan: -1,      // Priority 3: Then followed clans
+                        isLocal: -1,             // Priority 4: Then local content
+                        engagementScore: -1,     // Priority 5: Then most popular
+                        discoveryRank: 1,        // Priority 6: Randomize slightly for discovery
+                        createdAt: -1
+                    }
+                },
+                { $skip: skip },
+                { $limit: limit }
+            ];
+            posts = await Post.aggregate(pipeline);
+        }
 
-                        // 3. Personalization Multipliers
-                        personalizationMultiplier: {
-                            $let: {
-                                vars: {
-                                    // Heavy boost (x2.5) if anime or genre matches user preferences
-                                    prefMatch: { 
-                                        $cond: [
-                                            { 
-                                                $or: [
-                                                    { $in: ["$anime", favAnimes] }, 
-                                                    { $in: ["$category", favGenres] }
-                                                ] 
-                                            }, 2.5, 1
-                                        ] 
-                                    },
-                                    // Heavy boost (x2.0) if part of a followed clan
-                                    clanMatch: { 
-                                        $cond: [{ $in: ["$clanId", followedClanTags] }, 2.0, 1] 
-                                    },
-                                    // Slight boost (x1.2) for local country content
-                                    localMatch: { 
-                                        $cond: [{ $eq: ["$country", userCountry] }, 1.2, 1] 
-                                    }
-                                },
-                                // Multiply them all together
-                                in: { $multiply: ["$$prefMatch", "$$$clanMatch", "$$localMatch"] }
-                            }
-                        },
+        // --- STEP 4: SERIALIZATION ---
+        const serializedPosts = posts.map((p) => ({ 
+            ...p, 
+            _id: p._id.toString(),
+        }));
 
-                        // 4. Deterministic Jitter (0.0 to 0.99)
-                        // Slightly shuffles posts that have similar final scores to prevent stagnation.
-                        jitter: {
-                            $divide: [
-                                { $mod: [{ $toLong: "$createdAt" }, JITTER_SEED] },
-                                JITTER_SEED
-                            ]
-                        }
-                    }
-                },
-                {
-                    $addFields: {
-                        // FINAL ALGORITHM CALCULATION
-                        // Score = (Base Engagement / Age^1.5) * Personalization + Jitter
-                        // The power of 1.5 simulates "gravity", pulling older posts down the feed naturally over time.
-                        finalScore: {
-                            $add: [
-                                {
-                                    $multiply: [
-                                        { $divide: ["$baseEngagement", { $pow: ["$ageInHours", 1.5] }] },
-                                        "$personalizationMultiplier"
-                                    ]
-                                },
-                                "$jitter"
-                            ]
-                        }
-                    }
-                },
-                {
-                    // Sort smoothly by the final algorithm score
-                    $sort: {
-                        finalScore: -1,
-                        createdAt: -1 
-                    }
-                },
-                { $skip: skip },
-                { $limit: limit }
-            ];
-            
-            posts = await Post.aggregate(pipeline);
-        }
+        const res = NextResponse.json({ 
+            posts: serializedPosts, 
+            total, 
+            page, 
+            limit 
+        }, { status: 200 });
 
-        // --- STEP 4: SERIALIZATION ---
-        const serializedPosts = posts.map((p) => ({ 
-            ...p, 
-            _id: p._id.toString(),
-        }));
+        return addCorsHeaders(res);
 
-        const res = NextResponse.json({ 
-            posts: serializedPosts, 
-            total, 
-            page, 
-            limit 
-        }, { status: 200 });
-
-        return addCorsHeaders(res);
-
-    } catch (err) {
-        console.error("GET Feed Error:", err);
-        const res = NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 });
-        return addCorsHeaders(res);
-    }
+    } catch (err) {
+        console.error("GET Feed Error:", err);
+        const res = NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 });
+        return addCorsHeaders(res);
+    }
 }
+
+And check it well how can i uptimize it well for all these new features, i dont want it to be slow also and i dont want it to likeshow the same thing for everyone(the personalisation) then also i dont really want it that if theres a lot of posts some wont be seen at all
+So is there anyway i can optimize it to work better and be better like how those big social media does it?
 // ----------------------
 // Helper Functions
 // ----------------------
