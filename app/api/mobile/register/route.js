@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import connectDB from "@/app/lib/mongodb";
 import MobileUser from "@/app/models/MobileUserModel";
+import ReferralEvent from "@/app/models/ReferralEvent"; 
 import geoip from "geoip-lite";
 import crypto from "crypto";
+import { sendPushNotification } from "@/app/lib/pushNotifications";
 
 // 🆔 Helper: Generate a unique referral ID
 const generateReferralCode = (username) => {
@@ -14,13 +16,12 @@ const generateReferralCode = (username) => {
 export async function POST(req) {
   try {
     await connectDB();
-    // 📩 Catch 'referredBy' from the request body
     const { deviceId, username, pushToken, referredBy } = await req.json();
 
     if (!deviceId || !username || username.trim() === "") {
       return NextResponse.json({ message: "Username is required" }, { status: 400 });
     }
-    
+
     if (username.trim().toLowerCase().startsWith("admin")) {
       return NextResponse.json({ message: "This callsign is restricted." }, { status: 400 });
     }
@@ -39,75 +40,106 @@ export async function POST(req) {
       let auraBonus = 0;
       let boostDate = null;
 
-      // 🕒 Define the Boost Expiry (72 hours from now)
       const boostExpiry = new Date();
       boostExpiry.setHours(boostExpiry.getHours() + 72);
 
-      // Check if they were invited by a valid referral code
       if (referredBy && referredBy.trim() !== "") {
         const cleanRef = referredBy.trim();
         const referrer = await MobileUser.findOne({ referralCode: cleanRef });
-        
-        // Validation: Referrer must exist AND not be the same device
+
         if (referrer && referrer.deviceId !== deviceId) {
           finalReferrer = cleanRef;
+
+          // 1. Update Referrer Record
           referrer.invitedUsers.push({ username: username, date: new Date() });
-          // 🎁 Reward the Inviter: +20 Aura and 3-Day Double Streak Boost
           referrer.referralCount = (referrer.referralCount || 0) + 1;
           referrer.weeklyAura = (referrer.weeklyAura || 0) + 20;
-          referrer.doubleStreakUntil = boostExpiry; 
-          
+          referrer.doubleStreakUntil = boostExpiry;
           await referrer.save();
-          
-          // Set rewards for the new user
+
+          // 🔔 SEND NOTIFICATION TO THE REFERRER
+          if (referrer.pushToken) {
+            try {
+              await sendPushNotification(
+                referrer.pushToken,
+                "New Recruit Joined! 🌀",
+                `${username} has joined your clan via your link. Your 72h boost is active!`,
+                { type: "referral_success" }
+              );
+            } catch (pErr) {
+              console.error("Referrer Notification Failed:", pErr);
+            }
+          }
+
           auraBonus = 20;
           boostDate = boostExpiry;
-
-          console.log(`📈 Success: ${cleanRef} invited a new operative. Boosts applied.`);
-        } else {
-          console.log(`⚠️ Invalid Referral: Code ${cleanRef} not found or self-referral.`);
+          console.log(`📈 Success: ${cleanRef} invited a new operative.`);
         }
       }
 
-      user = await MobileUser.create({ 
-        deviceId, 
-        username, 
+      // Create the New User
+      user = await MobileUser.create({
+        deviceId,
+        username,
         pushToken,
         country: detectedCountry,
-        referralCode: myNewReferralCode, 
-        referredBy: finalReferrer,      
+        referralCode: myNewReferralCode,
+        referredBy: finalReferrer,
         referralCount: 0,
-        weeklyAura: auraBonus, // 🔹 +20 Aura immediately if referred
-        doubleStreakUntil: boostDate, // 🔹 3-day window for 2X streak
+        weeklyAura: auraBonus,
+        doubleStreakUntil: boostDate,
         lastActive: new Date()
       });
+
+      // 🏆 DYNAMIC ROUND CALCULATION & REGISTRATION
+      if (finalReferrer) {
+        try {
+          const referrerDoc = await MobileUser.findOne({ referralCode: finalReferrer }).select("_id");
+          if (referrerDoc) {
+            
+            // 🔄 Check grand total to assign the correct round
+            const grandTotal = await ReferralEvent.countDocuments({ status: 'verified' });
+            
+            let assignedRound = 1;
+            if (grandTotal >= 3000) assignedRound = 3;
+            else if (grandTotal >= 1000) assignedRound = 3; // Based on your logic
+            else if (grandTotal >= 500) assignedRound = 2;
+
+            await ReferralEvent.create({
+              referrerId: referrerDoc._id,
+              referredId: user._id,
+              referredUsername: user.username,
+              deviceId: deviceId, 
+              round: assignedRound, // 👈 Dynamically tagged
+              status: 'verified'
+            });
+          }
+        } catch (eventErr) {
+          console.error("ReferralEvent Logging Failed:", eventErr);
+        }
+      }
+
     } else {
       // 🔄 EXISTING USER UPDATE
       user.username = username;
       if (pushToken) user.pushToken = pushToken;
-      
-      if (!user.referralCode) {
-        user.referralCode = generateReferralCode(username);
-      }
-
-      if (!user.country || user.country === "Unknown") {
-        user.country = detectedCountry;
-      }
+      if (!user.referralCode) user.referralCode = generateReferralCode(username);
+      if (!user.country || user.country === "Unknown") user.country = detectedCountry;
 
       user.lastActive = new Date();
       await user.save();
     }
 
-    return NextResponse.json({ 
-      message: "Neural Link Established", 
-      user 
+    return NextResponse.json({
+      message: "Neural Link Established",
+      user
     }, { status: 201 });
 
   } catch (err) {
     console.error("Registration Error:", err);
-    return NextResponse.json({ 
-      message: "Uplink Error", 
-      error: err.message 
+    return NextResponse.json({
+      message: "Uplink Error",
+      error: err.message
     }, { status: 500 });
   }
 }

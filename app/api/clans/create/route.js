@@ -6,16 +6,49 @@ import { NextResponse } from "next/server";
 import geoip from "geoip-lite";
 
 const generateUniqueTag = async (name) => {
-    let base = name.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().substring(0, 5);
-    if (base.length < 3) base = "CLAN";
-    let isUnique = false;
-    let finalTag = "";
-    while (!isUnique) {
-        const randomNum = Math.floor(100 + Math.random() * 900);
-        finalTag = `${base}-${randomNum}`;
-        const existing = await Clan.findOne({ tag: finalTag });
-        if (!existing) isUnique = true;
+    // 1. Split into words to find the longest "Main" name
+    const words = name.split(/\s+/);
+    
+    // 2. Find the longest word based on letters only (The "Core" name)
+    let longestWord = words.reduce((a, b) => {
+        const aClean = a.replace(/[^a-zA-Z]/g, '');
+        const bClean = b.replace(/[^a-zA-Z]/g, '');
+        return aClean.length >= bClean.length ? a : b;
+    });
+
+    // 3. Extract all numbers and decimals from the entire string
+    const numbersMatch = name.match(/[\d.]+/g);
+    const combinedNumbers = numbersMatch ? numbersMatch.join('') : "";
+
+    // 4. Combine: LONGESTWORD + NUMBERS (Cleaned)
+    let base = (longestWord.replace(/[^a-zA-Z]/g, '') + combinedNumbers).toUpperCase();
+    
+    // Fallback for safety
+    if (base.length < 1) base = "SHINOBI";
+
+    let finalTag = `${base}-CLAN`;
+    
+    // 5. Check uniqueness for the "Prime" tag
+    const existingBase = await Clan.findOne({ tag: finalTag });
+    
+    if (!existingBase) {
+        return finalTag; 
     }
+
+    // 6. Collision loop: Inject random "Division" number middle-style
+    let isUnique = false;
+    while (!isUnique) {
+        const randomNum = Math.floor(Math.random() * 99 + 1).toString().padStart(2, '0');
+        
+        // This results in: FORTITUDE9.8-07-CLAN
+        finalTag = `${base}-${randomNum}-CLAN`;
+
+        const existing = await Clan.findOne({ tag: finalTag });
+        if (!existing) {
+            isUnique = true;
+        }
+    }
+
     return finalTag;
 };
 
