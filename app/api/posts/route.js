@@ -111,7 +111,7 @@ export async function OPTIONS() {
 }
 
 // ----------------------
-// GET: fetch all posts (Strictly Updated for Clan/Feed Filtering)
+// GET: fetch all posts (Strictly Updated for Preference & Discovery Ranking)
 // ---------------------- 
 export async function GET(req) {
     await connectDB();
@@ -124,7 +124,11 @@ export async function GET(req) {
         const category = searchParams.get("category");
         const viewerId = searchParams.get("viewerId");
         
+        // 🔹 Extract Preferences from Headers (Sent by your Mobile App)
         const userCountry = req.headers.get("x-user-country") || "Global";
+        const favAnimes = req.headers.get("x-user-animes")?.split(",") || []; // e.g. "Naruto,JJK"
+        const favGenres = req.headers.get("x-user-genres")?.split(",") || [];
+        
         const clanIdParam = searchParams.get("clanId");
         const last24Hours = searchParams.get("last24Hours") === "true";
         const skip = (page - 1) * limit;
@@ -134,7 +138,6 @@ export async function GET(req) {
         // --- STEP 1: BUILD QUERY (ADDITIVE) ---
         let query = {};
 
-        // Status Logic: Only show all status if viewing a specific author
         if (targetAuthor) {
             const available = await Post.find({ authorId: author });
             if (available.length > 0) {
@@ -146,21 +149,15 @@ export async function GET(req) {
             query.status = "approved";
         }
 
-        if (clanIdParam) {
-            query.clanId = clanIdParam;
-        }
-
-        if (category) {
-            // Reverting to your working simple category check or a safe version
-            query.category = category; 
-        }
+        if (clanIdParam) query.clanId = clanIdParam;
+        if (category) query.category = category; 
 
         if (last24Hours) {
             const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
             query.createdAt = { $gte: yesterday };
         }
 
-        // --- STEP 2: CLAN DETECTION (For Discovery Ranking) ---
+        // --- STEP 2: CLAN DETECTION ---
         let followedClanTags = [];
         if (viewerId && !targetAuthor) {
             const follows = await ClanFollower.find({ userId: viewerId }).select("clanTag").lean();
@@ -168,12 +165,10 @@ export async function GET(req) {
         }
 
         let posts;
-        // Accurate Total Count based on the constructed query
         const total = await Post.countDocuments(query);
 
         // --- STEP 3: EXECUTION BRANCH ---
         if (targetAuthor) {
-            // AUTHOR FEED: Simple list as requested
             posts = await Post.find(query)
                 .sort({ createdAt: -1 })
                 .skip(skip)
@@ -181,16 +176,37 @@ export async function GET(req) {
                 .lean();
         } else {
             // DISCOVERY FEED: Using the Algorithm
-            const TWO_HOURS_MS = 0.5 * 60 * 60 * 1000;
+            const BUCKET_MS = 0.5 * 60 * 60 * 1000; // 30 Minutes
+            const PREFERENCE_WINDOW_MS = 12 * 60 * 60 * 1000; // 12 Hours for deep preference check
             const now = new Date();
             const discoverySeed = Math.floor(Date.now() / (60 * 60 * 1000)) || 1;
 
             const pipeline = [
-                { $match: query }, // Filter by our built query
+                { $match: query }, 
                 {
                     $addFields: {
+                        // 1. Time Bucket (30 min groups)
                         timeBucket: {
-                            $floor: { $divide: [{ $subtract: [now, "$createdAt"] }, TWO_HOURS_MS] }
+                            $floor: { $divide: [{ $subtract: [now, "$createdAt"] }, BUCKET_MS] }
+                        },
+                        // 2. Preference Match (Check if post's anime/tags match user's favs)
+                        // This applies if the post was created within the last 12 hours
+                        isPreferenceMatch: {
+                            $cond: {
+                                if: {
+                                    $and: [
+                                        { $lt: [{ $subtract: [now, "$createdAt"] }, PREFERENCE_WINDOW_MS] },
+                                        {
+                                            $or: [
+                                                { $in: ["$anime", favAnimes] },
+                                                { $in: ["$category", favGenres] }
+                                            ]
+                                        }
+                                    ]
+                                },
+                                then: 1,
+                                else: 0
+                            }
                         },
                         isFollowedClan: {
                             $cond: { if: { $in: ["$clanId", followedClanTags] }, then: 1, else: 0 }
@@ -211,11 +227,12 @@ export async function GET(req) {
                 },
                 {
                     $sort: {
-                        timeBucket: 1,
-                        isFollowedClan: -1,
-                        isLocal: -1,
-                        engagementScore: -1,
-                        discoveryRank: 1,
+                        timeBucket: 1,           // Priority 1: Keep things relatively fresh (30m buckets)
+                        isPreferenceMatch: -1,   // Priority 2: Within that bucket, show preferred anime first
+                        isFollowedClan: -1,      // Priority 3: Then followed clans
+                        isLocal: -1,             // Priority 4: Then local content
+                        engagementScore: -1,     // Priority 5: Then most popular
+                        discoveryRank: 1,        // Priority 6: Randomize slightly for discovery
                         createdAt: -1
                     }
                 },
@@ -229,8 +246,6 @@ export async function GET(req) {
         const serializedPosts = posts.map((p) => ({ 
             ...p, 
             _id: p._id.toString(),
-            // Keeping authorId out of return if you previously selected "-authorId"
-            // But if your frontend needs it for navigation, keep it.
         }));
 
         const res = NextResponse.json({ 
