@@ -9,25 +9,19 @@ const commentSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     default: () => new mongoose.Types.ObjectId()
   },
-  // NEW (preferred)
   authorFingerprint: { type: String },
-  // OLD (backward compatibility)
   authorId: { type: String },
-  // Mobile-only (for notifications)
   authorUserId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "MobileUser",
     default: null
   },
-
   name: { type: String, required: true },
   text: { type: String, required: true },
   date: { type: Date, default: Date.now },
-
   replies: { type: Array, default: [] }
 });
 
-// Enable recursive replies
 commentSchema.add({
   replies: [commentSchema]
 });
@@ -38,19 +32,13 @@ commentSchema.add({
 
 const likeSchema = new mongoose.Schema(
   {
-    // NEW
     deviceId: { type: String },
-
-    // OLD (some posts used "fingerprint")
     fingerprint: { type: String },
-
-    // Mobile-only
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "MobileUser",
       default: null
     },
-
     date: { type: Date, default: Date.now }
   },
   { _id: false }
@@ -76,10 +64,7 @@ const pollSchema = new mongoose.Schema({
 
 const viewDataSchema = new mongoose.Schema({
   visitorFingerprint: { type: String },
-
-  // OLD naming support
   visitorId: { type: String },
-
   ip: String,
   country: String,
   city: String,
@@ -93,7 +78,7 @@ const viewDataSchema = new mongoose.Schema({
 
 const mediaItemSchema = new mongoose.Schema({
   url: { type: String, required: true },
-  type: { type: String, default: "image" } // e.g., "image", "video", "gif"
+  type: { type: String, default: "image" }
 }, { _id: false });
 
 /* =====================================================
@@ -103,72 +88,50 @@ const mediaItemSchema = new mongoose.Schema({
 const postSchema = new mongoose.Schema(
   {
     /* ---------- AUTHOR ---------- */
-
-    // NEW
     authorFingerprint: { type: String },
-
-    // OLD
     authorId: { type: String },
-
-    // Mobile-only
     authorUserId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "MobileUser",
       default: null
     },
-
     authorName: { type: String, default: "Anonymous" },
 
     /* ---------- CONTENT ---------- */
-
     title: { type: String, required: true },
     message: { type: String, required: true },
-
-    // Existing fields kept for backward compatibility
     mediaUrl: { type: String },
     mediaType: { type: String },
-
-    // NEW: Array for multiple images/videos
     media: { 
       type: [mediaItemSchema], 
       default: [] 
     },
 
     /* ---------- INTERACTIONS ---------- */
-
     likes: [likeSchema],
-    // New: Total count for display and rank calculations
     likeCount: { type: Number, default: 0 },
-
     comments: [commentSchema],
-
     shares: { type: Number, default: 0 },
 
     /* ---------- VIEWS ---------- */
-
     views: { type: Number, default: 0 },
-
-    // NEW
     viewsFingerprints: [{ type: String }],
-
-    // OLD
     viewsIPs: [{ type: String }],
-
     viewsData: [viewDataSchema],
 
     /* ---------- POLLS ---------- */
-
     poll: pollSchema,
-
-    // NEW
     voters: [{ type: String }],
-
-    // OLD
     votersOld: [{ type: String }],
 
     /* ---------- META ---------- */
-
     slug: { type: String, unique: true, trim: true },
+
+    interests: { 
+      type: [String], 
+      default: [], 
+      index: true 
+    },
 
     category: {
       type: String,
@@ -192,7 +155,6 @@ const postSchema = new mongoose.Schema(
       default: "approved"
     },
 
-    // NEW: Locked timestamp for cooldowns
     statusChangedAt: {
       type: Date,
       default: Date.now
@@ -212,18 +174,14 @@ const postSchema = new mongoose.Schema(
 ===================================================== */
 
 postSchema.pre('save', function (next) {
-  // Logic 1: Update statusChangedAt on status change
   if (this.isModified('status')) {
     this.statusChangedAt = new Date();
   }
 
-  // Logic 2: Handle Multi-Media Backward Compatibility
-  // If we have multiple media items, ensure the first one is mirrored to the old mediaUrl field
   if (this.media && this.media.length > 0) {
     this.mediaUrl = this.media[0].url;
     this.mediaType = this.media[0].type;
   } 
-  // If this is an old post being saved and it only has mediaUrl, wrap it in the media array
   else if (this.mediaUrl && (!this.media || this.media.length === 0)) {
     this.media = [{ url: this.mediaUrl, type: this.mediaType || "image" }];
   }

@@ -17,43 +17,63 @@ import { awardClanPoints } from "@/app/lib/clanService";
 /**
  * 🔹 UPDATED 2026 MODERATOR
  * Uses the new @google/genai SDK and Gemini 2.5 Flash
+ * Enhanced with Deep Inference for Tagging
  */
 
+// ----------------------
+// AI MODERATOR & AUTO-TAGGER
+// ----------------------
 async function runAIModerator(title, message, category, mediaUrl, mediaType) {
     const API_KEY = process.env.GEMINI_API_KEY;
-    if (!API_KEY) {
-        return { action: "flag", reason: "AI Config Error" };
-    }
+    if (!API_KEY) return { action: "flag", reason: "AI Config Error", interests: [] };
 
-    // Initialize the new 2026 Client
     const client = new GoogleGenAI({ apiKey: API_KEY });
+
+    // Valid tagging lists for consistency
+    const VALID_ANIMES = ["Naruto", "One Piece", "Bleach", "Dragon Ball Z", "Hunter x Hunter", "JJK", "Solo Leveling", "My Hero Academia", "Hell's Paradise", "Demon Slayer", "AOT", "Chainsaw Man", "Death Note", "Fullmetal Alchemist", "Code Geass", "Steins;Gate", "Berserk", "Vinland Saga", "Monster", "Vagabond", "Baki", "Nana", "Horimiya", "Fruits Basket", "Ouran High", "Haikyuu", "Blue Lock", "One Punch Man"];
+    const VALID_GENRES = ["Shonen", "Seinen", "Romance", "Isekai", "Psychological", "Ecchi", "Action", "Slice of Life", "Manga", "Fantasy", "Sci-Fi", "Comedy", "Manhwa"];
 
     try {
         const prompt = `
-            TASK: Moderate this 'Diary Entry' for 'Oreblogda' (Anime/Gaming blog).
-            RULES: 
+            TASK: Moderate and Tag this 'Diary Entry' for 'Oreblogda' (Anime/Gaming blog).
+            
+            MODERATION RULES: 
             - Reject real-life nudity or extreme real-life gore.
             - Allow animated/stylized gore (anime style).
-            - Allow adult jokes and "Ecchi" content, especially if the category is 'meme'.
-            - Reject content that is completely unrelated to anime, gaming, or nerd culture.
-            - If video is provided: Scan the timeline for hidden violations or "flash" nudity.
-            - Check for incorrect categories especially for News and Reviews, a meme post shouldn't be posted in any other category except for the meme category, if this isn't followed reject the post for incorrect category and saying the error
-            - NOTE the above rule should be strict on meme posts it must always be under the meme category unless you deem it might be eligible to be in another category like poll or gaming. if the meme is under gaming category then it has to be a gaming meme else should be rejected
-            - Here are all my categories, News, Memes, Polls, Review, Gaming -So let the review category be like a general category that can accommodate any kind of posts, the same for gaming category, but it has to be game related
-            -News is strictly for Anime/Gaming News, Polls is strictly for polls, Memes is strictly for memes, Gaming is strictly for anything gaming, Review is for more general content as long as it's anime/gaming related
-            -Finally if the post doesn't fit into any of the categories listed above then they can be allowed to be in any category, for example posting of wallpapers in news or memes are allowed, this is still limited to News, Memes, Reviews any post under Gaming category must be Gaming related. 
-            INPUT:
-            Title: "${title}"
-            Message: "${message}"
-            Category: "${category}"
+            - Allow adult jokes and "Ecchi" content, especially if the category is 'Memes'.
+            - Reject content completely unrelated to anime, gaming, or nerd culture.
 
-            OUTPUT: Return ONLY JSON: {"action": "approve" | "reject" | "flag", "reason": "..."}
+            STRICT CATEGORY RULES:
+            - 'News' is strictly for Anime/Gaming News.
+            - 'Polls' is strictly for posts with polls.
+            - 'Memes' is strictly for memes.
+            - 'Gaming' is strictly for anything gaming-related.
+            - 'Review' is a general category for anime/gaming related content.
+            - CRITICAL: A meme post MUST be in 'Memes' category. If a meme is found in 'News' or 'Review', REJECT it for "incorrect category".
+            - CRITICAL: If a meme is in 'Gaming', it MUST be a gaming-related meme, else REJECT it.
+
+            TAGGING & INFERENCE TASK (CRITICAL):
+            1. Identify the Anime/Game mentioned or shown. 
+            2. INTELLIGENT INFERENCE: If a character is mentioned but the Anime name is MISSING, you MUST include the Anime name from the VALID_ANIMES list. 
+               (e.g., If "Itachi" is mentioned, add "Naruto". If "Rengoku" is mentioned, add "Demon Slayer". If "Gojo" is mentioned, add "JJK").
+            3. Identify the Genre/Theme based on the "vibe" and characters.
+            4. Use these lists for primary tags: ANIME: ${VALID_ANIMES.join(", ")}, GENRES: ${VALID_GENRES.join(", ")}
+            5. CHARACTER TAGGING: Extract specific character names from title or given image (e.g., "Madara", "Luffy", "Zoro"). This is CRITICAL for user personalization.
+
+            INPUT:
+            Title: "${title}" | Message: "${message}" | Category: "${category}"
+
+            OUTPUT: Return ONLY JSON: 
+            {
+                "action": "approve" | "reject" | "flag", 
+                "reason": "...",
+                "interests": ["Tag1", "Tag2", "AnimeName", "CharacterName"] 
+            }
         `;
 
-        const modelId = "gemini-2.5-flash";
+        const modelId = "gemini-2.0-flash"; // Correcting model version string if needed
         const contents = [{ role: 'user', parts: [{ text: prompt }] }];
 
-        // 🔹 MODIFIED: Multimodal Support (Images & Videos)
         if (mediaUrl && mediaUrl.includes("cloudinary")) {
             const isVideo = mediaType === "video" || mediaUrl.match(/\.(mp4|mov|webm|mkv)$/i);
             const isImage = mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i);
@@ -62,34 +82,27 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
                 try {
                     const mediaRes = await fetch(mediaUrl);
                     const arrayBuffer = await mediaRes.arrayBuffer();
-
                     contents[0].parts.push({
                         inlineData: {
                             data: Buffer.from(arrayBuffer).toString("base64"),
-                            // 2026 Native Handling: Automatically samples video if mimeType is video/mp4
                             mimeType: isVideo ? "video/mp4" : "image/jpeg"
                         }
                     });
-                } catch (e) {
-                    console.error("Media fetch failed, falling back to text-only scanning.");
-                }
+                } catch (e) { console.error("Media fetch failed, text-only scan."); }
             }
         }
 
-        // New SDK Method
-        const response = await client.models.generateContent({
-            model: modelId,
-            contents: contents,
-        });
-
+        const response = await client.models.generateContent({ model: modelId, contents: contents });
         let text = response.text;
         const cleanJson = text.replace(/```json|```/g, "").trim();
+        const result = JSON.parse(cleanJson);
 
-        return JSON.parse(cleanJson);
+        if (!result.interests) result.interests = [];
+        return result;
 
     } catch (err) {
         console.error("❌ 2026 Moderator Error:", err.message);
-        return { action: "flag", reason: "Service unavailable" };
+        return { action: "flag", reason: "Service unavailable", interests: [] };
     }
 }
 
@@ -114,197 +127,217 @@ export async function OPTIONS() {
 // GET: fetch all posts (Strictly Updated for Preference & Discovery Ranking)
 // ---------------------- 
 export async function GET(req) {
-    await connectDB();
-    try {
-        const { searchParams } = new URL(req.url);
-        const page = parseInt(searchParams.get("page")) || 1;
-        const limit = parseInt(searchParams.get("limit")) || 30;
-        const author = searchParams.get("author");
-        const authorId = searchParams.get("authorId");
-        const category = searchParams.get("category");
-        const viewerId = searchParams.get("viewerId");
-        
-        // 🔹 Extract Preferences from Headers (Sent by your Mobile App)
-        const userCountry = req.headers.get("x-user-country") || "Global";
-        const favAnimes = req.headers.get("x-user-animes")?.split(",") || []; // e.g. "Naruto,JJK"
-        const favGenres = req.headers.get("x-user-genres")?.split(",") || [];
-        
-        const clanIdParam = searchParams.get("clanId");
-        const last24Hours = searchParams.get("last24Hours") === "true";
-        const skip = (page - 1) * limit;
+    await connectDB();
+    try {
+        const { searchParams } = new URL(req.url);
+        const page = parseInt(searchParams.get("page")) || 1;
+        const limit = parseInt(searchParams.get("limit")) || 30;
+        const author = searchParams.get("author");
+        const authorId = searchParams.get("authorId");
+        const category = searchParams.get("category");
+        const viewerId = searchParams.get("viewerId");
+        
+        // 🔹 Extract Preferences from Headers (Sent by your Mobile App)
+        const userCountry = req.headers.get("x-user-country") || "Global";
+        const favAnimes = req.headers.get("x-user-animes")?.split(",").map(s => s.trim()).filter(Boolean) || []; 
+        const favGenres = req.headers.get("x-user-genres")?.split(",").map(s => s.trim()).filter(Boolean) || [];
+        const favCharacter = req.headers.get("x-user-character") || "";
+        
+        // 🔹 Combine preferences for a broader match against the AI "interests" array
+        // We now include the favorite character in this list
+        const userInterests = [...favAnimes, ...favGenres];
+        if (favCharacter) {
+            userInterests.push(favCharacter);
+        }
 
-        const targetAuthor = author || authorId;
+        const clanIdParam = searchParams.get("clanId");
+        const last24Hours = searchParams.get("last24Hours") === "true";
+        const skip = (page - 1) * limit;
 
-        // --- STEP 1: BUILD QUERY (ADDITIVE) ---
-        let query = {};
+        const targetAuthor = author || authorId;
 
-        if (targetAuthor) {
-            const available = await Post.find({ authorId: author });
-            if (available.length > 0) {
-                query.authorId = author || authorId;
-            } else {
-                query.authorUserId = author || authorId;
-            }
-        } else {
-            query.status = "approved";
-        }
+        // --- STEP 1: BUILD QUERY ---
+        let query = {};
 
-        if (clanIdParam) query.clanId = clanIdParam;
-        if (category) query.category = category; 
+        if (targetAuthor) {
+            const available = await Post.find({ authorId: targetAuthor });
+            if (available.length > 0) {
+                query.authorId = targetAuthor;
+            } else {
+                query.authorUserId = targetAuthor;
+            }
+        } else {
+            query.status = "approved";
+        }
 
-        if (last24Hours) {
-            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            query.createdAt = { $gte: yesterday };
-        }
+        if (clanIdParam) query.clanId = clanIdParam;
+        if (category) query.category = category; 
 
-        // --- STEP 2: CLAN DETECTION ---
-        let followedClanTags = [];
-        if (viewerId && !targetAuthor) {
-            const follows = await ClanFollower.find({ userId: viewerId }).select("clanTag").lean();
-            followedClanTags = follows.map(f => f.clanTag);
-        }
+        if (last24Hours) {
+            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            query.createdAt = { $gte: yesterday };
+        } else if (!targetAuthor) {
+            const TIME_LIMIT_DAYS = 30;
+            const cutoffDate = new Date(Date.now() - TIME_LIMIT_DAYS * 24 * 60 * 60 * 1000);
+            query.createdAt = { $gte: cutoffDate };
+        }
 
-        let posts;
-        const total = await Post.countDocuments(query);
+        // --- STEP 2: CLAN DETECTION ---
+        let followedClanTags = [];
+        if (viewerId && !targetAuthor) {
+            const follows = await ClanFollower.find({ userId: viewerId }).select("clanTag").lean();
+            followedClanTags = follows.map(f => f.clanTag);
+        }
 
-        // --- STEP 3: EXECUTION BRANCH ---
-        if (targetAuthor) {
-            posts = await Post.find(query)
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean();
-        } else {
-            // DISCOVERY FEED: Using the Algorithm
-            const BUCKET_MS = 0.5 * 60 * 60 * 1000; // 30 Minutes
-            const PREFERENCE_WINDOW_MS = 12 * 60 * 60 * 1000; // 12 Hours for deep preference check
-            const now = new Date();
-            const discoverySeed = Math.floor(Date.now() / (60 * 60 * 1000)) || 1;
+        let posts;
+        const total = await Post.countDocuments(query);
 
-            const pipeline = [
-                { $match: query }, 
-                {
-                    $addFields: {
-                        // 1. Time Bucket (30 min groups)
-                        timeBucket: {
-                            $floor: { $divide: [{ $subtract: [now, "$createdAt"] }, BUCKET_MS] }
-                        },
-                        // 2. Preference Match (Check if post's anime/tags match user's favs)
-                        // This applies if the post was created within the last 12 hours
-                        isPreferenceMatch: {
-                            $cond: {
-                                if: {
-                                    $and: [
-                                        { $lt: [{ $subtract: [now, "$createdAt"] }, PREFERENCE_WINDOW_MS] },
-                                        {
-                                            $or: [
-                                                { $in: ["$anime", favAnimes] },
-                                                { $in: ["$category", favGenres] }
-                                            ]
-                                        }
-                                    ]
-                                },
-                                then: 1,
-                                else: 0
-                            }
-                        },
-                        isFollowedClan: {
-                            $cond: { if: { $in: ["$clanId", followedClanTags] }, then: 1, else: 0 }
-                        },
-                        isLocal: {
-                            $cond: { if: { $eq: ["$country", userCountry] }, then: 1, else: 0 }
-                        },
-                        engagementScore: {
-                            $add: [
-                                { $ifNull: ["$likeCount", 0] },
-                                { $ifNull: ["$commentsCount", 0] }
-                            ]
-                        },
-                        discoveryRank: { 
-                            $mod: [ { $toLong: "$createdAt" }, discoverySeed ] 
-                        }
-                    }
-                },
-                {
-                    $sort: {
-                        timeBucket: 1,           // Priority 1: Keep things relatively fresh (30m buckets)
-                        isPreferenceMatch: -1,   // Priority 2: Within that bucket, show preferred anime first
-                        isFollowedClan: -1,      // Priority 3: Then followed clans
-                        isLocal: -1,             // Priority 4: Then local content
-                        engagementScore: -1,     // Priority 5: Then most popular
-                        discoveryRank: 1,        // Priority 6: Randomize slightly for discovery
-                        createdAt: -1
-                    }
-                },
-                { $skip: skip },
-                { $limit: limit }
-            ];
-            posts = await Post.aggregate(pipeline);
-        }
+        // --- STEP 3: EXECUTION BRANCH ---
+        if (targetAuthor) {
+            posts = await Post.find(query)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean();
+        } else {
+            const CONFIG = {
+                likeWeight: 2,
+                commentWeight: 1.5,
+                noveltyBoostScore: 20,
+                noveltyWindowHours: 4,
+                gravityPower: 1.8,
+                prefMultiplier: 3.0,
+                clanMultiplier: 2.0,
+                localMultiplier: 1.2
+            };
 
-        // --- STEP 4: SERIALIZATION ---
-        const serializedPosts = posts.map((p) => ({ 
-            ...p, 
-            _id: p._id.toString(),
-        }));
+            const now = new Date();
+            const JITTER_SEED = 104729; 
 
-        const res = NextResponse.json({ 
-            posts: serializedPosts, 
-            total, 
-            page, 
-            limit 
-        }, { status: 200 });
+            const pipeline = [
+                { $match: query }, 
+                {
+                    $addFields: {
+                        ageInHours: {
+                            $max: [1, { $divide: [{ $subtract: [now, "$createdAt"] }, 3600000] }]
+                        },
+                        commentsCount: { $size: { $ifNull: ["$comments", []] } },
+                        hasInterestMatch: {
+                            $gt: [
+                                { $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] } },
+                                0
+                            ]
+                        }
+                    }
+                },
+                {
+                    $addFields: {
+                        baseEngagement: {
+                            $add: [
+                                { $multiply: [{ $ifNull: ["$likeCount", 0] }, CONFIG.likeWeight] }, 
+                                { $multiply: ["$commentsCount", CONFIG.commentWeight] }, 
+                                { 
+                                    $cond: [
+                                        { 
+                                            $and: [
+                                                { $lt: ["$ageInHours", CONFIG.noveltyWindowHours] },
+                                                { $eq: [{ $add: ["$likeCount", "$commentsCount"] }, 0] }
+                                            ] 
+                                        }, 
+                                        CONFIG.noveltyBoostScore, 0
+                                    ] 
+                                }
+                            ]
+                        },
+                        personalizationMultiplier: {
+                            $let: {
+                                vars: {
+                                    prefMatch: { $cond: ["$hasInterestMatch", CONFIG.prefMultiplier, 1] },
+                                    clanMatch: { $cond: [{ $in: ["$clanId", followedClanTags] }, CONFIG.clanMultiplier, 1] },
+                                    localMatch: { $cond: [{ $eq: ["$country", userCountry] }, CONFIG.localMultiplier, 1] }
+                                },
+                                in: { $multiply: ["$$prefMatch", "$$clanMatch", "$$localMatch"] }
+                            }
+                        },
+                        jitter: {
+                            $divide: [
+                                { $mod: [{ $toLong: "$createdAt" }, JITTER_SEED] },
+                                JITTER_SEED
+                            ]
+                        }
+                    }
+                },
+                {
+                    $addFields: {
+                        finalScore: {
+                            $add: [
+                                {
+                                    $multiply: [
+                                        { $divide: ["$baseEngagement", { $pow: ["$ageInHours", CONFIG.gravityPower] }] },
+                                        "$personalizationMultiplier"
+                                    ]
+                                },
+                                "$jitter"
+                            ]
+                        }
+                    }
+                },
+                {
+                    $sort: {
+                        finalScore: -1,
+                        createdAt: -1 
+                    }
+                },
+                { $skip: skip },
+                { $limit: limit }
+            ];
+            
+            posts = await Post.aggregate(pipeline);
+        }
 
-        return addCorsHeaders(res);
+        const serializedPosts = posts.map((p) => ({ 
+            ...p, 
+            _id: p._id.toString(),
+            interests: p.interests || []
+        }));
 
-    } catch (err) {
-        console.error("GET Feed Error:", err);
-        const res = NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 });
-        return addCorsHeaders(res);
-    }
+        const res = NextResponse.json({ 
+            posts: serializedPosts, 
+            total, 
+            page, 
+            limit 
+        }, { status: 200 });
+
+        return addCorsHeaders(res);
+
+    } catch (err) {
+        console.error("GET Feed Error:", err);
+        return addCorsHeaders(NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 }));
+    }
 }
+
 // ----------------------
 // Helper Functions
 // ----------------------
-/**
- * Efficiently notifies all users about a new post using chunked broadcasting.
- */
 async function notifyAllMobileUsersAboutPost(newPost, authorName) {
-    // 1. Fetch only valid tokens (Not null and Not empty)
     const mobileUsers = await MobileUser.find(
         { pushToken: { $nin: [null, ""], $exists: true } },
         "pushToken"
     );
 
-    if (!mobileUsers.length) {
-        console.log("ℹ️ No users with valid push tokens found.");
-        return;
-    }
+    if (!mobileUsers.length) return;
 
-    // 2. Extract tokens into a flat array
     const allTokens = mobileUsers.map(user => user.pushToken);
-
-    // 3. Prepare the notification content
     const title = "📰 New post on Oreblogda";
-    const body = `${authorName} just posted: ${newPost.title.length > 50
-        ? newPost.title.slice(0, 50) + "…"
-        : newPost.title
-        }`;
-    const data = {
-        postId: newPost._id.toString(),
-        slug: newPost.slug
-    };
+    const body = `${authorName} just posted: ${newPost.title.length > 50 ? newPost.title.slice(0, 50) + "…" : newPost.title}`;
+    const data = { postId: newPost._id.toString(), slug: newPost.slug };
 
     try {
-        // 4. Use the bulk helper to handle chunking (100 at a time)
-        // This replaces the loop and prevents your server from timing out
         await sendMultiplePushNotifications(allTokens, title, body, data);
-        console.log(`✅ Bulk notification sent to ${allTokens.length} users.`);
     } catch (err) {
         console.error("❌ Bulk Push Notification failed:", err);
     }
 }
-
 
 function normalizePostContent(content) {
     if (!content || typeof content !== "string") return content;
@@ -332,20 +365,17 @@ export async function POST(req) {
 
     try {
         const body = await req.json(); 
-
         const token = req.cookies.get("token")?.value;
         const {
             title, message, 
-            mediaUrl, mediaType, // Old single fields
-            media,               // NEW: Array of {url, type}
+            mediaUrl, mediaType, 
+            media,              
             hasPoll,
             pollMultiple, pollOptions, category, fingerprint,
             rewardToken
         } = body;
 
-        // --- 🔹 COUNTRY DETECTION 🔹 ---
         let country = req.headers.get("x-user-country");
-
         if (!country || country === "Unknown") {
             const forwarded = req.headers.get("x-forwarded-for");
             const ip = forwarded ? forwarded.split(/, /)[0] : "127.0.0.1";
@@ -353,13 +383,10 @@ export async function POST(req) {
             country = geo ? geo.country : "Global";
         }
 
-        // --- EXTRACT CLAN ID EARLY ---
         const clanId = body.clanId || (category?.startsWith("Clan:") ? category.split(":")[2] : null);
-
         let user = null;
         let isMobile = false;
 
-        // --- STEP 1: AUTHENTICATION ---
         if (token) {
             try { user = verifyToken(token); } catch (err) { }
         }
@@ -372,26 +399,13 @@ export async function POST(req) {
             }
         }
 
-        if (!user) {
-            return addCorsHeaders(NextResponse.json({ message: "Unauthorized" }, { status: 401 }));
-        }
+        if (!user) return addCorsHeaders(NextResponse.json({ message: "Unauthorized" }, { status: 401 }));
 
-        // --- STEP 2: RATE LIMIT ---
-        const isRewarded = rewardToken === `rewarded_${fingerprint}`;
-        if (isMobile && !isRewarded) {
-            const last24Hours = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            const existingPost = await Post.findOne({
-                authorUserId: user.id,
-                createdAt: { $gte: last24Hours }
-            });
-        }
-
-        // --- STEP 3: AI MODERATION ---
         let finalStatus = isMobile ? "pending" : "approved";
         let rejectionReason = "";
         let expiresAt = null;
+        let aiInterests = [];
 
-        // Prepare primary media for AI check (Fallback to array first item if single field is missing)
         const primaryMediaUrl = mediaUrl || (media && media.length > 0 ? media[0].url : null);
         const primaryMediaType = mediaType || (media && media.length > 0 ? media[0].type : "image");
 
@@ -408,8 +422,9 @@ export async function POST(req) {
                 if (clanId) {
                     finalStatus = "approved";
                 } else {
-                    // AI checks the main media item
                     const ai = await runAIModerator(title, message, category, primaryMediaUrl, primaryMediaType);
+                    aiInterests = ai.interests || [];
+                    
                     if (ai.action === "approve") {
                         finalStatus = "approved";
                         rejectionReason = ai.reason;
@@ -427,12 +442,10 @@ export async function POST(req) {
 
         const newMessage = removeEmptyLines(normalizePostContent(message));
 
-        // --- STEP 4: UNIQUE SLUG GENERATION ---
         const authorPrefix = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
         let cleanedTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().replace(/\s+/g, '-');
-        if (cleanedTitle.length > 80) {
-            cleanedTitle = cleanedTitle.substring(0, 80).split('-').slice(0, -1).join('-');
-        }
+        if (cleanedTitle.length > 80) cleanedTitle = cleanedTitle.substring(0, 80).split('-').slice(0, -1).join('-');
+        
         let baseSlug = `${authorPrefix}-${cleanedTitle}`;
         if (cleanedTitle.length < 1) baseSlug = `${authorPrefix}-transmission`;
 
@@ -448,7 +461,6 @@ export async function POST(req) {
             }
         }
 
-        // --- STEP 5: SAVE POST ---
         const newPost = await Post.create({
             authorUserId: user.id,
             authorId: fingerprint,
@@ -456,11 +468,10 @@ export async function POST(req) {
             title,
             slug,
             message: newMessage,
-            // Sync single fields for backward compatibility
             mediaUrl: primaryMediaUrl,
             mediaType: primaryMediaType,
-            // Save the full array
             media: media || (primaryMediaUrl ? [{ url: primaryMediaUrl, type: primaryMediaType }] : []),
+            interests: aiInterests, 
             status: finalStatus,
             rejectionReason: rejectionReason || null,
             expiresAt: expiresAt || null,
@@ -473,23 +484,15 @@ export async function POST(req) {
             country: country
         });
 
-        if (finalStatus === "approved") {
-            if (newPost.clanId || newPost.category?.startsWith("Clan:")) {
-                try {
-                    await Clan.findOneAndUpdate(
-                        { tag: newPost.clanId },
-                        { $inc: { 'stats.totalPosts': 1 } }
-                    );
-                    await awardClanPoints(newPost, 50, 'create');
-                } catch (err) {
-                    console.error("Clan point/stats update failed:", err);
-                }
-            }
+        if (finalStatus === "approved" && (newPost.clanId || newPost.category?.startsWith("Clan:"))) {
+            try {
+                await Clan.findOneAndUpdate({ tag: newPost.clanId }, { $inc: { 'stats.totalPosts': 1 } });
+                await awardClanPoints(newPost, 50, 'create');
+            } catch (err) { console.error("Clan update failed:", err); }
         }
 
-        // --- STEP 6: NOTIFICATIONS ---
         if (finalStatus === "approved") {
-            if (!isMobile || fingerprint == "4bfe2b53-7591-462f-927e-68eedd7a6447" || fingerprint == "a85b3208-05a1-4712-b90f-c8c3517b4ea3" || fingerprint == "94a07be0-70d6-4880-8484-b590aa422d7c") {
+            if (!isMobile || ["4bfe2b53-7591-462f-927e-68eedd7a6447", "a85b3208-05a1-4712-b90f-c8c3517b4ea3", "94a07be0-70d6-4880-8484-b590aa422d7c"].includes(fingerprint)) {
                 try {
                     const subscribers = await Newsletter.find({}, "email");
                     if (subscribers.length > 0) {
@@ -514,49 +517,37 @@ export async function POST(req) {
                 try {
                     const clan = await Clan.findOne({ tag: clanId }).select("name");
                     const followers = await ClanFollower.find({ clanTag: clanId }).populate({
-                        path: 'userId',
-                        select: 'pushToken'
+                        path: 'userId', select: 'pushToken'
                     });
-                    const tokens = followers
-                        .map(f => f.userId?.pushToken)
-                        .filter(t => t && t.startsWith('ExponentPushToken'));
+                    const tokens = followers.map(f => f.userId?.pushToken).filter(t => t?.startsWith('ExponentPushToken'));
 
                     if (tokens.length > 0) {
                         await sendMultiplePushNotifications(
                             tokens,
                             `${clan?.name || clanId} Transmission 🚩`,
                             `${user.username} posted: ${title}`,
-                            {
-                                type: "open_post",
-                                postId: newPost._id.toString(),
-                                clanTag: clanId
-                            },
+                            { type: "open_post", postId: newPost._id.toString(), clanTag: clanId },
                             `clan_${clanId}`
                         );
                     }
-                } catch (err) {
-                    console.error("Clan notification error:", err);
-                }
+                } catch (err) { console.error("Clan notification error:", err); }
             }
         }
 
         if (finalStatus === "pending") {
             const adminTokens = ["ExponentPushToken[TkR7ucI2anWi3XJrALGr4T]"];
             for (const token of adminTokens) {
-                try {
-                    await sendPushNotification(token, "New post!", "A post is awaiting your approval.", { postId: newPost._id.toString() });
-                } catch (pErr) { }
+                try { await sendPushNotification(token, "New post!", "A post is awaiting your approval.", { postId: newPost._id.toString() }); } catch (pErr) { }
             }
             try {
                 const transporter = nodemailer.createTransport({
                     service: "gmail",
                     auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
                 });
-                const adminEmails = ["kayteedberserker@gmail.com", "fredrickokwu@gmail.com"];
                 const mailOptions = {
                     from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
                     to: "Admins",
-                    bcc: adminEmails,
+                    bcc: ["kayteedberserker@gmail.com", "fredrickokwu@gmail.com"],
                     subject: `📰 New Post Awaiting Approval`,
                     html: `View it <a href="${process.env.SITE_URL}/authordiary/approvalpage">here</a>.`
                 };
@@ -572,12 +563,7 @@ export async function POST(req) {
                         foundUser.pushToken,
                         "Post Rejected ⚠️",
                         `Your post "${title.slice(0, 20)}..." was not approved. Reason: ${rejectionReason}`,
-                        {
-                            type: "open_diary",
-                            status: "rejected",
-                            reason: rejectionReason,
-                            postId: newPost._id.toString()
-                        },
+                        { type: "open_diary", status: "rejected", reason: rejectionReason, postId: newPost._id.toString() },
                         `rejected_${newPost._id.toString()}`
                     );
                 }
