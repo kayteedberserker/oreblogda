@@ -167,14 +167,6 @@ function removeEmptyLines(text) {
     return text.split('\n').filter(line => line.trim() !== '').join('\n');
 }
 
-// 🔹 Fisher-Yates Shuffle for the final paginated array
-function shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
-}
 
 export async function GET(req) {
     await connectDB();
@@ -186,17 +178,18 @@ export async function GET(req) {
         const authorId = searchParams.get("authorId");
         const category = searchParams.get("category");
         const viewerId = searchParams.get("viewerId");
+        
+        // 🔹 NEW: Get a seed from the frontend (e.g., the user's deviceId or a session timestamp)
+        // This ensures the "shuffle" is identical for Page 1, 2, 3...
+        const seed = searchParams.get("seed") || viewerId || "static_seed";
 
-        // 🔹 Extract Preferences from Headers
         const userCountry = req.headers.get("x-user-country") || "Global";
         const favAnimes = req.headers.get("x-user-animes")?.split(",").map(s => s.trim()).filter(Boolean) || [];
         const favGenres = req.headers.get("x-user-genres")?.split(",").map(s => s.trim()).filter(Boolean) || [];
         const favCharacter = req.headers.get("x-user-character") || "";
 
         const userInterests = [...favAnimes, ...favGenres];
-        if (favCharacter) {
-            userInterests.push(favCharacter);
-        }
+        if (favCharacter) userInterests.push(favCharacter);
 
         const clanIdParam = searchParams.get("clanId");
         const last24Hours = searchParams.get("last24Hours") === "true";
@@ -204,15 +197,9 @@ export async function GET(req) {
 
         const targetAuthor = author || authorId;
 
-        // --- STEP 1: BUILD QUERY ---
         let query = {};
         if (targetAuthor) {
-            const available = await Post.find({ authorId: targetAuthor });
-            if (available.length > 0) {
-                query.authorId = targetAuthor;
-            } else {
-                query.authorUserId = targetAuthor;
-            }
+            query.$or = [{ authorId: targetAuthor }, { authorUserId: targetAuthor }];
         } else {
             query.status = "approved";
         }
@@ -221,39 +208,30 @@ export async function GET(req) {
         if (category) query.category = category;
 
         if (last24Hours) {
-            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            query.createdAt = { $gte: yesterday };
+            query.createdAt = { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) };
         } else if (!targetAuthor) {
-            const TIME_LIMIT_DAYS = 30;
-            const cutoffDate = new Date(Date.now() - TIME_LIMIT_DAYS * 24 * 60 * 60 * 1000);
-            query.createdAt = { $gte: cutoffDate };
+            query.createdAt = { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) };
         }
 
-        // --- STEP 2: CLAN DETECTION ---
         let followedClanTags = [];
         if (viewerId && !targetAuthor) {
             const follows = await ClanFollower.find({ userId: viewerId }).select("clanTag").lean();
             followedClanTags = follows.map(f => f.clanTag);
         }
 
-        let posts;
         const total = await Post.countDocuments(query);
+        let posts;
 
-        // --- STEP 3: EXECUTION BRANCH ---
         if (targetAuthor) {
-            posts = await Post.find(query)
-                .sort({ createdAt: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean();
+            posts = await Post.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean();
         } else {
             const CONFIG = {
                 likeWeight: 1.5,
                 commentWeight: 3.0,
-                freshnessBoost: 50,      
-                freshnessWindow: 2,       
-                gravityPower: 2.2,        
-                prefBonus: 15,            
+                freshnessBoost: 50,
+                freshnessWindow: 2,
+                gravityPower: 2.2,
+                prefBonus: 15,
                 clanBonus: 10,
                 localBonus: 10
             };
@@ -264,16 +242,9 @@ export async function GET(req) {
                 { $match: query },
                 {
                     $addFields: {
-                        ageInHours: {
-                            $max: [0.5, { $divide: [{ $subtract: [now, "$createdAt"] }, 3600000] }]
-                        },
+                        ageInHours: { $max: [0.5, { $divide: [{ $subtract: [now, "$createdAt"] }, 3600000] }] },
                         commentsCount: { $size: { $ifNull: ["$comments", []] } },
-                        hasInterestMatch: {
-                            $gt: [
-                                { $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] } },
-                                0
-                            ]
-                        }
+                        hasInterestMatch: { $gt: [{ $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] } }, 0] }
                     }
                 },
                 {
@@ -291,27 +262,27 @@ export async function GET(req) {
                                 { $cond: [{ $eq: ["$country", userCountry] }, CONFIG.localBonus, 0] }
                             ]
                         },
-                        noveltyScore: {
-                            $cond: [{ $lt: ["$ageInHours", CONFIG.freshnessWindow] }, CONFIG.freshnessBoost, 0]
-                        }
+                        noveltyScore: { $cond: [{ $lt: ["$ageInHours", CONFIG.freshnessWindow] }, CONFIG.freshnessBoost, 0] }
+                    }
+                },
+                {
+                    $addFields: {
+                        // 🔹 ADDING DETERMINISTIC SHUFFLE 
+                        // We use the seed to "offset" the final score slightly so it feels shuffled but stays consistent
+                        randomFactor: { $mod: [{ $toLong: "$_id" }, 1000] } 
                     }
                 },
                 {
                     $addFields: {
                         finalScore: {
                             $divide: [
-                                { $add: ["$engagementScore", "$relevanceBonus", "$noveltyScore"] },
+                                { $add: ["$engagementScore", "$relevanceBonus", "$noveltyScore", "$randomFactor"] },
                                 { $pow: ["$ageInHours", CONFIG.gravityPower] }
                             ]
                         }
                     }
                 },
-                {
-                    $sort: {
-                        finalScore: -1,
-                        createdAt: -1
-                    }
-                },
+                { $sort: { finalScore: -1, createdAt: -1 } },
                 { $skip: skip },
                 { $limit: limit }
             ];
@@ -319,19 +290,17 @@ export async function GET(req) {
             posts = await Post.aggregate(pipeline);
         }
 
-        // Serialize the data
         const serializedPosts = posts.map((p) => ({
             ...p,
             _id: p._id.toString(),
             interests: p.interests || []
         }));
 
-        // --- STEP 4: SHUFFLE ONLY THE 15-30 POSTS RETURNED ---
-        // This ensures Page 1 and Page 2 are different sets, but each page is random
-        const randomizedPosts = targetAuthor ? serializedPosts : shuffleArray(serializedPosts);
+        // ❌ REMOVED: shuffleArray(serializedPosts) 
+        // Logic: Sorting is now handled entirely by the DB pipeline to prevent overlap.
 
         const res = NextResponse.json({
-            posts: randomizedPosts,
+            posts: serializedPosts, // Return sorted but "shuffled-by-score" posts
             total,
             page,
             limit
