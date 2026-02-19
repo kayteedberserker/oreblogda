@@ -170,10 +170,6 @@ export async function GET(req) {
         const authorId = searchParams.get("authorId");
         const category = searchParams.get("category");
         const viewerId = searchParams.get("viewerId");
-        
-        // 🔹 SEED FOR STABLE RANDOMNESS
-        // This seed ensures that Page 1, Page 2, Page 3 all use the exact same math.
-        const seedParam = parseInt(searchParams.get("seed")) || 0;
 
         // 🔹 Extract Preferences from Headers
         const userCountry = req.headers.get("x-user-country") || "Global";
@@ -236,14 +232,14 @@ export async function GET(req) {
                 .lean();
         } else {
             const CONFIG = {
-                likeWeight: 1.5,
-                commentWeight: 3.0,
-                freshnessBoost: 50,      
-                freshnessWindow: 2,       
-                gravityPower: 2.2,        
-                prefBonus: 40,            
-                clanBonus: 20,            
-                localBonus: 15            
+                likeWeight: 2.0,          // Boosted weight for engagement
+                commentWeight: 4.0,       // Comments usually imply higher value
+                freshnessBoost: 30,       // Strong boost for new content
+                freshnessWindow: 3,       // Consider "new" for 3 hours
+                gravityPower: 1.5,        // Slightly lowered so personalization lasts longer
+                prefBonus: 50,            // High bonus for matched interests
+                clanBonus: 30,            // Strong bonus for clan posts
+                localBonus: 15
             };
 
             const now = new Date();
@@ -281,23 +277,14 @@ export async function GET(req) {
                         },
                         noveltyScore: {
                             $cond: [{ $lt: ["$ageInHours", CONFIG.freshnessWindow] }, CONFIG.freshnessBoost, 0]
-                        },
-                        // 🔹 DETERMINISTIC PSEUDO-RANDOMNESS
-                        // Converts Date to ms, adds the seed, modulo by 30 to get a stable 0-29 boost.
-                        // If the seed doesn't change, the boost stays exactly the same across pages.
-                        randomDbBoost: {
-                            $mod: [
-                                { $add: [{ $toLong: "$createdAt" }, seedParam] },
-                                30
-                            ]
-                        } 
+                        }
                     }
                 },
                 {
                     $addFields: {
                         finalScore: {
                             $divide: [
-                                { $add: ["$engagementScore", "$relevanceBonus", "$noveltyScore", "$randomDbBoost"] },
+                                { $add: ["$engagementScore", "$relevanceBonus", "$noveltyScore"] },
                                 { $pow: ["$ageInHours", CONFIG.gravityPower] }
                             ]
                         }
@@ -323,12 +310,10 @@ export async function GET(req) {
             interests: p.interests || []
         }));
 
-        // --- STEP 4: SHUFFLE ONLY THE 15-30 POSTS RETURNED ---
-        // This ensures Page 1 and Page 2 are different sets, but each page is random
-        const randomizedPosts = targetAuthor ? serializedPosts : shuffleArray(serializedPosts);
-
+        // --- STEP 4: RETURN DATA ---
+        // Shuffling removed as requested. Data is now purely rank-sorted for stability.
         const res = NextResponse.json({
-            posts: randomizedPosts,
+            posts: serializedPosts,
             total,
             page,
             limit
@@ -340,17 +325,6 @@ export async function GET(req) {
         console.error("GET Feed Error:", err);
         return addCorsHeaders(NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 }));
     }
-}
-
-// Ensure these functions are at the bottom of your file
-function shuffleArray(array) {
-    let currentIndex = array.length, randomIndex;
-    while (currentIndex !== 0) {
-        randomIndex = Math.floor(Math.random() * currentIndex);
-        currentIndex--;
-        [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
-    }
-    return array;
 }
 
 function addCorsHeaders(res) {
