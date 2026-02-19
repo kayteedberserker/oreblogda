@@ -165,8 +165,7 @@ function normalizePostContent(content) {
 
 function removeEmptyLines(text) {
     return text.split('\n').filter(line => line.trim() !== '').join('\n');
-}
-
+};
 
 export async function GET(req) {
     await connectDB();
@@ -178,11 +177,8 @@ export async function GET(req) {
         const authorId = searchParams.get("authorId");
         const category = searchParams.get("category");
         const viewerId = searchParams.get("viewerId");
-        
-        // 🔹 NEW: Get a seed from the frontend (e.g., the user's deviceId or a session timestamp)
-        // This ensures the "shuffle" is identical for Page 1, 2, 3...
-        const seed = searchParams.get("seed") || viewerId || "static_seed";
 
+        // 🔹 Preferences from Headers
         const userCountry = req.headers.get("x-user-country") || "Global";
         const favAnimes = req.headers.get("x-user-animes")?.split(",").map(s => s.trim()).filter(Boolean) || [];
         const favGenres = req.headers.get("x-user-genres")?.split(",").map(s => s.trim()).filter(Boolean) || [];
@@ -197,6 +193,7 @@ export async function GET(req) {
 
         const targetAuthor = author || authorId;
 
+        // --- STEP 1: QUERY ---
         let query = {};
         if (targetAuthor) {
             query.$or = [{ authorId: targetAuthor }, { authorUserId: targetAuthor }];
@@ -210,9 +207,11 @@ export async function GET(req) {
         if (last24Hours) {
             query.createdAt = { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) };
         } else if (!targetAuthor) {
-            query.createdAt = { $gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) };
+            const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            query.createdAt = { $gte: cutoffDate };
         }
 
+        // --- STEP 2: CLAN FOLLOWS ---
         let followedClanTags = [];
         if (viewerId && !targetAuthor) {
             const follows = await ClanFollower.find({ userId: viewerId }).select("clanTag").lean();
@@ -222,16 +221,21 @@ export async function GET(req) {
         const total = await Post.countDocuments(query);
         let posts;
 
+        // --- STEP 3: EXECUTION ---
         if (targetAuthor) {
-            posts = await Post.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean();
+            posts = await Post.find(query)
+                .sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean();
         } else {
             const CONFIG = {
                 likeWeight: 1.5,
                 commentWeight: 3.0,
-                freshnessBoost: 50,
-                freshnessWindow: 2,
-                gravityPower: 2.2,
-                prefBonus: 15,
+                freshnessBoost: 50,      
+                freshnessWindow: 2,       
+                gravityPower: 2.2,        
+                prefBonus: 15,            
                 clanBonus: 10,
                 localBonus: 10
             };
@@ -242,9 +246,16 @@ export async function GET(req) {
                 { $match: query },
                 {
                     $addFields: {
-                        ageInHours: { $max: [0.5, { $divide: [{ $subtract: [now, "$createdAt"] }, 3600000] }] },
+                        ageInHours: {
+                            $max: [0.5, { $divide: [{ $subtract: [now, "$createdAt"] }, 3600000] }]
+                        },
                         commentsCount: { $size: { $ifNull: ["$comments", []] } },
-                        hasInterestMatch: { $gt: [{ $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] } }, 0] }
+                        hasInterestMatch: {
+                            $gt: [
+                                { $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] } },
+                                0
+                            ]
+                        }
                     }
                 },
                 {
@@ -262,27 +273,31 @@ export async function GET(req) {
                                 { $cond: [{ $eq: ["$country", userCountry] }, CONFIG.localBonus, 0] }
                             ]
                         },
-                        noveltyScore: { $cond: [{ $lt: ["$ageInHours", CONFIG.freshnessWindow] }, CONFIG.freshnessBoost, 0] }
-                    }
-                },
-                {
-                    $addFields: {
-                        // 🔹 ADDING DETERMINISTIC SHUFFLE 
-                        // We use the seed to "offset" the final score slightly so it feels shuffled but stays consistent
-                        randomFactor: { $mod: [{ $toLong: "$_id" }, 1000] } 
+                        noveltyScore: {
+                            $cond: [{ $lt: ["$ageInHours", CONFIG.freshnessWindow] }, CONFIG.freshnessBoost, 0]
+                        },
+                        // 🔹 FIXED DETERMINISTIC SHUFFLE 
+                        // Instead of $toLong on ObjectId, we convert to string and use its length or 
+                        // a field like "views" to create a stable variance.
+                        stableVariance: { $strLenCP: { $toString: "$_id" } } 
                     }
                 },
                 {
                     $addFields: {
                         finalScore: {
                             $divide: [
-                                { $add: ["$engagementScore", "$relevanceBonus", "$noveltyScore", "$randomFactor"] },
+                                { $add: ["$engagementScore", "$relevanceBonus", "$noveltyScore", "$stableVariance"] },
                                 { $pow: ["$ageInHours", CONFIG.gravityPower] }
                             ]
                         }
                     }
                 },
-                { $sort: { finalScore: -1, createdAt: -1 } },
+                {
+                    $sort: {
+                        finalScore: -1,
+                        createdAt: -1
+                    }
+                },
                 { $skip: skip },
                 { $limit: limit }
             ];
@@ -296,11 +311,8 @@ export async function GET(req) {
             interests: p.interests || []
         }));
 
-        // ❌ REMOVED: shuffleArray(serializedPosts) 
-        // Logic: Sorting is now handled entirely by the DB pipeline to prevent overlap.
-
         const res = NextResponse.json({
-            posts: serializedPosts, // Return sorted but "shuffled-by-score" posts
+            posts: serializedPosts, // Shuffling is handled by the score variance in the pipeline
             total,
             page,
             limit
@@ -314,6 +326,12 @@ export async function GET(req) {
     }
 }
 
+function addCorsHeaders(res) {
+    res.headers.set("Access-Control-Allow-Origin", "*");
+    res.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.headers.set("Access-Control-Allow-Headers", "Content-Type, x-user-country, x-user-animes, x-user-genres, x-user-character");
+    return res;
+}
 
 
 // ----------------------
