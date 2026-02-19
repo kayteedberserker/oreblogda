@@ -167,7 +167,7 @@ function removeEmptyLines(text) {
     return text.split('\n').filter(line => line.trim() !== '').join('\n');
 }
 
-// 🔹 JavaScript Fisher-Yates Shuffle to randomize the final array
+// 🔹 Fisher-Yates Shuffle for the final paginated array
 function shuffleArray(array) {
     for (let i = array.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -187,13 +187,16 @@ export async function GET(req) {
         const category = searchParams.get("category");
         const viewerId = searchParams.get("viewerId");
 
+        // 🔹 Extract Preferences from Headers
         const userCountry = req.headers.get("x-user-country") || "Global";
         const favAnimes = req.headers.get("x-user-animes")?.split(",").map(s => s.trim()).filter(Boolean) || [];
         const favGenres = req.headers.get("x-user-genres")?.split(",").map(s => s.trim()).filter(Boolean) || [];
         const favCharacter = req.headers.get("x-user-character") || "";
 
         const userInterests = [...favAnimes, ...favGenres];
-        if (favCharacter) userInterests.push(favCharacter);
+        if (favCharacter) {
+            userInterests.push(favCharacter);
+        }
 
         const clanIdParam = searchParams.get("clanId");
         const last24Hours = searchParams.get("last24Hours") === "true";
@@ -221,7 +224,8 @@ export async function GET(req) {
             const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
             query.createdAt = { $gte: yesterday };
         } else if (!targetAuthor) {
-            const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            const TIME_LIMIT_DAYS = 30;
+            const cutoffDate = new Date(Date.now() - TIME_LIMIT_DAYS * 24 * 60 * 60 * 1000);
             query.createdAt = { $gte: cutoffDate };
         }
 
@@ -244,13 +248,14 @@ export async function GET(req) {
                 .lean();
         } else {
             const CONFIG = {
-                likeWeight: 1,
-                commentWeight: 2.0,
-                dayPriorityBoost: 100,
-                gravityPower: 2.5,
-                prefBonus: 20,
-                clanBonus: 15,
-                localBonus: 30
+                likeWeight: 1.5,
+                commentWeight: 3.0,
+                freshnessBoost: 50,      
+                freshnessWindow: 2,       
+                gravityPower: 2.2,        
+                prefBonus: 15,            
+                clanBonus: 10,
+                localBonus: 10
             };
 
             const now = new Date();
@@ -286,8 +291,8 @@ export async function GET(req) {
                                 { $cond: [{ $eq: ["$country", userCountry] }, CONFIG.localBonus, 0] }
                             ]
                         },
-                        dayPriority: {
-                            $cond: [{ $lt: ["$ageInHours", 24] }, CONFIG.dayPriorityBoost, 0]
+                        noveltyScore: {
+                            $cond: [{ $lt: ["$ageInHours", CONFIG.freshnessWindow] }, CONFIG.freshnessBoost, 0]
                         }
                     }
                 },
@@ -295,15 +300,18 @@ export async function GET(req) {
                     $addFields: {
                         finalScore: {
                             $divide: [
-                                { $add: ["$engagementScore", "$relevanceBonus", "$dayPriority"] },
+                                { $add: ["$engagementScore", "$relevanceBonus", "$noveltyScore"] },
                                 { $pow: ["$ageInHours", CONFIG.gravityPower] }
                             ]
                         }
                     }
                 },
-                // 🔹 SORT BY RANKING FIRST
-                { $sort: { finalScore: -1, createdAt: -1 } },
-                // 🔹 THEN PAGINATE (Grab the exact 15-30 posts for this page)
+                {
+                    $sort: {
+                        finalScore: -1,
+                        createdAt: -1
+                    }
+                },
                 { $skip: skip },
                 { $limit: limit }
             ];
@@ -311,16 +319,16 @@ export async function GET(req) {
             posts = await Post.aggregate(pipeline);
         }
 
-        // --- STEP 4: SHUFFLE ONLY THE PAGINATED RESULTS ---
-        // We serialize and then shuffle the current page's results
+        // Serialize the data
         const serializedPosts = posts.map((p) => ({
             ...p,
             _id: p._id.toString(),
             interests: p.interests || []
         }));
 
-        // Shuffle the 15-30 posts so their order is different on every refresh
-        const randomizedPosts = shuffleArray(serializedPosts);
+        // --- STEP 4: SHUFFLE ONLY THE 15-30 POSTS RETURNED ---
+        // This ensures Page 1 and Page 2 are different sets, but each page is random
+        const randomizedPosts = targetAuthor ? serializedPosts : shuffleArray(serializedPosts);
 
         const res = NextResponse.json({
             posts: randomizedPosts,
@@ -336,6 +344,7 @@ export async function GET(req) {
         return addCorsHeaders(NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 }));
     }
 }
+
 
 
 // ----------------------
