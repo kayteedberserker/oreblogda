@@ -170,15 +170,21 @@ export async function GET(req) {
         const authorId = searchParams.get("authorId");
         const category = searchParams.get("category");
         const viewerId = searchParams.get("viewerId");
+        
+        // 🔹 SEED FOR STABLE RANDOMNESS
+        // This seed ensures that Page 1, Page 2, Page 3 all use the exact same math.
+        const seedParam = parseInt(searchParams.get("seed")) || 0;
 
-        // 🔹 Preferences from Headers
+        // 🔹 Extract Preferences from Headers
         const userCountry = req.headers.get("x-user-country") || "Global";
         const favAnimes = req.headers.get("x-user-animes")?.split(",").map(s => s.trim()).filter(Boolean) || [];
         const favGenres = req.headers.get("x-user-genres")?.split(",").map(s => s.trim()).filter(Boolean) || [];
         const favCharacter = req.headers.get("x-user-character") || "";
 
         const userInterests = [...favAnimes, ...favGenres];
-        if (favCharacter) userInterests.push(favCharacter);
+        if (favCharacter) {
+            userInterests.push(favCharacter);
+        }
 
         const clanIdParam = searchParams.get("clanId");
         const last24Hours = searchParams.get("last24Hours") === "true";
@@ -186,10 +192,15 @@ export async function GET(req) {
 
         const targetAuthor = author || authorId;
 
-        // --- STEP 1: QUERY ---
+        // --- STEP 1: BUILD QUERY ---
         let query = {};
         if (targetAuthor) {
-            query.$or = [{ authorId: targetAuthor }, { authorUserId: targetAuthor }];
+            const available = await Post.find({ authorId: targetAuthor });
+            if (available.length > 0) {
+                query.authorId = targetAuthor;
+            } else {
+                query.authorUserId = targetAuthor;
+            }
         } else {
             query.status = "approved";
         }
@@ -198,23 +209,25 @@ export async function GET(req) {
         if (category) query.category = category;
 
         if (last24Hours) {
-            query.createdAt = { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) };
+            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+            query.createdAt = { $gte: yesterday };
         } else if (!targetAuthor) {
-            const cutoffDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+            const TIME_LIMIT_DAYS = 30;
+            const cutoffDate = new Date(Date.now() - TIME_LIMIT_DAYS * 24 * 60 * 60 * 1000);
             query.createdAt = { $gte: cutoffDate };
         }
 
-        // --- STEP 2: CLAN FOLLOWS ---
+        // --- STEP 2: CLAN DETECTION ---
         let followedClanTags = [];
         if (viewerId && !targetAuthor) {
             const follows = await ClanFollower.find({ userId: viewerId }).select("clanTag").lean();
             followedClanTags = follows.map(f => f.clanTag);
         }
 
-        const total = await Post.countDocuments(query);
         let posts;
+        const total = await Post.countDocuments(query);
 
-        // --- STEP 3: EXECUTION ---
+        // --- STEP 3: EXECUTION BRANCH ---
         if (targetAuthor) {
             posts = await Post.find(query)
                 .sort({ createdAt: -1 })
@@ -228,9 +241,9 @@ export async function GET(req) {
                 freshnessBoost: 50,      
                 freshnessWindow: 2,       
                 gravityPower: 2.2,        
-                prefBonus: 15,            
-                clanBonus: 10,
-                localBonus: 10
+                prefBonus: 40,            
+                clanBonus: 20,            
+                localBonus: 15            
             };
 
             const now = new Date();
@@ -269,17 +282,22 @@ export async function GET(req) {
                         noveltyScore: {
                             $cond: [{ $lt: ["$ageInHours", CONFIG.freshnessWindow] }, CONFIG.freshnessBoost, 0]
                         },
-                        // 🔹 FIXED DETERMINISTIC SHUFFLE 
-                        // Instead of $toLong on ObjectId, we convert to string and use its length or 
-                        // a field like "views" to create a stable variance.
-                        stableVariance: { $strLenCP: { $toString: "$_id" } } 
+                        // 🔹 DETERMINISTIC PSEUDO-RANDOMNESS
+                        // Converts Date to ms, adds the seed, modulo by 30 to get a stable 0-29 boost.
+                        // If the seed doesn't change, the boost stays exactly the same across pages.
+                        randomDbBoost: {
+                            $mod: [
+                                { $add: [{ $toLong: "$createdAt" }, seedParam] },
+                                30
+                            ]
+                        } 
                     }
                 },
                 {
                     $addFields: {
                         finalScore: {
                             $divide: [
-                                { $add: ["$engagementScore", "$relevanceBonus", "$noveltyScore", "$stableVariance"] },
+                                { $add: ["$engagementScore", "$relevanceBonus", "$noveltyScore", "$randomDbBoost"] },
                                 { $pow: ["$ageInHours", CONFIG.gravityPower] }
                             ]
                         }
@@ -298,14 +316,19 @@ export async function GET(req) {
             posts = await Post.aggregate(pipeline);
         }
 
+        // Serialize the data
         const serializedPosts = posts.map((p) => ({
             ...p,
             _id: p._id.toString(),
             interests: p.interests || []
         }));
 
+        // --- STEP 4: SHUFFLE ONLY THE 15-30 POSTS RETURNED ---
+        // This ensures Page 1 and Page 2 are different sets, but each page is random
+        const randomizedPosts = targetAuthor ? serializedPosts : shuffleArray(serializedPosts);
+
         const res = NextResponse.json({
-            posts: serializedPosts, // Shuffling is handled by the score variance in the pipeline
+            posts: randomizedPosts,
             total,
             page,
             limit
@@ -317,6 +340,17 @@ export async function GET(req) {
         console.error("GET Feed Error:", err);
         return addCorsHeaders(NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 }));
     }
+}
+
+// Ensure these functions are at the bottom of your file
+function shuffleArray(array) {
+    let currentIndex = array.length, randomIndex;
+    while (currentIndex !== 0) {
+        randomIndex = Math.floor(Math.random() * currentIndex);
+        currentIndex--;
+        [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+    }
+    return array;
 }
 
 function addCorsHeaders(res) {
