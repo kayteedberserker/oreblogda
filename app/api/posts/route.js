@@ -239,13 +239,13 @@ export async function GET(req) {
                 .lean();
         } else {
             const CONFIG = {
-                likeWeight: 1.5,
-                commentWeight: 3.0,
-                dayPriorityBoost: 200,    // Massive boost for posts < 24h
+                likeWeight: 1,
+                commentWeight: 2.0,
+                dayPriorityBoost: 100,    // Massive boost for posts < 24h
                 gravityPower: 2.5,        // Increased to sink old posts much faster
                 prefBonus: 20,
                 clanBonus: 15,
-                localBonus: 10,
+                localBonus: 30,
                 shuffleIntensity: 50      // Randomness spread for the top group
             };
 
