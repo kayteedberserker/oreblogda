@@ -109,13 +109,6 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
 
 // Helper to add CORS headers
 // ----------------------
-function addCorsHeaders(response) {
-    response.headers.set("Access-Control-Allow-Origin", "*");
-    response.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS,PATCH");
-    response.headers.set("Access-Control-Allow-Headers", "Content-Type,Authorization,x-oreblogda-signature");
-    return response;
-}
-
 // ----------------------
 // Handle preflight OPTIONS request
 // ----------------------
