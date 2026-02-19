@@ -23,7 +23,7 @@ import { awardClanPoints } from "@/app/lib/clanService";
 // ----------------------
 // AI MODERATOR & AUTO-TAGGER
 // ----------------------
-async function runAIModerator(title, message, category, mediaUrl, mediaType) {
+async function runAIModerator(title, message, clanId, category, mediaUrl, mediaType) {
     const API_KEY = process.env.GEMINI_API_KEY;
     if (!API_KEY) return { action: "flag", reason: "AI Config Error", interests: [] };
 
@@ -38,12 +38,13 @@ async function runAIModerator(title, message, category, mediaUrl, mediaType) {
             TASK: Moderate and Tag this 'Diary Entry' for 'Oreblogda' (Anime/Gaming blog).
             
             MODERATION RULES: 
+            - If the post includes clanId and it's not null, the action should always be approved no matter what the post is or if any rules are breached. 
             - Reject real-life nudity or extreme real-life gore.
             - Allow animated/stylized gore (anime style).
             - Allow adult jokes and "Ecchi" content, especially if the category is 'Memes'.
             - Reject content completely unrelated to anime, gaming, or nerd culture.
 
-            STRICT CATEGORY RULES:
+            STRICT CATEGORY RULES for posts without clanId/clanId is null:
             - 'News' is strictly for Anime/Gaming News.
             - 'Polls' is strictly for posts with polls.
             - 'Memes' is strictly for memes.
@@ -123,9 +124,48 @@ export async function OPTIONS() {
     return addCorsHeaders(res);
 }
 
+
+                
 // ----------------------
-// GET: fetch all posts (Strictly Updated for Preference & Discovery Ranking)
-// ---------------------- 
+// Helper Functions
+// ----------------------
+async function notifyAllMobileUsersAboutPost(newPost, authorName) {
+    const mobileUsers = await MobileUser.find(
+        { pushToken: { $nin: [null, ""], $exists: true } },
+        "pushToken"
+    );
+
+    if (!mobileUsers.length) return;
+
+    const allTokens = mobileUsers.map(user => user.pushToken);
+    const title = "📰 New post on Oreblogda";
+    const body = `${authorName} just posted: ${newPost.title.length > 50 ? newPost.title.slice(0, 50) + "…" : newPost.title}`;
+    const data = { postId: newPost._id.toString(), slug: newPost.slug };
+
+    try {
+        await sendMultiplePushNotifications(allTokens, title, body, data);
+    } catch (err) {
+        console.error("❌ Bulk Push Notification failed:", err);
+    }
+}
+
+function normalizePostContent(content) {
+    if (!content || typeof content !== "string") return content;
+    let cleaned = content;
+    cleaned = cleaned.replace(/\s*(\[(h|li|section|br|\/h|\/li|\/section)\])\s*/g, "$1");
+    cleaned = cleaned.replace(/\s*([hls]\([^)]+\)|br\(\))\s*/g, "$1");
+    cleaned = cleaned.replace(/([hls]\()\s+/g, "$1");
+    cleaned = cleaned.replace(/\s+(\))/g, "$1");
+    cleaned = cleaned.replace(/\s*(\[source="[^"]*" text:[^\]]*\])\s*/g, "$1");
+    cleaned = cleaned.replace(/\s*(link\([^)]+\)-text\([^)]+\))\s*/g, "$1");
+    cleaned = cleaned.replace(/(link\(|text\()\s+/g, "$1");
+    cleaned = cleaned.replace(/\s+(\))/g, "$1");
+    return cleaned;
+}
+
+function removeEmptyLines(text) {
+    return text.split('\n').filter(line => line.trim() !== '').join('\n');
+}
 export async function GET(req) {
     await connectDB();
     try {
@@ -137,14 +177,12 @@ export async function GET(req) {
         const category = searchParams.get("category");
         const viewerId = searchParams.get("viewerId");
         
-        // 🔹 Extract Preferences from Headers (Sent by your Mobile App)
+        // 🔹 Extract Preferences from Headers
         const userCountry = req.headers.get("x-user-country") || "Global";
         const favAnimes = req.headers.get("x-user-animes")?.split(",").map(s => s.trim()).filter(Boolean) || []; 
         const favGenres = req.headers.get("x-user-genres")?.split(",").map(s => s.trim()).filter(Boolean) || [];
         const favCharacter = req.headers.get("x-user-character") || "";
         
-        // 🔹 Combine preferences for a broader match against the AI "interests" array
-        // We now include the favorite character in this list
         const userInterests = [...favAnimes, ...favGenres];
         if (favCharacter) {
             userInterests.push(favCharacter);
@@ -158,7 +196,6 @@ export async function GET(req) {
 
         // --- STEP 1: BUILD QUERY ---
         let query = {};
-
         if (targetAuthor) {
             const available = await Post.find({ authorId: targetAuthor });
             if (available.length > 0) {
@@ -201,27 +238,27 @@ export async function GET(req) {
                 .lean();
         } else {
             const CONFIG = {
-                likeWeight: 2,
-                commentWeight: 1.5,
-                noveltyBoostScore: 20,
-                noveltyWindowHours: 4,
-                gravityPower: 1.8,
-                prefMultiplier: 3.0,
-                clanMultiplier: 2.0,
-                localMultiplier: 1.2
+                likeWeight: 1.5,
+                commentWeight: 3.0,
+                freshnessBoost: 50,      // High initial boost for new posts
+                freshnessWindow: 2,       // Only for posts under 2 hours
+                gravityPower: 2.2,        // Stronger decay (1.8 -> 2.2) to kill old posts
+                prefBonus: 15,            // Additive bonus instead of multiplier
+                clanBonus: 10,
+                localBonus: 5
             };
 
             const now = new Date();
-            const JITTER_SEED = 104729; 
 
             const pipeline = [
                 { $match: query }, 
                 {
                     $addFields: {
                         ageInHours: {
-                            $max: [1, { $divide: [{ $subtract: [now, "$createdAt"] }, 3600000] }]
+                            $max: [0.5, { $divide: [{ $subtract: [now, "$createdAt"] }, 3600000] }]
                         },
                         commentsCount: { $size: { $ifNull: ["$comments", []] } },
+                        // Check for matches
                         hasInterestMatch: {
                             $gt: [
                                 { $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] } },
@@ -232,52 +269,39 @@ export async function GET(req) {
                 },
                 {
                     $addFields: {
-                        baseEngagement: {
+                        // 1. Calculate Engagement Base
+                        engagementScore: {
                             $add: [
                                 { $multiply: [{ $ifNull: ["$likeCount", 0] }, CONFIG.likeWeight] }, 
-                                { $multiply: ["$commentsCount", CONFIG.commentWeight] }, 
-                                { 
-                                    $cond: [
-                                        { 
-                                            $and: [
-                                                { $lt: ["$ageInHours", CONFIG.noveltyWindowHours] },
-                                                { $eq: [{ $add: ["$likeCount", "$commentsCount"] }, 0] }
-                                            ] 
-                                        }, 
-                                        CONFIG.noveltyBoostScore, 0
-                                    ] 
-                                }
+                                { $multiply: ["$commentsCount", CONFIG.commentWeight] }
                             ]
                         },
-                        personalizationMultiplier: {
-                            $let: {
-                                vars: {
-                                    prefMatch: { $cond: ["$hasInterestMatch", CONFIG.prefMultiplier, 1] },
-                                    clanMatch: { $cond: [{ $in: ["$clanId", followedClanTags] }, CONFIG.clanMultiplier, 1] },
-                                    localMatch: { $cond: [{ $eq: ["$country", userCountry] }, CONFIG.localMultiplier, 1] }
-                                },
-                                in: { $multiply: ["$$prefMatch", "$$clanMatch", "$$localMatch"] }
-                            }
-                        },
-                        jitter: {
-                            $divide: [
-                                { $mod: [{ $toLong: "$createdAt" }, JITTER_SEED] },
-                                JITTER_SEED
+                        // 2. Calculate Relevance Bonuses (Additive)
+                        relevanceBonus: {
+                            $add: [
+                                { $cond: ["$hasInterestMatch", CONFIG.prefBonus, 0] },
+                                { $cond: [{ $in: ["$clanId", followedClanTags] }, CONFIG.clanBonus, 0] },
+                                { $cond: [{ $eq: ["$country", userCountry] }, CONFIG.localBonus, 0] }
                             ]
+                        },
+                        // 3. New Post Signal
+                        noveltyScore: {
+                            $cond: [{ $lt: ["$ageInHours", CONFIG.freshnessWindow] }, CONFIG.freshnessBoost, 0]
                         }
                     }
                 },
                 {
                     $addFields: {
+                        // Formula: ((Engagement + Relevance + Novelty) / (Age^Gravity)) + RandomJitter
                         finalScore: {
                             $add: [
                                 {
-                                    $multiply: [
-                                        { $divide: ["$baseEngagement", { $pow: ["$ageInHours", CONFIG.gravityPower] }] },
-                                        "$personalizationMultiplier"
+                                    $divide: [
+                                        { $add: ["$engagementScore", "$relevanceBonus", "$noveltyScore"] },
+                                        { $pow: ["$ageInHours", CONFIG.gravityPower] }
                                     ]
                                 },
-                                "$jitter"
+                                { $multiply: [{ $rand: {} }, 5] } // 🔹 TRUE RANDOMNESS: Shuffles order on every request
                             ]
                         }
                     }
@@ -314,47 +338,6 @@ export async function GET(req) {
         console.error("GET Feed Error:", err);
         return addCorsHeaders(NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 }));
     }
-}
-
-// ----------------------
-// Helper Functions
-// ----------------------
-async function notifyAllMobileUsersAboutPost(newPost, authorName) {
-    const mobileUsers = await MobileUser.find(
-        { pushToken: { $nin: [null, ""], $exists: true } },
-        "pushToken"
-    );
-
-    if (!mobileUsers.length) return;
-
-    const allTokens = mobileUsers.map(user => user.pushToken);
-    const title = "📰 New post on Oreblogda";
-    const body = `${authorName} just posted: ${newPost.title.length > 50 ? newPost.title.slice(0, 50) + "…" : newPost.title}`;
-    const data = { postId: newPost._id.toString(), slug: newPost.slug };
-
-    try {
-        await sendMultiplePushNotifications(allTokens, title, body, data);
-    } catch (err) {
-        console.error("❌ Bulk Push Notification failed:", err);
-    }
-}
-
-function normalizePostContent(content) {
-    if (!content || typeof content !== "string") return content;
-    let cleaned = content;
-    cleaned = cleaned.replace(/\s*(\[(h|li|section|br|\/h|\/li|\/section)\])\s*/g, "$1");
-    cleaned = cleaned.replace(/\s*([hls]\([^)]+\)|br\(\))\s*/g, "$1");
-    cleaned = cleaned.replace(/([hls]\()\s+/g, "$1");
-    cleaned = cleaned.replace(/\s+(\))/g, "$1");
-    cleaned = cleaned.replace(/\s*(\[source="[^"]*" text:[^\]]*\])\s*/g, "$1");
-    cleaned = cleaned.replace(/\s*(link\([^)]+\)-text\([^)]+\))\s*/g, "$1");
-    cleaned = cleaned.replace(/(link\(|text\()\s+/g, "$1");
-    cleaned = cleaned.replace(/\s+(\))/g, "$1");
-    return cleaned;
-}
-
-function removeEmptyLines(text) {
-    return text.split('\n').filter(line => line.trim() !== '').join('\n');
 }
 
 // ----------------------
@@ -419,10 +402,7 @@ export async function POST(req) {
                 rejectionReason = "Polls require at least 2 options.";
                 expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
             } else {
-                if (clanId) {
-                    finalStatus = "approved";
-                } else {
-                    const ai = await runAIModerator(title, message, category, primaryMediaUrl, primaryMediaType);
+                const ai = await runAIModerator(title, message, clanId, category, primaryMediaUrl, primaryMediaType);
                     aiInterests = ai.interests || [];
                     
                     if (ai.action === "approve") {
@@ -436,7 +416,6 @@ export async function POST(req) {
                         finalStatus = "pending";
                         rejectionReason = ai.reason;
                     }
-                }
             }
         }
 
