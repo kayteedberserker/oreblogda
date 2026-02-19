@@ -38,7 +38,7 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
             TASK: Moderate and Tag this 'Diary Entry' for 'Oreblogda' (Anime/Gaming blog).
             
             MODERATION RULES: 
-            - If the post includes clanId and it's not null, the action should always be approved no matter what the post is or if any rules are breached. 
+            - If the post includes ${clanId} and it's not null, the action should always be approved no matter what the post is or if any rules are breached. 
             - Reject real-life nudity or extreme real-life gore.
             - Allow animated/stylized gore (anime style).
             - Allow adult jokes and "Ecchi" content, especially if the category is 'Memes'.
@@ -125,7 +125,7 @@ export async function OPTIONS() {
 }
 
 
-                
+
 // ----------------------
 // Helper Functions
 // ----------------------
@@ -166,6 +166,7 @@ function normalizePostContent(content) {
 function removeEmptyLines(text) {
     return text.split('\n').filter(line => line.trim() !== '').join('\n');
 }
+
 export async function GET(req) {
     await connectDB();
     try {
@@ -176,13 +177,13 @@ export async function GET(req) {
         const authorId = searchParams.get("authorId");
         const category = searchParams.get("category");
         const viewerId = searchParams.get("viewerId");
-        
+
         // 🔹 Extract Preferences from Headers
         const userCountry = req.headers.get("x-user-country") || "Global";
-        const favAnimes = req.headers.get("x-user-animes")?.split(",").map(s => s.trim()).filter(Boolean) || []; 
+        const favAnimes = req.headers.get("x-user-animes")?.split(",").map(s => s.trim()).filter(Boolean) || [];
         const favGenres = req.headers.get("x-user-genres")?.split(",").map(s => s.trim()).filter(Boolean) || [];
         const favCharacter = req.headers.get("x-user-character") || "";
-        
+
         const userInterests = [...favAnimes, ...favGenres];
         if (favCharacter) {
             userInterests.push(favCharacter);
@@ -208,7 +209,7 @@ export async function GET(req) {
         }
 
         if (clanIdParam) query.clanId = clanIdParam;
-        if (category) query.category = category; 
+        if (category) query.category = category;
 
         if (last24Hours) {
             const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -251,7 +252,7 @@ export async function GET(req) {
             const now = new Date();
 
             const pipeline = [
-                { $match: query }, 
+                { $match: query },
                 {
                     $addFields: {
                         ageInHours: {
@@ -272,7 +273,7 @@ export async function GET(req) {
                         // 1. Calculate Engagement Base
                         engagementScore: {
                             $add: [
-                                { $multiply: [{ $ifNull: ["$likeCount", 0] }, CONFIG.likeWeight] }, 
+                                { $multiply: [{ $ifNull: ["$likeCount", 0] }, CONFIG.likeWeight] },
                                 { $multiply: ["$commentsCount", CONFIG.commentWeight] }
                             ]
                         },
@@ -309,27 +310,27 @@ export async function GET(req) {
                 {
                     $sort: {
                         finalScore: -1,
-                        createdAt: -1 
+                        createdAt: -1
                     }
                 },
                 { $skip: skip },
                 { $limit: limit }
             ];
-            
+
             posts = await Post.aggregate(pipeline);
         }
 
-        const serializedPosts = posts.map((p) => ({ 
-            ...p, 
+        const serializedPosts = posts.map((p) => ({
+            ...p,
             _id: p._id.toString(),
             interests: p.interests || []
         }));
 
-        const res = NextResponse.json({ 
-            posts: serializedPosts, 
-            total, 
-            page, 
-            limit 
+        const res = NextResponse.json({
+            posts: serializedPosts,
+            total,
+            page,
+            limit
         }, { status: 200 });
 
         return addCorsHeaders(res);
@@ -347,12 +348,12 @@ export async function POST(req) {
     await connectDB();
 
     try {
-        const body = await req.json(); 
+        const body = await req.json();
         const token = req.cookies.get("token")?.value;
         const {
-            title, message, 
-            mediaUrl, mediaType, 
-            media,              
+            title, message,
+            mediaUrl, mediaType,
+            media,
             hasPoll,
             pollMultiple, pollOptions, category, fingerprint,
             rewardToken
@@ -403,19 +404,19 @@ export async function POST(req) {
                 expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
             } else {
                 const ai = await runAIModerator(title, message, clanId, category, primaryMediaUrl, primaryMediaType);
-                    aiInterests = ai.interests || [];
-                    
-                    if (ai.action === "approve") {
-                        finalStatus = "approved";
-                        rejectionReason = ai.reason;
-                    } else if (ai.action === "reject") {
-                        finalStatus = "rejected";
-                        rejectionReason = ai.reason;
-                        expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
-                    } else {
-                        finalStatus = "pending";
-                        rejectionReason = ai.reason;
-                    }
+                aiInterests = ai.interests || [];
+
+                if (ai.action === "approve") {
+                    finalStatus = "approved";
+                    rejectionReason = ai.reason;
+                } else if (ai.action === "reject") {
+                    finalStatus = "rejected";
+                    rejectionReason = ai.reason;
+                    expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
+                } else {
+                    finalStatus = "pending";
+                    rejectionReason = ai.reason;
+                }
             }
         }
 
@@ -424,7 +425,7 @@ export async function POST(req) {
         const authorPrefix = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
         let cleanedTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().replace(/\s+/g, '-');
         if (cleanedTitle.length > 80) cleanedTitle = cleanedTitle.substring(0, 80).split('-').slice(0, -1).join('-');
-        
+
         let baseSlug = `${authorPrefix}-${cleanedTitle}`;
         if (cleanedTitle.length < 1) baseSlug = `${authorPrefix}-transmission`;
 
@@ -450,7 +451,7 @@ export async function POST(req) {
             mediaUrl: primaryMediaUrl,
             mediaType: primaryMediaType,
             media: media || (primaryMediaUrl ? [{ url: primaryMediaUrl, type: primaryMediaType }] : []),
-            interests: aiInterests, 
+            interests: aiInterests,
             status: finalStatus,
             rejectionReason: rejectionReason || null,
             expiresAt: expiresAt || null,
