@@ -241,12 +241,12 @@ export async function GET(req) {
             const CONFIG = {
                 likeWeight: 1.5,
                 commentWeight: 3.0,
-                freshnessBoost: 50,      // High initial boost for new posts
-                freshnessWindow: 2,       // Only for posts under 2 hours
-                gravityPower: 2.2,        // Stronger decay (1.8 -> 2.2) to kill old posts
-                prefBonus: 15,            // Additive bonus instead of multiplier
-                clanBonus: 10,
-                localBonus: 5
+                dayPriorityBoost: 200,    // Massive boost for posts < 24h
+                gravityPower: 2.5,        // Increased to sink old posts much faster
+                prefBonus: 20,
+                clanBonus: 15,
+                localBonus: 10,
+                shuffleIntensity: 50      // Randomness spread for the top group
             };
 
             const now = new Date();
@@ -259,7 +259,6 @@ export async function GET(req) {
                             $max: [0.5, { $divide: [{ $subtract: [now, "$createdAt"] }, 3600000] }]
                         },
                         commentsCount: { $size: { $ifNull: ["$comments", []] } },
-                        // Check for matches
                         hasInterestMatch: {
                             $gt: [
                                 { $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] } },
@@ -270,14 +269,14 @@ export async function GET(req) {
                 },
                 {
                     $addFields: {
-                        // 1. Calculate Engagement Base
+                        // 1. Engagement (Likes/Comments)
                         engagementScore: {
                             $add: [
                                 { $multiply: [{ $ifNull: ["$likeCount", 0] }, CONFIG.likeWeight] },
                                 { $multiply: ["$commentsCount", CONFIG.commentWeight] }
                             ]
                         },
-                        // 2. Calculate Relevance Bonuses (Additive)
+                        // 2. Personalization Bonuses
                         relevanceBonus: {
                             $add: [
                                 { $cond: ["$hasInterestMatch", CONFIG.prefBonus, 0] },
@@ -285,34 +284,37 @@ export async function GET(req) {
                                 { $cond: [{ $eq: ["$country", userCountry] }, CONFIG.localBonus, 0] }
                             ]
                         },
-                        // 3. New Post Signal
-                        noveltyScore: {
-                            $cond: [{ $lt: ["$ageInHours", CONFIG.freshnessWindow] }, CONFIG.freshnessBoost, 0]
+                        // 3. 24h Absolute Priority
+                        dayPriority: {
+                            $cond: [{ $lt: ["$ageInHours", 24] }, CONFIG.dayPriorityBoost, 0]
                         }
                     }
                 },
                 {
                     $addFields: {
-                        // Formula: ((Engagement + Relevance + Novelty) / (Age^Gravity)) + RandomJitter
-                        finalScore: {
-                            $add: [
-                                {
-                                    $divide: [
-                                        { $add: ["$engagementScore", "$relevanceBonus", "$noveltyScore"] },
-                                        { $pow: ["$ageInHours", CONFIG.gravityPower] }
-                                    ]
-                                },
-                                { $multiply: [{ $rand: {} }, 5] } // 🔹 TRUE RANDOMNESS: Shuffles order on every request
+                        // Combined rank before randomization
+                        baseRank: {
+                            $divide: [
+                                { $add: ["$engagementScore", "$relevanceBonus", "$dayPriority"] },
+                                { $pow: ["$ageInHours", CONFIG.gravityPower] }
                             ]
                         }
                     }
                 },
+                // --- STEP 4: THE SHUFFLE ---
+                // Sort by the base rank first to find the "best" posts
+                { $sort: { baseRank: -1 } },
+                // Take a large enough pool to shuffle (e.g., top 100)
+                { $limit: 100 },
                 {
-                    $sort: {
-                        finalScore: -1,
-                        createdAt: -1
+                    $addFields: {
+                        // Apply high-variance randomness so similar ranking posts swap places every refresh
+                        shuffledScore: { 
+                            $add: ["$baseRank", { $multiply: [{ $rand: {} }, CONFIG.shuffleIntensity] }] 
+                        }
                     }
                 },
+                { $sort: { shuffledScore: -1 } },
                 { $skip: skip },
                 { $limit: limit }
             ];
@@ -340,7 +342,6 @@ export async function GET(req) {
         return addCorsHeaders(NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 }));
     }
 }
-
 // ----------------------
 // POST: create a new post
 // ----------------------
