@@ -121,7 +121,7 @@ export async function PATCH(req, { params }) {
                     { $inc: { weeklyAura: 2 } }
                 );
                 // 🛡️ CLAN: Only if the post is a Clan Post
-                await awardClanPoints(post, 2);
+                await awardClanPoints(post, 10);
                 const msg = `Someone voted on your post: "${post.title.substring(0, 15)}..."`;
                 await Notification.create({ recipientId: post.authorId, senderName: "Someone", type: "like", postId: post._id, message: msg });
                 const author = await MobileUser.findOne({ deviceId: post.authorId });
