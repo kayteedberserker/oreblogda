@@ -48,6 +48,7 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
             - 'News' is strictly for Anime/Gaming News.
             - 'Polls' is strictly for posts with polls.
             - 'Fanart' category should also be lax and can be used for general content without much context as long as there is an image/video attached to the post and the media is anime/gaming related, which doesn't fit the meme category. 
+            - CRITICAL: If there is no media attached to a post with category FANART the post should be rejected, the purpose of the fan art category is for art in means of pictures or videos so if that isn't available the post isn't approved
             - 'Memes' is strictly for memes.
             - 'Gaming' is strictly for anything gaming-related.
             - 'Review' is a general category for anime/gaming related content.
