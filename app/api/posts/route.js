@@ -47,6 +47,7 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
             STRICT CATEGORY RULES for posts without clanId/clanId is null:
             - 'News' is strictly for Anime/Gaming News.
             - 'Polls' is strictly for posts with polls.
+            - 'Fanart' category should also be lax and can be used for general content without much context as long as there is an image/video attached to the post and the media is anime/gaming related, which doesn't fit the meme category. 
             - 'Memes' is strictly for memes.
             - 'Gaming' is strictly for anything gaming-related.
             - 'Review' is a general category for anime/gaming related content.
