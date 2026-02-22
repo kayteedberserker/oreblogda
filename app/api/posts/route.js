@@ -48,7 +48,7 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
             - 'News' is strictly for Anime/Gaming News.
             - 'Polls' is strictly for posts with polls.
             - 'Fanart' category should also be lax and can be used for general content without much context as long as there is an image/video attached to the post and the media is anime/gaming related, which doesn't fit the meme category. 
-            - CRITICAL: If there is no media attached to a post with category FANART the post should be rejected, the purpose of the fan art category is for art in means of pictures or videos so if that isn't available the post isn't approved
+            - CRITICAL: If there is no ${mediaUrl} or if ${mediaUrl} is an empty array or null attached to a post with category FANART the post should be rejected, the purpose of the fan art category is for art in means of pictures or videos so if that isn't available the post isn't approved
             - 'Memes' is strictly for memes.
             - 'Gaming' is strictly for anything gaming-related.
             - 'Review' is a general category for anime/gaming related content.
@@ -468,7 +468,7 @@ export async function POST(req) {
         }
 
         if (finalStatus === "approved") {
-            if (!isMobile || ["4bfe2b53-7591-462f-927e-68eedd7a6447", "a85b3208-05a1-4712-b90f-c8c3517b4ea3", "94a07be0-70d6-4880-8484-b590aa422d7c"].includes(fingerprint)) {
+            if (!isMobile) {
                 try {
                     const subscribers = await Newsletter.find({}, "email");
                     if (subscribers.length > 0) {
@@ -496,8 +496,10 @@ export async function POST(req) {
                         path: 'userId', select: 'pushToken'
                     });
                     const tokens = followers.map(f => f.userId?.pushToken).filter(t => t?.startsWith('ExponentPushToken'));
+                    console.log(tokens) 
 
                     if (tokens.length > 0) {
+                        console.log("trying to send notifications for clan") 
                         await sendMultiplePushNotifications(
                             tokens,
                             `${clan?.name || clanId} Transmission 🚩`,
