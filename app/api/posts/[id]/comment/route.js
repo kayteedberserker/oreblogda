@@ -106,16 +106,16 @@ export async function POST(req, { params }) {
     };
 
     if (mobileUserId) {
-      await MobileUser.updateOne({ _id: mobileUserId }, { $inc: { weeklyAura: 1 } });
-      await awardClanPoints(post, 1, 'comment');
+      await MobileUser.updateOne({ _id: mobileUserId }, { $inc: { weeklyAura: 5 } });
+      await awardClanPoints(post, 10, 'comment');
     }
 
     if (!parentCommentId) {
       post.comments.unshift(newComment);
       immediateRecipientId = post.authorUserId;
       if (post.authorUserId && post.authorUserId.toString() !== mobileUserId?.toString()) {
-        await MobileUser.updateOne({ _id: post.authorUserId }, { $inc: { weeklyAura: 3 } });
-        await awardClanPoints(post, 3, 'comment');
+        await MobileUser.updateOne({ _id: post.authorUserId }, { $inc: { weeklyAura: 10 } });
+        await awardClanPoints(post, 20, 'comment');
       }
     } else {
       immediateRecipientId = findAndReply(post.comments);
@@ -123,8 +123,8 @@ export async function POST(req, { params }) {
       post.markModified("comments");
 
       if (immediateRecipientId.toString() !== mobileUserId?.toString()) {
-        await MobileUser.updateOne({ _id: immediateRecipientId }, { $inc: { weeklyAura: 3 } });
-        await awardClanPoints(post, 2, 'comment');
+        await MobileUser.updateOne({ _id: immediateRecipientId }, { $inc: { weeklyAura: 10 } });
+        await awardClanPoints(post, 20, 'comment');
       }
     }
 
