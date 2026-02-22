@@ -144,6 +144,11 @@ async function auraReset() {
 
 async function weeklyClanReset() {
     const rankThresholds = [0, 5000, 20000, 50000, 100000, 300000];
+    
+    // 🔹 Define fixed decay amounts based on the clan's current rank
+    // Index 0 = Rank 1, Index 5 = Rank 6
+    const decayAmounts = [200, 500, 1000, 2000, 5000, 10000, 30000]; 
+
     const rankedClans = await Clan.find({}).sort({ currentWeeklyPoints: -1 });
     const mostDiscussedClan = await Clan.findOne({}).sort({ "stats.comments": -1 });
     const weekEnding = new Date();
@@ -154,13 +159,21 @@ async function weeklyClanReset() {
     for (let i = 0; i < rankedClans.length; i++) {
       const clan = rankedClans[i];
       const position = i + 1;
+      const currentRank = clan.rank || 1; // Get existing rank before decay
       
       let setFields = {};
       let pushFields = {};
       let incFields = {};
       let badgesToAdd = [];
 
-      const decayedPoints = Math.floor((clan.totalPoints || 0) * 0.9);
+      // 🔹 NEW DECAY LOGIC: Fixed amount based on rank
+      const decayValue = decayAmounts[currentRank - 1] || 0;
+      let decayedPoints = (clan.totalPoints || 0) - decayValue;
+      
+      // Prevent points from going below 0
+      if (decayedPoints < 0) decayedPoints = 0;
+
+      // Calculate NEW rank based on points after fixed decay
       let newRank = 1;
       for (let r = rankThresholds.length - 1; r >= 0; r--) {
         if (decayedPoints >= rankThresholds[r]) {
@@ -168,6 +181,7 @@ async function weeklyClanReset() {
           break;
         }
       }
+      
       setFields.totalPoints = decayedPoints;
       setFields.rank = newRank;
 
@@ -221,6 +235,7 @@ async function weeklyClanReset() {
       await Clan.updateOne({ _id: clan._id }, finalUpdate);
     }
 }
+
 
 // --- MAIN HANDLER ---
 
