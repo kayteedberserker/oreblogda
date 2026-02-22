@@ -167,11 +167,11 @@ export async function PATCH(req, { params }) {
             if (updatedPost.authorId !== fingerprint) {
                 await MobileUser.updateOne(
                     { deviceId: updatedPost.authorId },
-                    { $inc: { weeklyAura: 2 } }
+                    { $inc: { weeklyAura: 5 } }
                 );
 
                 // One-Shot and stats logic
-                await awardClanPoints(updatedPost, 2, 'like');
+                await awardClanPoints(updatedPost, 10, 'like');
 
                 // 3. Handle Notifications
                 const msg = `Someone liked your post: "${updatedPost.title.substring(0, 15)}..."`;
@@ -230,10 +230,10 @@ export async function PATCH(req, { params }) {
             if (updatedPost && updatedPost.authorId !== fingerprint) {
                 await MobileUser.updateOne(
                     { deviceId: updatedPost.authorId },
-                    { $inc: { weeklyAura: 5 } }
+                    { $inc: { weeklyAura: 10 } }
                 );
                 // 🛡️ CLAN: Only if the post is a Clan Post
-                await awardClanPoints(updatedPost, 5, 'share');
+                await awardClanPoints(updatedPost, 20, 'share');
             }
 
             return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
@@ -279,15 +279,15 @@ export async function PATCH(req, { params }) {
 
                     if (updatedPost) {
                         // ✨ AURA LOGIC: +1 Aura for every 50 unique views
-                        if (updatedPost.views % 50 === 0) {
+                        if (updatedPost.views % 5 === 0) {
                             await MobileUser.updateOne(
                                 { deviceId: updatedPost.authorId },
-                                { $inc: { weeklyAura: 1 } }
+                                { $inc: { weeklyAura: 5 } }
                             );
 
                             // 🛡️ CLAN: Points for views
                             // We pass 'view' as type to update clan stats
-                            await awardClanPoints(updatedPost, 10, 'view');
+                            await awardClanPoints(updatedPost, 20, 'view');
                         }
                         return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
                     }
