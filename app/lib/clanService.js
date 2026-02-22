@@ -18,7 +18,7 @@ export async function awardClanPoints(post, actionPoints, type = null) {
 
     // Increment the specific stats based on your ClanModel schema
     if (type === 'like') incQuery['stats.likes'] = 1;
-    if (type === 'view') incQuery['stats.views'] = 1;
+    if (type === 'view') incQuery['stats.views'] = 5;
     if (type === 'comment') incQuery['stats.comments'] = 1;
     if (type === 'share') incQuery['stats.shares'] = 1;
 
