@@ -25,8 +25,8 @@ export async function GET(req) {
         tag: clan.tag,
         rank: clan.rank || 1,
         totalPoints: clan.totalPoints || 0,
-        followerCount: clan.followerCount || 0,
-        currentWeeklyPoints: clan.currentWeeklyPoints || 0,
+        followerCount: clan?.followerCount || 0,
+        currentWeeklyPoints: clan?.currentWeeklyPoints || 0,
         badgeCount: clan.badges?.length || 0,
         country: clan.country || "Global"
       }));
