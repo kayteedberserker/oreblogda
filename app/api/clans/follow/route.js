@@ -18,6 +18,7 @@ export async function POST(req) {
         const userId = user._id;
 
         // Fetch Clan details for role verification
+        console.log(clanTag) 
         const clan = await Clan.findOne({ tag: clanTag });
         if (!clan) {
             return NextResponse.json({ message: "Clan not found" }, { status: 404 });
