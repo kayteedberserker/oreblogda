@@ -29,6 +29,7 @@ export async function GET(req) {
         badgeCount: clan.badges?.length || 0,
         country: clan.country || "Global"
       }));
+      console.log(formattedClans) 
 
       // Sort logic for clans
       formattedClans.sort((a, b) => {
