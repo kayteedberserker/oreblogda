@@ -17,6 +17,7 @@ export async function GET(req) {
 
     if (category === "clans") {
       const clans = await Clan.find({});
+      console.log(clans) 
       
       const formattedClans = clans.map(clan => ({
         clanId: clan._id,
