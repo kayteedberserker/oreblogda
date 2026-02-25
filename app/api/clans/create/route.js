@@ -102,8 +102,8 @@ export async function POST(req) {
         });
 
         // 4. Requirements Configuration
-        const MIN_POSTS = 50;
-        const MIN_STREAK = 10;
+        const MIN_POSTS = 25;
+        const MIN_STREAK = 5;
         const userStreak = user.lastStreak || 0;
 
         if (actualPostCount < MIN_POSTS || userStreak < MIN_STREAK) {

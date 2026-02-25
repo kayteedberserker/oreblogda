@@ -35,11 +35,11 @@ export default async function connectDB() {
      * This limits THIS SPECIFIC instance. 
      * Note: Vercel may spin up multiple instances (Lambdas) simultaneously.
      */
-    maxPoolSize: 1,       
+    maxPoolSize: 3,       
     minPoolSize: 1,
     /* * IDLE CLEANUP: 60 seconds.
      */
-    maxIdleTimeMS: 60000, 
+    maxIdleTimeMS: 180000, 
     serverSelectionTimeoutMS: 10000,
     socketTimeoutMS: 20000,
     family: 4

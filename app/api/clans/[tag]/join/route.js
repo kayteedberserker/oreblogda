@@ -1,4 +1,5 @@
 import connectDB from "@/app/lib/mongodb";
+import { sendPushNotification } from "@/app/lib/pushNotifications";
 import Clan from "@/app/models/ClanModel";
 import MobileUser from "@/app/models/MobileUserModel";
 import { NextResponse } from "next/server";
@@ -49,6 +50,16 @@ export async function POST(req, { params }) {
             username: username || user.username, 
             appliedAt: new Date() 
         });
+        const leader = await MobileUser.findById(targetClan.leader)
+        const noti = await sendPushNotification(
+            leader?.pushToken,
+            "New Clan Join Request",
+            `${username || user.username} has requested to join your clan [${targetClan.name}]!`,
+            {  
+              type: "screen", 
+              page: "clanprofile"
+            },
+        )
         
         await targetClan.save();
 
