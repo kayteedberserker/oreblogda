@@ -97,11 +97,11 @@ export async function PATCH(req, { params }) {
                 
                 if (badgeItem) {
                     badgeItem.expiresAt = clan.verifiedUntil;
-                    badgeItem.name = itemName || "Verified Badge";
+                    badgeItem.name = "Verified Badge";
                 } else {
                     clan.specialInventory.push({
                         itemId: itemId,
-                        name: itemName || "Verified Badge",
+                        name: "Verified Badge",
                         category: "BADGE",
                         isEquipped: true,
                         acquiredAt: new Date(),

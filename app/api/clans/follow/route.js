@@ -18,7 +18,6 @@ export async function POST(req) {
         const userId = user._id;
 
         // Fetch Clan details for role verification
-        console.log(clanTag) 
         const clan = await Clan.findOne({ tag: clanTag });
         if (!clan) {
             return NextResponse.json({ message: "Clan not found" }, { status: 404 });
@@ -28,7 +27,7 @@ export async function POST(req) {
             // Check if already following to prevent index errors
             const existing = await ClanFollower.findOne({ clanTag, userId });
             if (existing) {
-                return NextResponse.json({ message: "Already following" }, { status: 419 });
+                return NextResponse.json({ message: "Already following this clan" }, { status: 419 });
             }
 
             // Create follower record

@@ -24,12 +24,13 @@ export async function GET(req) {
         tag: clan.tag,
         rank: clan.rank || 1,
         totalPoints: clan.totalPoints || 0,
-        followerCount: clan.followerCount || 0,
-        currentWeeklyPoints: clan.currentWeeklyPoints || 0,
+        followerCount: clan?.followerCount || 0,
+        currentWeeklyPoints: clan?.currentWeeklyPoints || 0,
         badgeCount: clan.badges?.length || 0,
         country: clan.country || "Global"
       }));
-
+      console.log(formattedClans);
+      
       // Sort logic for clans
       formattedClans.sort((a, b) => {
         if (type === "followers") return b.followerCount - a.followerCount;
@@ -62,7 +63,7 @@ export async function GET(req) {
       .map((user) => ({
           ...user._doc,
           postCount: postCountMap[user._id.toString()] || 0,
-          streak: user.consecutiveStreak || user.lastStreak || 0 
+          streak: user.lastStreak || 0 
       }))
       .filter((u) => u.postCount > 0);
 
@@ -71,7 +72,6 @@ export async function GET(req) {
       if (type === "aura") return (b.weeklyAura || 0) - (a.weeklyAura || 0);
       return b.postCount - a.postCount;
     });
-
     return NextResponse.json({
       category,
       type,
