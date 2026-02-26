@@ -64,7 +64,7 @@ export async function GET(req) {
       .map((user) => ({
           ...user._doc,
           postCount: postCountMap[user._id.toString()] || 0,
-          streak: user.consecutiveStreak || user.lastStreak || 0 
+          streak: user.lastStreak || 0 
       }))
       .filter((u) => u.postCount > 0);
 
