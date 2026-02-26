@@ -17,6 +17,7 @@ export async function GET(req) {
 
     if (category === "clans") {
       const clans = await Clan.find({});
+      console.log(clans) 
       
       const formattedClans = clans.map(clan => ({
         clanId: clan._id,
@@ -29,6 +30,7 @@ export async function GET(req) {
         badgeCount: clan.badges?.length || 0,
         country: clan.country || "Global"
       }));
+
       // Sort logic for clans
       formattedClans.sort((a, b) => {
         if (type === "followers") return b.followerCount - a.followerCount;

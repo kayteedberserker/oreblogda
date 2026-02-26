@@ -54,6 +54,7 @@ export async function POST(req) {
           referrer.invitedUsers.push({ username: username, date: new Date() });
           referrer.referralCount = (referrer.referralCount || 0) + 1;
           referrer.weeklyAura = (referrer.weeklyAura || 0) + 20;
+          referrer.coins = (referrer.coins || 0) + 50;
           referrer.doubleStreakUntil = boostExpiry;
           await referrer.save();
 
@@ -85,6 +86,7 @@ export async function POST(req) {
         country: detectedCountry,
         referralCode: myNewReferralCode,
         referredBy: finalReferrer,
+        coins: 50,
         referralCount: 0,
         weeklyAura: auraBonus,
         doubleStreakUntil: boostDate,
