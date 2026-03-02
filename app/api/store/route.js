@@ -101,14 +101,14 @@ const CLAN_CATALOG = {
       visualData: {
         icon: 'person-add',
         color: '#10b981',
-        svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 21V19C16 17.9391 15.5786 16.9217 14.8284 16.1716C14.0783 15.4214 13.0609 15 12 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="7" r="4" stroke="currentColor" stroke-width="2"/><line x1="20" y1="8" x2="20" y2="14" stroke="#10b981" stroke-width="2" stroke-linecap="round"/><line x1="17" y1="11" x2="23" y2="11" stroke="#10b981" stroke-width="2" stroke-linecap="round"/></svg>`
+        svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M16 21V19C16 17.9391 15.5786 16.9217 14.8284 16.1716C14.0783 15.4214 13.0609 15H5C3.93913 15 2.92172 15.4214 2.17157 16.1716C1.42143 16.9217 1 17.9391 1 19V21" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><circle cx="8.5" cy="7" r="4" stroke="currentColor" stroke-width="2"/><line x1="20" y1="8" x2="20" y2="14" stroke="#10b981" stroke-width="2" stroke-linecap="round"/><line x1="17" y1="11" x2="23" y2="11" stroke="#10b981" stroke-width="2" stroke-linecap="round"/></svg>`
       }
     }
   ],
   themes: [
     {
       id: 'ninja_way',
-      label: 'The Ninja Way',
+      label: 'The Will of Fire',
       iconsvg: `<svg xmlns="http://www.w3.org/2000/svg" width="237" height="212" viewBox="0 0 237 212" version="1.1">
   <defs>
     <filter id="finalFireGlow" x="-20%" y="-20%" width="140%" height="140%">
@@ -136,6 +136,30 @@ const CLAN_CATALOG = {
   <animateTransform attributeName="transform" type="scale" values="1;1.005;1" dur="4s" repeatCount="indefinite" transform-origin="center" additive="sum" />
 </svg>`,
       items: [] 
+    },
+    {
+      id: 'yin_yang',
+      label: 'Yin and Yang',
+      iconsvg: `<svg xmlns="http://www.w3.org/2000/svg" width="225" height="225" viewBox="0 0 225 225" version="1.1">
+  <defs>
+    <filter id="blueAnimatedGlow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="3" result="blur"/>
+      <feFlood flood-color="#0055ff" result="color"/>
+      <feComposite in="color" in2="blur" operator="in" result="glow"/>
+      
+      <feMerge>
+        <feMergeNode in="glow"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+      
+      <animate attributeName="stdDeviation" values="3;6;3" dur="2s" repeatCount="indefinite" />
+    </filter>
+  </defs>
+
+  <g filter="url(#blueAnimatedGlow)">
+    <path d="M 93 34.043 C 65.246 41.194, 43.577 62.044, 34.843 90 C 32.823 96.466, 32.500 99.569, 32.500 112.500 C 32.500 125.431, 32.823 128.534, 34.843 135 C 43.301 162.073, 62.927 181.699, 90 190.157 C 96.466 192.177, 99.569 192.500, 112.500 192.500 C 125.431 192.500, 128.534 192.177, 135 190.157 C 162.073 181.699, 181.699 162.073, 190.157 135 C 192.177 128.534, 192.500 125.431, 192.500 112.500 C 192.500 99.569, 192.177 96.466, 190.157 90 C 181.363 61.851, 159.599 41.037, 131.590 33.990 C 120.949 31.313, 103.502 31.337, 93 34.043 M 96.358 37.548 C 66.099 44.188, 42.393 68.975, 36.981 99.633 C 35.448 108.314, 36.159 124.081, 38.462 132.500 C 42.422 146.977, 52.682 162.613, 64.223 171.759 C 70.700 176.892, 79.682 182.256, 83.914 183.519 C 86.041 184.153, 85.880 183.778, 82.564 180.370 C 65.591 162.922, 67.892 133.716, 87.399 118.988 C 94.406 113.698, 101.642 111.239, 113.372 110.161 C 129.198 108.706, 139.897 101.740, 145.943 88.956 C 152.603 74.875, 150.279 59.778, 139.679 48.260 C 134.455 42.584, 129.809 39.615, 122.972 37.584 C 116.590 35.689, 104.905 35.673, 96.358 37.548 M 107.452 62.406 C 103.301 64.214, 101 68.078, 101 73.242 C 101 78.179, 102.863 81.361, 107.011 83.506 C 112.320 86.251, 119.046 84.628, 122.439 79.783 C 124.506 76.833, 124.428 69.583, 122.296 66.328 C 120.547 63.660, 115.453 60.969, 112.282 61.039 C 111.302 61.061, 109.129 61.676, 107.452 62.406 M 105.095 142.574 C 100.804 146.184, 99.348 151.503, 101.342 156.276 C 103.130 160.555, 108.141 163.991, 112.602 163.996 C 120.105 164.005, 126.304 155.480, 123.959 148.376 C 121.304 140.332, 111.385 137.281, 105.095 142.574 Z" stroke="none" fill="#0c0c0c" fill-rule="evenodd"/>
+  </g>
+</svg>`
     }
   ]
 };
