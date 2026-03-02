@@ -52,7 +52,7 @@ const CLAN_CATALOG = {
       visualData: {
         glowColor: '#ef4444',
         tier: 'standard',
-        svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 3.86L12 2L13.71 3.86L16.25 3.51L17.33 5.82L19.78 6.55L19.74 9.1L21.49 10.95L20.25 13.2L21 15.65L18.81 17.07L18.15 19.52L15.73 20L13.91 21.75L12 21L10.09 21.75L8.27 20L5.85 19.52L5.19 17.07L3 15.65L3.75 13.2L2.51 10.95L4.26 9.1L4.22 6.55L6.67 5.82L7.75 3.51L10.29 3.86Z" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 12L11 14L15 10" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
+        svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 3.86L12 2L13.71 3.86L16.25 3.51L17.33 5.82L19.78 6.55L19.74 9.1L21.49 10.95L20.25 13.2L21 15.65L18.81 17.07L18.15 19.52L15.73 20L13.91 21.75L12 21L10.09 21.75L8.27 20L5.85 19.52L5.19 17.07L3 15.65L3.75 13.2L2.51 10.95L4.26 9.1L4.22 6.55L6.67 5.82L7.75 3.51L10.29 3.86Z" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 12L11 14L15 10" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
     
     },
     {
@@ -64,7 +64,7 @@ const CLAN_CATALOG = {
       visualData: {
         glowColor: '#ef4444',
         tier: 'standard',
-        svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 3.86L12 2L13.71 3.86L16.25 3.51L17.33 5.82L19.78 6.55L19.74 9.1L21.49 10.95L20.25 13.2L21 15.65L18.81 17.07L18.15 19.52L15.73 20L13.91 21.75L12 21L10.09 21.75L8.27 20L5.85 19.52L5.19 17.07L3 15.65L3.75 13.2L2.51 10.95L4.26 9.1L4.22 6.55L6.67 5.82L7.75 3.51L10.29 3.86Z" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 12L11 14L15 10" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
+        svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 3.86L12 2L13.71 3.86L16.25 3.51L17.33 5.82L19.78 6.55L19.74 9.1L21.49 10.95L20.25 13.2L21 15.65L18.81 17.07L18.15 19.52L15.73 20L13.91 21.75L12 21L10.09 21.75L8.27 20L5.85 19.52L5.19 17.07L3 15.65L3.75 13.2L2.51 10.95L4.26 9.1L4.22 6.55L6.67 5.82L7.75 3.51L10.29 3.86Z" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 12L11 14L15 10" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
     },
     // --- VERIFIED BADGES (PREMIUM - GOLD) ---
     {
@@ -76,7 +76,7 @@ const CLAN_CATALOG = {
       visualData: {
         glowColor: '#facc15',
         tier: 'premium',
-        svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 3.86L12 2L13.71 3.86L16.25 3.51L17.33 5.82L19.78 6.55L19.74 9.1L21.49 10.95L20.25 13.2L21 15.65L18.81 17.07L18.15 19.52L15.73 20L13.91 21.75L12 21L10.09 21.75L8.27 20L5.85 19.52L5.19 17.07L3 15.65L3.75 13.2L2.51 10.95L4.26 9.1L4.22 6.55L6.67 5.82L7.75 3.51L10.29 3.86Z" fill="#facc15" fill-opacity="0.3" stroke="#facc15" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 12L11 14L15 10" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
+        svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 3.86L12 2L13.71 3.86L16.25 3.51L17.33 5.82L19.78 6.55L19.74 9.1L21.49 10.95L20.25 13.2L21 15.65L18.81 17.07L18.15 19.52L15.73 20L13.91 21.75L12 21L10.09 21.75L8.27 20L5.85 19.52L5.19 17.07L3 15.65L3.75 13.2L2.51 10.95L4.26 9.1L4.22 6.55L6.67 5.82L7.75 3.51L10.29 3.86Z" fill="#facc15" fill-opacity="0.3" stroke="#facc15" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 12L11 14L15 10" stroke="#facc15" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
     },
     {
       id: 'verified_premium_30d',
@@ -87,7 +87,7 @@ const CLAN_CATALOG = {
       visualData: {
         glowColor: '#facc15',
         tier: 'premium',
-        svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 3.86L12 2L13.71 3.86L16.25 3.51L17.33 5.82L19.78 6.55L19.74 9.1L21.49 10.95L20.25 13.2L21 15.65L18.81 17.07L18.15 19.52L15.73 20L13.91 21.75L12 21L10.09 21.75L8.27 20L5.85 19.52L5.19 17.07L3 15.65L3.75 13.2L2.51 10.95L4.26 9.1L4.22 6.55L6.67 5.82L7.75 3.51L10.29 3.86Z" fill="#facc15" fill-opacity="0.3" stroke="#facc15" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 12L11 14L15 10" stroke="#000" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
+        svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 3.86L12 2L13.71 3.86L16.25 3.51L17.33 5.82L19.78 6.55L19.74 9.1L21.49 10.95L20.25 13.2L21 15.65L18.81 17.07L18.15 19.52L15.73 20L13.91 21.75L12 21L10.09 21.75L8.27 20L5.85 19.52L5.19 17.07L3 15.65L3.75 13.2L2.51 10.95L4.26 9.1L4.22 6.55L6.67 5.82L7.75 3.51L10.29 3.86Z" fill="#facc15" fill-opacity="0.3" stroke="#facc15" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M9 12L11 14L15 10" stroke="#facc15" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`}
     },
     // --- CLAN UPGRADES ---
     {
