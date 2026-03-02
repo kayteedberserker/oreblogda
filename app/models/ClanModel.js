@@ -1,13 +1,31 @@
 import mongoose from 'mongoose';
 import MobileUser from './MobileUserModel';
+
 const InventoryItemSchema = new mongoose.Schema({
-    itemId: { type: String, required: true },
-    name: { type: String, required: true },
-    category: { type: String, enum: ['FRAME', 'THEME', 'BADGE', 'EFFECT', 'FUNCTIONAL'], required: true },
-    isEquipped: { type: Boolean, default: false },
-    acquiredAt: { type: Date, default: Date.now },
-    expiresAt: { type: Date, default: null }, // null = permanent
+  itemId: { type: String, required: true },
+  name: { type: String, required: true },
+  category: { 
+    type: String,
+    required: true 
+  },
+  // 🎨 Updated to store advanced animation and color properties
+  visualConfig: {
+    svgCode: { type: String }, // The raw <svg>...</svg> string
+    primaryColor: { type: String },
+    secondaryColor: { type: String, default: null }, // For dual-color animations like 'triple'
+    animationType: { 
+      type: String,
+      default: "singleSnake" 
+    },
+    duration: { type: Number, default: 3000 }, // Animation speed in ms
+    snakeLength: { type: Number, default: 120 }, // length of the dash
+    isAnimated: { type: Boolean, default: false }
+  },
+  isEquipped: { type: Boolean, default: false },
+  acquiredAt: { type: Date, default: Date.now },
+  expiresAt: { type: Date, default: null },
 });
+
 const ClanSchema = new mongoose.Schema({
     name: { type: String, required: true },
     tag: { type: String, required: true, unique: true, uppercase: true },
@@ -83,8 +101,10 @@ const ClanSchema = new mongoose.Schema({
         default: null
     },
     bountyExpiry: { type: Date },
-    // Add these to your ClanSchema in ClanModel.js
+    
+    // Inventory & Customization
     specialInventory: [InventoryItemSchema], // Permanent items like "Red Cloud Theme"
+    
     // Quick-access for UI rendering (what is currently active)
     activeCustomizations: {
         frame: { type: String, default: null },
@@ -105,5 +125,3 @@ const ClanSchema = new mongoose.Schema({
 ClanSchema.index({ isInWar: 1, hasBounty: 1, rank: 1 });
 
 export default mongoose.models.Clan || mongoose.model('Clan', ClanSchema);
-
-

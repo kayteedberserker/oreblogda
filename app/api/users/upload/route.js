@@ -17,7 +17,9 @@ export async function PUT(req) {
     const userId = formData.get("userId");
     const fingerprint = formData.get("fingerprint");
     const description = formData.get("description");
-    const username = formData.get("username"); // 👈 Catch the name change
+    const username = formData.get("username"); 
+    const preferencesRaw = formData.get("preferences"); 
+    const inventoryRaw = formData.get("inventory"); // 🆕 Added to capture equipment changes
     const file = formData.get("file");
 
     console.log("--- Profile Update Start ---");
@@ -48,8 +50,40 @@ export async function PUT(req) {
       return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
+    // 🔹 Initialize Update Object
+    let updateFields = {
+      username: username || user.username,
+      description: description ?? user.description,
+    };
+
+    // 🔹 Handle Preferences
+    if (preferencesRaw) {
+      try {
+        const parsed = JSON.parse(preferencesRaw);
+        updateFields.preferences = {
+          favAnimes: parsed.favAnimes || user.preferences?.favAnimes || [],
+          favCharacter: parsed.favCharacter || user.preferences?.favCharacter || "",
+          favGenres: parsed.favGenres || user.preferences?.favGenres || []
+        };
+        console.log("🧠 Neural Prefs Synced:", updateFields.preferences);
+      } catch (pErr) {
+        console.error("Preference Parse Error:", pErr);
+      }
+    }
+
+    // 🔹 Handle Inventory / Equipment Sync
+    if (inventoryRaw) {
+      try {
+        const parsedInventory = JSON.parse(inventoryRaw);
+        // Syncing to inventory field in DB
+        updateFields.inventory = parsedInventory;
+        console.log("🎒 Inventory Equipment Synced");
+      } catch (iErr) {
+        console.error("Inventory Parse Error:", iErr);
+      }
+    }
+
     // 2. Cloudinary Processing (Images)
-    let profilePicUpdate = null;
     const hasValidFile = file && typeof file === 'object' && (file.size > 0 || file.name);
 
     if (hasValidFile) {
@@ -76,24 +110,20 @@ export async function PUT(req) {
         ).end(buffer);
       });
 
-      profilePicUpdate = {
+      updateFields.profilePic = {
         url: uploadRes.secure_url,
         public_id: uploadRes.public_id,
       };
     }
 
-    // 3. Unified Update
+    // 3. Unified Update using $set to ensure nested objects are overwritten correctly
     const updatedUser = await SelectedModel.findByIdAndUpdate(
       user._id,
-      {
-        username: username || user.username, // 👈 Directly update without uniqueness check
-        description: description ?? user.description,
-        ...(profilePicUpdate && { profilePic: profilePicUpdate }),
-      },
-      { new: true }
+      { $set: updateFields },
+      { new: true, runValidators: true }
     );
-
-    console.log("💾 Database updated: Name and Lore synced.");
+    
+    console.log("💾 Database updated: All Character Data & Equipment synced.");
     console.log("--- Profile Update End ---");
 
     return NextResponse.json({ 

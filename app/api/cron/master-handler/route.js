@@ -74,13 +74,31 @@ async function dailyClanCheck() {
     }
 }
 
+/**
+ * Daily distribution of Spendable Points.
+ * If a clan's most recent 'rankAtTime' was in the Top 10, they get 30.
+ * Otherwise, they get 20.
+ */
 async function dailyAllocation() {
     const clans = await Clan.find({});
-    const rankMap = { 6: 5000, 5: 2500, 4: 1000, 3: 600, 2: 300, 1: 150 };
 
     const updatePromises = clans.map(clan => {
-        const allowance = rankMap[clan.rank] || 0;
-        return Clan.updateOne({ _id: clan._id }, { $inc: { spendablePoints: allowance } });
+        let allowance = 20;
+
+        // Check the last history entry to see the rank they achieved
+        if (clan.weeklyPointHistory && clan.weeklyPointHistory.length > 0) {
+            const lastHistoryEntry = clan.weeklyPointHistory[clan.weeklyPointHistory.length - 1];
+            
+            // If their rankAtTime was between 1 and 10
+            if (lastHistoryEntry.rankAtTime > 0 && lastHistoryEntry.rankAtTime <= 10) {
+                allowance = 30;
+            }
+        }
+
+        return Clan.updateOne(
+            { _id: clan._id }, 
+            { $inc: { spendablePoints: allowance } }
+        );
     });
 
     await Promise.all(updatePromises);
@@ -145,20 +163,20 @@ async function auraReset() {
 async function weeklyClanReset() {
     // 1-6 Ranks
     const rankThresholds = [0, 5000, 20000, 50000, 100000, 300000];
-    
-    // Index 0 (Rank 1) to Index 5 (Rank 6)
     const decayAmounts = [200, 500, 1000, 2000, 5000, 30000]; 
 
     const rankedClans = await Clan.find({}).sort({ currentWeeklyPoints: -1 });
+    // Based on your preference, this checks lifetime stats
     const mostDiscussedClan = await Clan.findOne({}).sort({ "stats.comments": -1 });
     const weekEnding = new Date();
 
-    const weeklyTitleBadges = ["The Pirate King", "The Pillars", "Hunter Association", "Talk-no-jutsu"];
+    const weeklyTitleBadges = ["The Pirate King", "The Pillars", "Hunter Association"];
+    // Note: Removed "Talk-no-jutsu" from the pull list so it stays permanent
     await Clan.updateMany({}, { $pull: { badges: { $in: weeklyTitleBadges } } });
 
     for (let i = 0; i < rankedClans.length; i++) {
       const clan = rankedClans[i];
-      const position = i + 1;
+      const position = i + 1; // Leaderboard position (1, 2, 3...)
       const currentRank = clan.rank || 1; 
       
       let setFields = {};
@@ -166,12 +184,9 @@ async function weeklyClanReset() {
       let incFields = {};
       let badgesToAdd = [];
 
-      // 🔹 CORRECTED INDEXING: 
-      // If rank is 1, index is 0. If rank is 6, index is 5.
+      // --- 📉 DECAY LOGIC ---
       const decayValue = decayAmounts[currentRank - 1] || 0;
-      let decayedPoints = (clan.totalPoints || 0) - decayValue;
-      
-      if (decayedPoints < 0) decayedPoints = 0;
+      let decayedPoints = Math.max(0, (clan.totalPoints || 0) - decayValue);
 
       let newRank = 1;
       for (let r = rankThresholds.length - 1; r >= 0; r--) {
@@ -184,6 +199,7 @@ async function weeklyClanReset() {
       setFields.totalPoints = decayedPoints;
       setFields.rank = newRank;
 
+      // --- 🛡️ UNLIMITED CHAKRA ---
       const nextRankThreshold = rankThresholds[newRank];
       let hit80PercentLimit = false;
 
@@ -195,7 +211,7 @@ async function weeklyClanReset() {
 
       if (hit80PercentLimit) {
         incFields.consecutiveWeeksNoDerank = 1;
-        if ((clan.consecutiveWeeksNoDerank + 1) >= 4 && !clan.badges.includes("Unlimited Chakra")) {
+        if ((clan.consecutiveWeeksNoDerank + 1) >= 4) {
           badgesToAdd.push("Unlimited Chakra");
         }
       } else {
@@ -203,29 +219,36 @@ async function weeklyClanReset() {
         await Clan.updateOne({ _id: clan._id }, { $pull: { badges: "Unlimited Chakra" } });
       }
 
-      const lastWeek = clan.weeklyPointHistory?.[clan.weeklyPointHistory.length - 1];
+      // --- 📈 GROWTH CHECK ---
+      const history = clan.weeklyPointHistory || [];
+      const lastWeek = history[history.length - 1];
       if (lastWeek?.points > 0) {
         const growth = clan.currentWeeklyPoints / lastWeek.points;
-        if (growth >= 2.0 && !clan.badges.includes("Gear 2nd")) {
-          badgesToAdd.push("Gear 2nd");
-        } else if (growth >= 1.5 && !clan.badges.includes("Zenkai Boost")) {
-          badgesToAdd.push("Zenkai Boost");
-        }
+        if (growth >= 2.0) badgesToAdd.push("Gear 2nd");
+        else if (growth >= 1.5) badgesToAdd.push("Zenkai Boost");
       }
 
+      // --- 🏆 WEEKLY TITLES ---
       if (position === 1) badgesToAdd.push("The Pirate King");
       else if (position <= 5) badgesToAdd.push("The Pillars");
       else if (position <= 10) badgesToAdd.push("Hunter Association");
 
+      // --- 💬 LIFETIME BADGE CHECK ---
       if (mostDiscussedClan && clan._id.equals(mostDiscussedClan._id)) {
         badgesToAdd.push("Talk-no-jutsu");
       }
 
+      // --- 🔄 RESET WEEKLY PROGRESS ---
       pushFields.weeklyPointHistory = {
-        $each: [{ weekEnding, points: clan.currentWeeklyPoints, rankAtTime: newRank }],
+        $each: [{ 
+            weekEnding, 
+            points: clan.currentWeeklyPoints, 
+            rankAtTime: position // Storing position (1-10+) for dailyAllocation
+        }],
         $slice: -12
       };
-      setFields.currentWeeklyPoints = 0;
+      
+      setFields.currentWeeklyPoints = 0; // The reset happens here
 
       const finalUpdate = { $set: setFields, $push: pushFields };
       if (badgesToAdd.length > 0) finalUpdate.$addToSet = { badges: { $each: badgesToAdd } };

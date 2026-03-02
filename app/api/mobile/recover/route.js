@@ -38,11 +38,11 @@ export async function POST(req) {
     user.lastActive = new Date();
     await user.save();
 
-    // 3. Return the user data (including their original username)
+    // 3. Return the user data (including preferences and original username)
     return NextResponse.json({ 
       message: "Neural link established. Welcome back.", 
-      username: user.username, // This sends the old username back to the app
-      user 
+      username: user.username, 
+      user // 👈 This now contains user.preferences for the app to save locally
     }, { status: 200 });
 
   } catch (err) {
@@ -53,4 +53,3 @@ export async function POST(req) {
     }, { status: 500 });
   }
 }
-

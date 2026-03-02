@@ -16,7 +16,7 @@ const generateReferralCode = (username) => {
 export async function POST(req) {
   try {
     await connectDB();
-    const { deviceId, username, pushToken, referredBy } = await req.json();
+    const { deviceId, username, pushToken, referredBy, preferences } = await req.json();
 
     if (!deviceId || !username || username.trim() === "") {
       return NextResponse.json({ message: "Username is required" }, { status: 400 });
@@ -78,7 +78,7 @@ export async function POST(req) {
         }
       }
 
-      // Create the New User
+      // Create the New User with Preferences
       user = await MobileUser.create({
         deviceId,
         username,
@@ -86,6 +86,7 @@ export async function POST(req) {
         country: detectedCountry,
         referralCode: myNewReferralCode,
         referredBy: finalReferrer,
+        preferences, // 👈 Saved to DB
         coins: 50,
         referralCount: 0,
         weeklyAura: auraBonus,
@@ -125,6 +126,7 @@ export async function POST(req) {
       // 🔄 EXISTING USER UPDATE
       user.username = username;
       if (pushToken) user.pushToken = pushToken;
+      if (preferences) user.preferences = preferences; // 👈 Updated on DB
       if (!user.referralCode) user.referralCode = generateReferralCode(username);
       if (!user.country || user.country === "Unknown") user.country = detectedCountry;
 

@@ -1,16 +1,16 @@
 import connectDB from "@/app/lib/mongodb";
 import Clan from "@/app/models/ClanModel";
 import MobileUser from "@/app/models/MobileUserModel";
+import Post from "@/app/models/PostModel"; // 🔹 Added Post model import
 import { NextResponse } from "next/server";
 
 const getRankDetails = (points) => {
-    // Exact thresholds from your handwritten notes
-    if (points >= 300000) return { title: "The Akatsuki", next: 1000000, color: "#ef4444" }; // Red
-    if (points >= 100000) return { title: "The Espada", next: 300000, color: "#e0f2fe" }; // White
-    if (points >= 50000) return { title: "Phantom Troupe", next: 100000, color: "#a855f7" }; // Purple
-    if (points >= 20000) return { title: "Upper Moon", next: 50000, color: "#60a5fa" }; // Blue
-    if (points >= 5000) return { title: "Squad 13", next: 20000, color: "#10b981" }; // Green
-    return { title: "Wandering Ronin", next: 5000, color: "#94a3b8" }; // Grey
+    if (points >= 300000) return { title: "The Akatsuki", next: 1000000, color: "#ef4444" };
+    if (points >= 100000) return { title: "The Espada", next: 300000, color: "#e0f2fe" };
+    if (points >= 50000) return { title: "Phantom Troupe", next: 100000, color: "#a855f7" };
+    if (points >= 20000) return { title: "Upper Moon", next: 50000, color: "#60a5fa" };
+    if (points >= 5000) return { title: "Squad 13", next: 20000, color: "#10b981" };
+    return { title: "Wandering Ronin", next: 5000, color: "#94a3b8" };
 };
 
 export async function GET(req, { params }) {
@@ -50,20 +50,50 @@ export async function GET(req, { params }) {
     }
 }
 
-
 export async function PATCH(req, { params }) {
     await connectDB();
     const { tag } = await params;
     const { deviceId, action, payload } = await req.json();
-
+    
     try {
         const user = await MobileUser.findOne({ deviceId });
         const clan = await Clan.findOne({ tag: tag.toUpperCase() });
-        const affectedUser = payload?.userId ? await MobileUser.findById(payload.userId) : null;
 
         if (!clan || !user) return NextResponse.json({ message: "Not found" }, { status: 404 });
 
-        const isAdmin = clan.leader.toString() === user._id.toString() || clan.viceLeader?.toString() === user._id.toString();
+        const isLeader = clan.leader.toString() === user._id.toString();
+        const isVice = clan.viceLeader?.toString() === user._id.toString();
+        const isAdmin = isLeader || isVice;
+
+        // 🔹 1. APPOINT VICE LEADER (Leader Only)
+        if (action === "APPOINT_VICE") {
+            if (!isLeader) return NextResponse.json({ message: "Forbidden: Leader access required" }, { status: 403 });
+            
+            // If userId is provided, appoint them. If null, demote current vice.
+            clan.viceLeader = payload.userId || null;
+        }
+
+        // 🔹 2. DELETE POST (Admin Only)
+        if (action === "DELETE_POST") {
+            if (!isAdmin) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+
+            // We find the post globally but verify it belongs to this clan
+            const postToDelete = await Post.findById(payload.postId);
+            
+            if (!postToDelete) {
+                return NextResponse.json({ message: "Post already deleted or not found" }, { status: 404 });
+            }
+
+            // Security check: Ensure this post actually belongs to the clan being managed
+            // We use tag or _id depending on how clanId is stored in your Post model
+            if (postToDelete.clanId !== clan.tag && postToDelete.clanId !== clan._id.toString()) {
+                return NextResponse.json({ message: "Unauthorized post deletion" }, { status: 403 });
+            }
+
+            await Post.findByIdAndDelete(payload.postId);
+            
+            return NextResponse.json({ success: true, message: "Post deleted successfully" });
+        }
         
         // 🔹 Handle Purchases
         if (action === "BUY_STORE_ITEM") {
@@ -89,10 +119,7 @@ export async function PATCH(req, { params }) {
                 currentExpiry.setDate(currentExpiry.getDate() + days);
                 clan.verifiedUntil = currentExpiry;
 
-                // Also save to Inventory as requested
                 if (!clan.specialInventory) clan.specialInventory = [];
-                
-                // Check if a "Verified" badge entry already exists
                 let badgeItem = clan.specialInventory.find(i => i.category === 'BADGE' && i.itemId.includes('badge'));
                 
                 if (badgeItem) {
@@ -127,22 +154,23 @@ export async function PATCH(req, { params }) {
         if (action === "EQUIP_ITEM") {
             if (!isAdmin) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
             
-            const item = clan.specialInventory.id(payload.itemId);
+            const item = clan.specialInventory.find(i => i.itemId === payload.itemId);
             if (!item) return NextResponse.json({ message: "Item not found" }, { status: 404 });
 
-            // Unique logic: Only one frame/theme can be active
-            if (['FRAME', 'THEME'].includes(item.category)) {
+            const isEquipping = !item.isEquipped;
+            
+            if (isEquipping && item.category !== 'BADGE') {
                 clan.specialInventory.forEach(i => {
                     if (i.category === item.category) i.isEquipped = false;
                 });
             }
 
-            item.isEquipped = true;
+            item.isEquipped = isEquipping;
 
-            // Sync with Quick-Access
-            if (item.category === 'FRAME') clan.activeCustomizations.frame = item.itemId;
-            if (item.category === 'THEME') clan.activeCustomizations.theme = item.itemId;
-            if (item.category === 'EFFECT') clan.activeCustomizations.effect = item.itemId;
+            if (!clan.activeCustomizations) clan.activeCustomizations = {};
+            if (item.category === 'FRAME') clan.activeCustomizations.frame = isEquipping ? item.itemId : null;
+            if (item.category === 'THEME') clan.activeCustomizations.theme = isEquipping ? item.itemId : null;
+            if (item.category === 'EFFECT') clan.activeCustomizations.effect = isEquipping ? item.itemId : null;
         }
 
         // 🔹 Standard Clan Management
@@ -169,16 +197,20 @@ export async function PATCH(req, { params }) {
         if (action === "KICK_MEMBER") {
             if (!isAdmin) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
             if (payload.userId === clan.leader.toString()) return NextResponse.json({ message: "Cannot kick leader" }, { status: 400 });
+            
+            if (payload.userId === clan.viceLeader?.toString()) clan.viceLeader = null;
+
             clan.members = clan.members.filter(m => m.toString() !== payload.userId);
         }
 
         if (action === "LEAVE_CLAN") {
             if (clan.leader.toString() === user._id.toString()) return NextResponse.json({ message: "Transfer leadership first" }, { status: 403 });
+            if (user._id.toString() === clan.viceLeader?.toString()) clan.viceLeader = null;
+            
             clan.members = clan.members.filter(m => m.toString() !== user._id.toString());
         }
 
         // 🔹 FINAL SAVE
-        // We use markModified because we are updating nested objects and arrays
         clan.markModified('specialInventory');
         clan.markModified('activeCustomizations');
         

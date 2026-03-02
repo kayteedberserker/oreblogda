@@ -1,5 +1,5 @@
 import Clan from '@/app/models/ClanModel';
-import { updateWarProgress } from './warService'; // Import the new war helper
+import { updateWarProgress } from './warService';
 
 /**
  * Award points, increment stats, and check for real-time badges like One-Shot
@@ -10,10 +10,21 @@ export async function awardClanPoints(post, actionPoints, type = null) {
     const clanTag = post.clanId || (post.category.split(":")[2]); 
     if (!clanTag) return;
 
+    // --- 💎 VERIFIED MULTIPLIER LOGIC ---
+    // Fetch the clan first to check verification status
+    const clanDoc = await Clan.findOne({ tag: clanTag }).select('verifiedUntil');
+    
+    let finalPoints = actionPoints;
+    
+    // Check if the clan is verified and the badge hasn't expired
+    if (clanDoc && clanDoc.verifiedUntil && new Date(clanDoc.verifiedUntil) > new Date()) {
+        finalPoints = Math.round(actionPoints * 1.5); // Apply 1.5x boost
+    }
+
     // 1. Build the dynamic increment query based on action type
     const incQuery = { 
-        totalPoints: actionPoints,
-        currentWeeklyPoints: actionPoints 
+        totalPoints: finalPoints,
+        currentWeeklyPoints: finalPoints 
     };
 
     // Increment the specific stats based on your ClanModel schema
@@ -37,14 +48,13 @@ export async function awardClanPoints(post, actionPoints, type = null) {
     if (!updatedClan) return;
 
     // --- ⚔️ UPDATE WAR SCORE ---
-    // This happens in the background every time points/stats are awarded
-    await updateWarProgress(clanTag, actionPoints, type);
+    // Note: We pass finalPoints (boosted) so the war score also reflects the verified status
+    await updateWarProgress(clanTag, finalPoints, type);
 
     // --- 🏅 ONE-SHOT BADGE CHECK (Only on likes) ---
     if (type === 'like' && !updatedClan.badges.includes("One-Shot") && post.likes) {
         const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
         
-        // Ensure we handle the likes array safely
         const recentLikes = post.likes.filter(l => {
             const likeDate = l.date ? new Date(l.date) : new Date();
             return likeDate > oneHourAgo;
