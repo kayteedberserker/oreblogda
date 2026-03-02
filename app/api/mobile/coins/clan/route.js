@@ -136,8 +136,8 @@ export async function POST(req) {
             if (!amount || isNaN(amount)) {
                 return NextResponse.json({ success: false, error: 'Invalid CC amount' }, { status: 400 });
             }
-
-            clan.spendablePoints = (clan.spendablePoints || 0) + amount;
+            
+            clan.spendablePoints = (clan.spendablePoints || 0) + amount/10;
             await clan.save();
             return NextResponse.json({ success: true, newBalance: clan.spendablePoints });
         }
