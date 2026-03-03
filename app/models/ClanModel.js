@@ -2,28 +2,28 @@ import mongoose from 'mongoose';
 import MobileUser from './MobileUserModel';
 
 const InventoryItemSchema = new mongoose.Schema({
-  itemId: { type: String, required: true },
-  name: { type: String, required: true },
-  category: { 
-    type: String,
-    required: true 
-  },
-  // 🎨 Updated to store advanced animation and color properties
-  visualConfig: {
-    svgCode: { type: String }, // The raw <svg>...</svg> string
-    primaryColor: { type: String },
-    secondaryColor: { type: String, default: null }, // For dual-color animations like 'triple'
-    animationType: { 
-      type: String,
-      default: "singleSnake" 
+    itemId: { type: String, required: true },
+    name: { type: String, required: true },
+    category: {
+        type: String,
+        required: true
     },
-    duration: { type: Number, default: 3000 }, // Animation speed in ms
-    snakeLength: { type: Number, default: 120 }, // length of the dash
-    isAnimated: { type: Boolean, default: false }
-  },
-  isEquipped: { type: Boolean, default: false },
-  acquiredAt: { type: Date, default: Date.now },
-  expiresAt: { type: Date, default: null },
+    // 🎨 Updated to store advanced animation and color properties
+    visualConfig: {
+        svgCode: { type: String }, // The raw <svg>...</svg> string
+        primaryColor: { type: String },
+        secondaryColor: { type: String, default: null }, // For dual-color animations like 'triple'
+        animationType: {
+            type: String,
+            default: "singleSnake"
+        },
+        duration: { type: Number, default: 3000 }, // Animation speed in ms
+        snakeLength: { type: Number, default: 120 }, // length of the dash
+        isAnimated: { type: Boolean, default: false }
+    },
+    isEquipped: { type: Boolean, default: false },
+    acquiredAt: { type: Date, default: Date.now },
+    expiresAt: { type: Date, default: null },
 });
 
 const ClanSchema = new mongoose.Schema({
@@ -59,7 +59,9 @@ const ClanSchema = new mongoose.Schema({
     // --- ⚔️ NEW: Escrow/Locked Points ---
     // Points staked in an active war are moved here until the war ends
     lockedPoints: { type: Number, default: 0 },
-
+    // --- ⚡ Multiplier Logic ---
+    activeMultiplier: { type: Number, default: 1 }, 
+    multiplierExpiresAt: { type: Date, default: null },
     rank: { type: Number, default: 1 }, // This represents the Clan Level (1-6)
 
     // Add these fields to your existing ClanSchema in ClanModel.js
@@ -101,15 +103,17 @@ const ClanSchema = new mongoose.Schema({
         default: null
     },
     bountyExpiry: { type: Date },
-    
+
     // Inventory & Customization
     specialInventory: [InventoryItemSchema], // Permanent items like "Red Cloud Theme"
-    
+
     // Quick-access for UI rendering (what is currently active)
     activeCustomizations: {
         frame: { type: String, default: null },
         theme: { type: String, default: null },
-        effect: { type: String, default: null }
+        effect: { type: String, default: null },
+        verifiedBadgeXml: { type: String, default: null }, // Store the SVG string here
+        verifiedTier: { type: String, default: 'none' }   // 'basic', 'standard', 'premium'
     },
     verifiedUntil: { type: Date, default: null }, // Clan-wide verification
     purchasedPacks: [{ type: String }], // To track the one-time buy per Clan

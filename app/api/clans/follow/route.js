@@ -4,6 +4,42 @@ import ClanFollower from "@/app/models/ClanFollower";
 import MobileUser from "@/app/models/MobileUserModel";
 import { NextResponse } from "next/server";
 
+// --- GET: Check Follow Status ---
+export async function GET(req) {
+    try {
+        await connectDB();
+        const { searchParams } = new URL(req.url);
+        const clanTag = searchParams.get('clanTag')?.toUpperCase();
+        const deviceId = searchParams.get('deviceId');
+
+        if (!clanTag || !deviceId) {
+            return NextResponse.json({ message: "Missing parameters" }, { status: 400 });
+        }
+
+        // Find the user via deviceId
+        const user = await MobileUser.findOne({ deviceId });
+        if (!user) {
+            return NextResponse.json({ message: "User not found" }, { status: 404 });
+        }
+
+        // Check if a follow record exists
+        const followRecord = await ClanFollower.findOne({ 
+            clanTag, 
+            userId: user._id 
+        });
+
+        return NextResponse.json({ 
+            success: true, 
+            isFollowing: !!followRecord 
+        });
+
+    } catch (err) {
+        console.error("Follow Status Check Error:", err);
+        return NextResponse.json({ message: "Server error" }, { status: 500 });
+    }
+}
+
+// --- POST: Handle Follow/Unfollow Actions ---
 export async function POST(req) {
     await connectDB();
     const { clanTag, deviceId, action } = await req.json();
@@ -18,24 +54,24 @@ export async function POST(req) {
         const userId = user._id;
 
         // Fetch Clan details for role verification
-        const clan = await Clan.findOne({ tag: clanTag });
+        const clan = await Clan.findOne({ tag: clanTag.toUpperCase() });
         if (!clan) {
             return NextResponse.json({ message: "Clan not found" }, { status: 404 });
         }
 
         if (action === "follow") {
             // Check if already following to prevent index errors
-            const existing = await ClanFollower.findOne({ clanTag, userId });
+            const existing = await ClanFollower.findOne({ clanTag: clan.tag, userId });
             if (existing) {
                 return NextResponse.json({ message: "Already following this clan" }, { status: 419 });
             }
 
             // Create follower record
-            await ClanFollower.create({ clanTag, userId });
+            await ClanFollower.create({ clanTag: clan.tag, userId });
             
             // Increment count on Clan
             await Clan.findOneAndUpdate(
-                { tag: clanTag }, 
+                { tag: clan.tag }, 
                 { $inc: { followerCount: 1 } }
             );
             
@@ -53,12 +89,12 @@ export async function POST(req) {
             }
 
             // 1. Remove follower record from ClanFollower collection
-            const deleted = await ClanFollower.findOneAndDelete({ clanTag, userId });
+            const deleted = await ClanFollower.findOneAndDelete({ clanTag: clan.tag, userId });
             
             // 2. Decrement only if a record was actually deleted
             if (deleted) {
                 await Clan.findOneAndUpdate(
-                    { tag: clanTag }, 
+                    { tag: clan.tag }, 
                     { $inc: { followerCount: -1 } }
                 );
                 return NextResponse.json({ message: "Unfollowed" });

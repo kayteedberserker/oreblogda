@@ -1,40 +1,60 @@
 import MobileUser from '@/app/models/MobileUserModel';
-import Post from '@/app/models/PostModel'; // Needed for rank calculation
+import Post from '@/app/models/PostModel';
+import Clan from '@/app/models/ClanModel'; // New import needed
 import { NextResponse } from 'next/server';
 
 export async function GET(req) {
   try {
     const { searchParams } = new URL(req.url);
-    const packType = searchParams.get('type') || 'author';
+    const packType = searchParams.get('type') || 'author'; // 'author' or 'clan'
     const deviceId = req.headers.get('x-user-deviceId');
 
     if (!deviceId) {
       return NextResponse.json({ success: false, error: "Unauthorized" }, { status: 401 });
     }
 
-    // 1. Fetch User and their Post Count for Rank Logic
+    // 1. Fetch User
     const user = await MobileUser.findOne({ deviceId });
     if (!user) {
       return NextResponse.json({ success: false, error: "User not found" }, { status: 404 });
     }
 
-    // Assuming posts are linked to user via their MongoDB _id
-    const postCount = await Post.countDocuments({ authorUserId: user._id });
-    console.log(postCount);
-    
-    // 2. Determine Numeric Rank Level
-    // Rank 1: Novice_Researcher (< 25)
-    // Rank 2: Senior_Researcher (25-50)
-    // Rank 3: Novice_Writer (51-100)
-    // Rank 4: Senior_Writer (101-150)
-    // Rank 5: Elite_Writer (151-200)
-    // Rank 6: Master_Writer (> 200)
     let userRankLevel = 1;
-    if (postCount > 200) userRankLevel = 6;
-    else if (postCount > 150) userRankLevel = 5;
-    else if (postCount > 100) userRankLevel = 4;
-    else if (postCount > 50) userRankLevel = 3;
-    else if (postCount > 25) userRankLevel = 2;
+    let postCount = 0;
+    let targetClan = null;
+    let isAuthorizedToBuy = true; // Default for individual packs
+
+    // 2. Branch Logic based on Pack Type
+    if (packType === 'author') {
+      // Logic for Author Ranks (Individual)
+      postCount = await Post.countDocuments({ authorUserId: user._id });
+      
+      if (postCount > 200) userRankLevel = 6;
+      else if (postCount > 150) userRankLevel = 5;
+      else if (postCount > 100) userRankLevel = 4;
+      else if (postCount > 50) userRankLevel = 3;
+      else if (postCount > 25) userRankLevel = 2;
+      else userRankLevel = 1;
+
+    } else if (packType === 'clan') {
+      // Logic for Clan Ranks (Group)
+      targetClan = await Clan.findOne({ members: user._id });
+      
+      if (!targetClan) {
+        return NextResponse.json({ 
+            success: false, 
+            error: "You must be in a clan to view clan packs" 
+        }, { status: 403 });
+      }
+
+      userRankLevel = targetClan.rank || 1;
+      
+      // Only Leader or Vice-Leader can technically trigger the purchase
+      const userIdStr = user._id.toString();
+      const isLeader = targetClan.leader?.toString() === userIdStr;
+      const isViceLeader = targetClan.viceLeader?.toString() === userIdStr;
+      isAuthorizedToBuy = isLeader || isViceLeader;
+    }
 
     const packCatalog = {
       author: [
@@ -43,7 +63,7 @@ export async function GET(req) {
           name: 'The Chunin Pack',
           description: 'Reach Rank 2',
           storeId: 'chuninpack',
-          requiredRank: 2, // Added for logic
+          requiredRank: 2,
           price: 1.5,
           color: '#808080',
           bannerImage: 'https://your-storage.com/banners/chunin_bg.jpg',
@@ -60,12 +80,7 @@ export async function GET(req) {
                 isAnimated: false
               }
             },
-            { 
-              type: 'MULTIPLIER', 
-              value: 2, 
-              duration: 7, 
-              label: 'x2 Streak (7 Days)' 
-            }
+            { type: 'MULTIPLIER', value: 2, duration: 7, label: 'x2 Streak (7 Days)' }
           ],
           visualData: { icon: 'shield-star', rarity: 'Common' }
         },
@@ -74,7 +89,7 @@ export async function GET(req) {
           name: 'The Jonin Pack',
           description: 'Rank 4',
           storeId: 'joninpack',
-          requiredRank: 4, // Added for logic
+          requiredRank: 4,
           price: 5.0,
           color: '#C0C0C0',
           bannerImage: 'https://your-storage.com/banners/jonin_bg.jpg',
@@ -91,22 +106,8 @@ export async function GET(req) {
                 isAnimated: false
               }
             },
-            { 
-              type: 'BADGE', 
-              id: 'green_quill_badge', 
-              name: 'The Green Quill',
-              visualConfig: {
-                svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.24 12.24C21.36 11.12 22 9.63 22 8V2H16C14.37 2 12.88 2.64 11.76 3.76L2 13.52V22H10.48L20.24 12.24Z" fill="currentColor"/></svg>`,
-                primaryColor: '#10b981',
-                isAnimated: false
-              }
-            },
-            { 
-              type: 'MULTIPLIER', 
-              value: 2, 
-              duration: 7, 
-              label: 'x2 Streak (7 Days)' 
-            }
+            { type: 'BADGE', id: 'green_quill_badge', name: 'The Green Quill', visualConfig: { svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20.24 12.24C21.36 11.12 22 9.63 22 8V2H16C14.37 2 12.88 2.64 11.76 3.76L2 13.52V22H10.48L20.24 12.24Z" fill="currentColor"/></svg>`, primaryColor: '#10b981', isAnimated: false }},
+            { type: 'MULTIPLIER', value: 2, duration: 7, label: 'x2 Streak (7 Days)' }
           ],
           visualData: { icon: 'medal', rarity: 'Rare' }
         },
@@ -115,93 +116,113 @@ export async function GET(req) {
           name: 'The Kage Pack',
           description: 'Rank 6',
           storeId: 'kagepack',
-          requiredRank: 6, // Added for logic
+          requiredRank: 6,
           price: 12.0,
           color: '#FFD700',
           bannerImage: 'https://your-storage.com/banners/kage_bg.jpg',
           rewards: [
             { type: 'OC', amount: 15000, label: '15000 OC' },
-            { 
-              type: 'WATERMARK', 
-              id: 'golden_pen_wm', 
-              name: 'The Golden Pen', 
-              visualConfig: {
-                svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="currentColor"/></svg>`,
-                primaryColor: '#FFD700',
-                isAnimated: false
-              }
-            },
-            { 
-              type: 'BORDER', 
-              id: 'uzumaki_swirl_border', 
-              name: 'Uzumaki Swirl',
-              visualConfig: {
-                animationType: 'singleSnake',
-                primaryColor: '#FFD700',
-                duration: 2500,
-                snakeLength: 140,
-                isAnimated: true
-              }
-            },
-            { 
-              type: 'GLOW', 
-              id: 'jade_glow_item', 
-              name: 'Jade Glow', 
-              visualConfig: {
-                svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" fill="currentColor" fill-opacity="0.3"/></svg>`,
-                primaryColor: '#00A86B',
-                isAnimated: true
-              }
-            },
-            { 
-              type: 'BADGE', 
-              id: 'red_quill_badge', 
-              name: 'The Red Quill',
-              visualConfig: {
-                svgCode: `<svg viewBox="0 0 24 24" fill="red" xmlns="http://www.w3.org/2000/svg"><path d="M20.24 12.24L10.48 22H2V13.52L11.76 3.76C12.88 2.64 14.37 2 16 2H22V8C22 9.63 21.36 11.12 20.24 12.24Z"/></svg>`,
-                primaryColor: '#ef4444',
-                isAnimated: false
-              }
-            }
+            { type: 'WATERMARK', id: 'golden_pen_wm', name: 'The Golden Pen', visualConfig: { svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="currentColor"/></svg>`, primaryColor: '#FFD700', isAnimated: false }},
+            { type: 'BORDER', id: 'uzumaki_swirl_border', name: 'Uzumaki Swirl', visualConfig: { animationType: 'singleSnake', primaryColor: '#FFD700', duration: 2500, snakeLength: 140, isAnimated: true }},
+            { type: 'BADGE', id: 'red_quill_badge', name: 'The Red Quill', visualConfig: { svgCode: `<svg viewBox="0 0 24 24" fill="red" xmlns="http://www.w3.org/2000/svg"><path d="M20.24 12.24L10.48 22H2V13.52L11.76 3.76C12.88 2.64 14.37 2 16 2H22V8C22 9.63 21.36 11.12 20.24 12.24Z"/></svg>`, primaryColor: '#ef4444', isAnimated: false }}
           ],
           visualData: { icon: 'crown', rarity: 'Legendary' }
+        }
+      ],
+      clan: [
+        {
+          id: 'wandering_ronin_pack',
+          name: 'Wandering Ronin Pack',
+          description: 'Basic Clan Starter Pack',
+          storeId: 'wandering_ronin_pack',
+          requiredRank: 1, 
+          price: 2.0,
+          color: '#808080',
+          bannerImage: 'https://your-storage.com/banners/ronin_clan_bg.jpg',
+          rewards: [
+            { type: 'CC', amount: 500, label: '500 CC' },
+            { type: 'BACKGROUND', id: 'iron_banner_bg', name: 'Iron Banner', visualConfig: { svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" fill="currentColor"/></svg>`, primaryColor: '#808080', isAnimated: false }},
+            { type: 'UPGRADE', id: 'slot_upgrade_2', value: 2, label: '+2 Member Slots' },
+            { type: 'MULTIPLIER', value: 2, duration: 7, label: 'x2 Clan Point Multiplier (7 Days)' }
+          ],
+          visualData: { icon: 'sword', rarity: 'Common' }
+        },
+        {
+          id: 'squad_13_pack',
+          name: 'Squad 13 Pack',
+          description: 'Reach Clan Rank 2',
+          storeId: 'squad_13_pack',
+          requiredRank: 2,
+          price: 6.0,
+          color: '#CD7F32',
+          bannerImage: 'https://your-storage.com/banners/squad13_clan_bg.jpg',
+          rewards: [
+            { type: 'CC', amount: 1200, label: '1200 CC' },
+            { type: 'BACKGROUND', id: 'bronze_banner_bg', name: 'Bronze Banner', visualConfig: { svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect width="24" height="24" fill="currentColor"/></svg>`, primaryColor: '#CD7F32', isAnimated: false }},
+            { type: 'UPGRADE', id: 'slot_upgrade_2_squad', value: 2, label: '+2 Member Slots' }
+          ],
+          visualData: { icon: 'account-group', rarity: 'Uncommon' }
+        },
+        {
+          id: 'the_akatsuki_pack',
+          name: 'The Akatsuki Pack',
+          description: 'Mythic Clan Pack (Rank 6)',
+          storeId: 'the_akatsuki_pack',
+          requiredRank: 6,
+          price: 50.0,
+          color: '#FF0000',
+          bannerImage: 'https://your-storage.com/banners/akatsuki_clan_bg.jpg',
+          rewards: [
+            { type: 'CC', amount: 10000, label: '10,000 CC' },
+            { type: 'BADGE', id: 'red_cloud_badge', name: 'The Red Cloud', visualConfig: { svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12C2 17.52 6.48 22 12 22C17.52 22 22 17.52 22 12C22 6.48 17.52 2 12 2ZM12 20C7.59 20 4 16.41 4 12C4 7.59 7.59 4 12 4C16.41 4 20 7.59 20 12C20 16.41 16.41 20 12 20Z" fill="currentColor"/></svg>`, primaryColor: '#FF0000', isAnimated: false }},
+            { type: 'PERK', id: 'verified_premium_30', value: 'premium', duration: 30, label: 'Premium Verified Badge (30 Days)' }
+          ],
+          visualData: { icon: 'cloud', rarity: 'Mythic' }
         }
       ]
     };
 
     const rawPacks = packCatalog[packType] || [];
 
-    // 3. Map status flags to each pack
+    // 3. Process Packs with Specific Ownership Logic
     const processedPacks = rawPacks.map(pack => {
-      // Check if user already owns any unique digital asset from this pack
-      const uniqueRewardIds = pack.rewards
-        .filter(r => r.id)
-        .map(r => r.id);
+      let isPurchased = false;
 
-      const isPurchased = uniqueRewardIds.some(id => 
-        user.inventory && user.inventory.some(invItem => invItem.itemId === id)
-      );
+      if (packType === 'clan') {
+        // For Clans, check the Clan Model's purchasedPacks array
+        isPurchased = targetClan.purchasedPacks?.includes(pack.id) || false;
+      } else {
+        // For Authors, check individual User inventory
+        const uniqueRewardIds = pack.rewards.filter(r => r.id).map(r => r.id);
+        isPurchased = uniqueRewardIds.some(id => 
+          user.inventory && user.inventory.some(invItem => invItem.itemId === id)
+        );
+      }
 
       const isLocked = userRankLevel < pack.requiredRank;
-      const canPurchase = !isPurchased && !isLocked;
+      
+      // canPurchase logic: Not already bought AND rank requirement met AND authorized
+      const canPurchase = !isPurchased && !isLocked && isAuthorizedToBuy;
 
       return {
         ...pack,
         isPurchased,
         isLocked,
         canPurchase,
+        isAuthorizedToBuy, // To show "Leader Only" UI if false
         currentRankLevel: userRankLevel,
         userPostCount: postCount
       };
     });
-    console.log(processedPacks);
-    
+
     return NextResponse.json({ 
       success: true, 
       packs: processedPacks,
       meta: {
         postCount,
-        rankLevel: userRankLevel
+        rankLevel: userRankLevel,
+        type: packType,
+        clanTag: targetClan?.tag || null
       }
     });
 

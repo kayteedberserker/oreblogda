@@ -29,7 +29,7 @@ export async function GET(req) {
                         { viceLeader: mUser._id }, 
                         { members: mUser._id }
                     ] 
-                }).select("tag name leader viceLeader");
+                }).select("tag name leader rank viceLeader");
 
                 if (clan) {
                     console.log("user found in clan" + clan?.name)
@@ -45,7 +45,8 @@ export async function GET(req) {
                         tag: clan.tag,
                         name: clan.name,
                         role: userRole,
-                        clanId: clan._id
+                        clanId: clan._id,
+                        rank: clan.rank
                     };
                 }
 
