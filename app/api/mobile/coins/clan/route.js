@@ -30,6 +30,7 @@ export async function POST(req) {
             name,
             category,
             visualConfig,
+            rewards,
             extraData // Contains rewards and currency type
         } = body;
 
@@ -94,9 +95,8 @@ const isAuthorized = clan.leader.equals(user._id) || (clan.viceLeader && clan.vi
 
         // --- ACTION: PURCHASE CLAN PACKS (IAP) ---
         if (action === 'purchase_pack') {
-            const packRewards = extraData?.rewards; 
+            const packRewards = rewards; 
             const pId = packId || type; // Safety for identifier
-
             if (clan.purchasedPacks?.includes(pId)) return NextResponse.json({ success: false, error: 'Already owned' }, { status: 400 });
 
             packRewards.forEach(reward => {

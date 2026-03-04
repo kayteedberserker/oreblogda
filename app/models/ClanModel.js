@@ -60,7 +60,7 @@ const ClanSchema = new mongoose.Schema({
     // Points staked in an active war are moved here until the war ends
     lockedPoints: { type: Number, default: 0 },
     // --- ⚡ Multiplier Logic ---
-    activeMultiplier: { type: Number, default: 1 }, 
+    activeMultiplier: { type: Number, default: 0 }, 
     multiplierExpiresAt: { type: Date, default: null },
     rank: { type: Number, default: 1 }, // This represents the Clan Level (1-6)
 
