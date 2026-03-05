@@ -217,7 +217,7 @@ export async function GET(req) {
               }
             },
             {
-              type: 'PERK', id: 'verified_standard_7', label: 'Elite Verification (7 Days)',
+              type: 'VERIFIED', id: 'verified_standard_7', label: 'Elite Verification (7 Days)',
               visualConfig: { tier: 'standard', glowColor: '#ef4444', svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 3.86L12 2L13.71 3.86L16.25 3.51L17.33 5.82L19.78 6.55L19.74 9.1L21.49 10.95L20.25 13.2L21 15.65L18.81 17.07L18.15 19.52L15.73 20L13.91 21.75L12 21L10.09 21.75L8.27 20L5.85 19.52L5.19 17.07L3 15.65L3.75 13.2L2.51 10.95L4.26 9.1L4.22 6.55L6.67 5.82L7.75 3.51L10.29 3.86Z" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2"/><path d="M9 12L11 14L15 10" stroke="#ef4444" stroke-width="2.5"/></svg>` }
             }
           ],
@@ -252,7 +252,7 @@ export async function GET(req) {
               }
             },
             {
-              type: 'PERK', id: 'verified_standard_7_pt', label: 'Elite Verification (7 Days)',
+              type: 'VERIFIED', id: 'verified_standard_7_pt', label: 'Elite Verification (7 Days)',
               visualConfig: { tier: 'standard', glowColor: '#ef4444', svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 3.86L12 2L13.71 3.86L16.25 3.51L17.33 5.82L19.78 6.55L19.74 9.1L21.49 10.95L20.25 13.2L21 15.65L18.81 17.07L18.15 19.52L15.73 20L13.91 21.75L12 21L10.09 21.75L8.27 20L5.85 19.52L5.19 17.07L3 15.65L3.75 13.2L2.51 10.95L4.26 9.1L4.22 6.55L6.67 5.82L7.75 3.51L10.29 3.86Z" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2"/><path d="M9 12L11 14L15 10" stroke="#ef4444" stroke-width="2.5"/></svg>` }
             }
           ],
@@ -291,7 +291,7 @@ export async function GET(req) {
                 primaryColor: '#ffffff'
               }
             },
-            { type: 'PERK', id: 'verified_standard_30', label: 'Elite Verification (30 Days)', visualConfig: { tier: 'standard', glowColor: '#ef4444', svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 3.86L12 2L13.71 3.86L16.25 3.51L17.33 5.82L19.78 6.55L19.74 9.1L21.49 10.95L20.25 13.2L21 15.65L18.81 17.07L18.15 19.52L15.73 20L13.91 21.75L12 21L10.09 21.75L8.27 20L5.85 19.52L5.19 17.07L3 15.65L3.75 13.2L2.51 10.95L4.26 9.1L4.22 6.55L6.67 5.82L7.75 3.51L10.29 3.86Z" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2"/><path d="M9 12L11 14L15 10" stroke="#ef4444" stroke-width="2.5"/></svg>` } },
+            { type: 'VERIFIED', id: 'verified_standard_30', label: 'Elite Verification (30 Days)', visualConfig: { tier: 'standard', glowColor: '#ef4444', svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 3.86L12 2L13.71 3.86L16.25 3.51L17.33 5.82L19.78 6.55L19.74 9.1L21.49 10.95L20.25 13.2L21 15.65L18.81 17.07L18.15 19.52L15.73 20L13.91 21.75L12 21L10.09 21.75L8.27 20L5.85 19.52L5.19 17.07L3 15.65L3.75 13.2L2.51 10.95L4.26 9.1L4.22 6.55L6.67 5.82L7.75 3.51L10.29 3.86Z" fill="#ef4444" fill-opacity="0.3" stroke="#ef4444" stroke-width="2"/><path d="M9 12L11 14L15 10" stroke="#ef4444" stroke-width="2.5"/></svg>` } },
             { type: 'GLOW', id: 'orange_glow', name: 'Orange Glow', visualConfig: { svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" fill="currentColor" fill-opacity="0.3"/></svg>`,
                 primaryColor: '#f97316' } }
           ],
@@ -312,7 +312,7 @@ export async function GET(req) {
                 <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><g stroke-width="0"/><g stroke-linecap="round" stroke-linejoin="round"/><path d="M22 14.353C22 17.472 19.442 20 16.286 20H11m3.381-10.973a5.8 5.8 0 0 1 1.905-.321c.654 0 1.283.109 1.87.309m-11.04 2.594a4.4 4.4 0 0 0-.83-.08C3.919 11.53 2 13.426 2 15.765S3.919 20 6.286 20H7m.116-8.391a5.6 5.6 0 0 1-.354-1.962C6.762 6.528 9.32 4 12.476 4c2.94 0 5.361 2.194 5.68 5.015m-11.04 2.594a4.3 4.3 0 0 1 1.55.634m9.49-3.228A5.7 5.7 0 0 1 20 10.061" stroke="red" stroke-width="1.5" stroke-linecap="round"/></svg>
               `, primaryColor: '#FF0000', isAnimated: false } },
             {
-              type: 'PERK', id: 'verified_premium_30', label: 'Godly Verification (30 Days)',
+              type: 'VERIFIED', id: 'verified_premium_30', label: 'Godly Verification (30 Days)',
               visualConfig: { tier: 'premium', glowColor: '#facc15', svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M10.29 3.86L12 2L13.71 3.86L16.25 3.51L17.33 5.82L19.78 6.55L19.74 9.1L21.49 10.95L20.25 13.2L21 15.65L18.81 17.07L18.15 19.52L15.73 20L13.91 21.75L12 21L10.09 21.75L8.27 20L5.85 19.52L5.19 17.07L3 15.65L3.75 13.2L2.51 10.95L4.26 9.1L4.22 6.55L6.67 5.82L7.75 3.51L10.29 3.86Z" fill="#facc15" fill-opacity="0.3" stroke="#facc15" stroke-width="2"/><path d="M9 12L11 14L15 10" stroke="#facc15" stroke-width="2.5"/></svg>` }
             },
             { type: 'GLOW', id: 'pineapple_glow', name: 'Yellow Glow', visualConfig: { svgCode: `
