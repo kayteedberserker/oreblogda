@@ -54,6 +54,7 @@ const ClanSchema = new mongoose.Schema({
     },
 
     totalPoints: { type: Number, default: 0 },
+    totalPurchasedCoins: { type: Number, default: 0 },
     spendablePoints: { type: Number, default: 0 },
 
     // --- ⚔️ NEW: Escrow/Locked Points ---
