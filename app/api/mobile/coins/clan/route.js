@@ -136,6 +136,7 @@ const isAuthorized = clan.leader.equals(user._id) || (clan.viceLeader && clan.vi
         if (action === 'buy_coins') {
             const amount = parseInt(type.match(/\d+/)?.[0] || 0);
             clan.spendablePoints = (clan.spendablePoints || 0) + (amount / 10);
+            clan.totalPurchasedCoins += (amount / 10) 
             await clan.save();
             return NextResponse.json({ success: true, newBalance: clan.spendablePoints });
         }
