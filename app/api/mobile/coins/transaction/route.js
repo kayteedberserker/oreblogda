@@ -152,6 +152,7 @@ export async function POST(req) {
                 user.clanCoins = (user.clanCoins || 0) + amount;
             } else {
                 user.coins = (user.coins || 0) + amount;
+                user.totalPurchasedCoins += amount
             }
 
             await user.save();
