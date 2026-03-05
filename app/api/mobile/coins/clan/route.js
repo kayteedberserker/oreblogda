@@ -34,16 +34,16 @@ export async function POST(req) {
             extraData // Contains rewards and currency type
         } = body;
 
-const user = await MobileUser.findOne({ deviceId });
-if (!user) return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+        const user = await MobileUser.findOne({ deviceId });
+        if (!user) return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
 
-const clan = clanTag
-? await Clan.findOne({ tag: clanTag.toUpperCase() })
-: await Clan.findOne({ $or: [{ leader: user._id }, { viceLeader: user._id }] });
+        const clan = clanTag
+            ? await Clan.findOne({ tag: clanTag.toUpperCase() })
+            : await Clan.findOne({ $or: [{ leader: user._id }, { viceLeader: user._id }] });
 
-if (!clan) return NextResponse.json({ success: false, error: 'Clan not found' }, { status: 404 });
+        if (!clan) return NextResponse.json({ success: false, error: 'Clan not found' }, { status: 404 });
 
-const isAuthorized = clan.leader.equals(user._id) || (clan.viceLeader && clan.viceLeader.equals(user._id));
+        const isAuthorized = clan.leader.equals(user._id) || (clan.viceLeader && clan.viceLeader.equals(user._id));
 
         // --- ACTION: BUY DYNAMIC STORE ITEMS (using CC) ---
         if (action === 'buy_item') {
@@ -109,13 +109,31 @@ const isAuthorized = clan.leader.equals(user._id) || (clan.viceLeader && clan.vi
                     expiry.setDate(expiry.getDate() + (reward.duration || 7));
                     clan.multiplierExpiresAt = expiry;
                     clan.activeMultiplier = reward.value || 2;
+                } else if (reward.type === 'VERIFIED') {
+                    // Handle Verified Badges inside Packs
+                    const parts = reward.id.split('_'); 
+                    const newTier = reward.visualConfig?.tier || parts[1] || 'basic'; 
+                    const days = parseInt(parts[2]) || 7; 
+                    const currentTier = clan.activeCustomizations?.verifiedTier || 'none';
+                    
+                    // Only update visual/tier if it's an upgrade or same level
+                    if (VERIFIED_TIERS[newTier] >= VERIFIED_TIERS[currentTier]) {
+                        clan.activeCustomizations.verifiedTier = newTier;
+                        clan.activeCustomizations.verifiedBadgeXml = reward.visualConfig?.svgCode;
+                    }
+
+                    // Always stack the duration
+                    const now = new Date();
+                    let expiry = (clan.verifiedUntil && clan.verifiedUntil > now) ? new Date(clan.verifiedUntil) : now;
+                    expiry.setDate(expiry.getDate() + days);
+                    clan.verifiedUntil = expiry;
                 } else if (reward.type === 'PERK' && reward.value === 'premium') {
                     const expiry = (clan.verifiedUntil && clan.verifiedUntil > new Date()) ? new Date(clan.verifiedUntil) : new Date();
                     expiry.setDate(expiry.getDate() + (reward.duration || 30));
                     clan.verifiedUntil = expiry;
                     clan.activeCustomizations.verifiedTier = 'premium';
                 } else {
-                    // Visual Items (Borders, Backgrounds, Badges)
+                    // Visual Items (Borders, Backgrounds, Badges, Watermarks)
                     clan.specialInventory.push({
                         itemId: reward.id,
                         name: reward.name || reward.label,
@@ -136,16 +154,20 @@ const isAuthorized = clan.leader.equals(user._id) || (clan.viceLeader && clan.vi
         if (action === 'buy_coins') {
             const amount = parseInt(type.match(/\d+/)?.[0] || 0);
             clan.spendablePoints = (clan.spendablePoints || 0) + (amount / 10);
-            clan.totalPurchasedCoins += (amount / 10) 
+            // Preserving functionality for field tracking
+            if (clan.totalPurchasedCoins !== undefined) {
+                clan.totalPurchasedCoins += (amount / 10);
+            }
             await clan.save();
             return NextResponse.json({ success: true, newBalance: clan.spendablePoints });
         }
 
-return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
+        return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
 
     } catch (error) {
         console.error("Clan Transaction Error:", error);
         return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
     }
 }
+
 
