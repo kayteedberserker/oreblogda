@@ -37,6 +37,7 @@ const mobileUserSchema = new mongoose.Schema(
       url: { type: String, default: "" },
       public_id: { type: String, default: "" },
     },
+    totalPurchasedCoins: { type: Number, default: 0 },
     totalRejectedPost: { type: Number, default: 0 },
     consecutiveStreak: { type: Number, default: 0 },
     country: { type: String, default: 'Unknown' },
