@@ -47,8 +47,7 @@ export async function POST(req) {
 
         // --- ACTION: BUY DYNAMIC STORE ITEMS (using CC) ---
         if (action === 'buy_item') {
-            if (!isAuthorized) return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 403 });
-
+            
             if (category === "UPGRADE" || type === "UPGRADE" || type === "increase_slot") {
                 if (clan.maxSlots >= 13) return NextResponse.json({ success: false, error: 'Clan Slots full' }, { status: 400 });
                 const cost = price || CC_VALUES["increase_slot"];
