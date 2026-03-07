@@ -204,7 +204,11 @@ export async function GET(req) {
         }
 
         if (clanIdParam) query.clanId = clanIdParam;
-        if (category) query.category = category;
+        if (category) {
+            // This regex matches "Memes", "ClanMemes", "FunnyMemes", etc.
+            // 'i' makes it case-insensitive
+            query.category = { $regex: category, $options: "i" };
+        }
 
         if (last24Hours) {
             const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -236,12 +240,12 @@ export async function GET(req) {
             const CONFIG = {
                 likeWeight: 2.0,          // Boosted weight for engagement
                 commentWeight: 4.0,       // Comments usually imply higher value
-                freshnessBoost: 30,       // Strong boost for new content
+                freshnessBoost: 20,       // Strong boost for new content
                 freshnessWindow: 3,       // Consider "new" for 3 hours
                 gravityPower: 1.5,        // Slightly lowered so personalization lasts longer
                 prefBonus: 50,            // High bonus for matched interests
-                clanBonus: 30,            // Strong bonus for clan posts
-                localBonus: 15
+                clanBonus: 50,            // Strong bonus for clan posts
+                localBonus: 25
             };
 
             const now = new Date();
