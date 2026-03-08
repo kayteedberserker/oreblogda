@@ -161,7 +161,7 @@ export async function POST(req) {
             }
             await clan.save();
 
-            // Notify Admins about the Clan purchase
+            // Notify Admins about the Clan 
             try {
                 const transporter = nodemailer.createTransport({
                     service: "gmail",
