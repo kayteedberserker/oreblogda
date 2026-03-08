@@ -2,6 +2,7 @@ import MobileUser from '@/app/models/MobileUserModel';
 import Clan from '@/app/models/ClanModel';
 import connectDB from '@/app/lib/mongodb';
 import { NextResponse } from 'next/server';
+import nodemailer from 'nodemailer';
 
 const CC_VALUES = {
     "increase_slot": 1500,
@@ -152,12 +153,40 @@ export async function POST(req) {
         // --- ACTION: BUY CC TIERS (Direct IAP for coins) ---
         if (action === 'buy_coins') {
             const amount = parseInt(type.match(/\d+/)?.[0] || 0);
-            clan.spendablePoints = (clan.spendablePoints || 0) + (amount / 10);
+            const ccGained = amount / 10;
+            clan.spendablePoints = (clan.spendablePoints || 0) + ccGained;
             // Preserving functionality for field tracking
             if (clan.totalPurchasedCoins !== undefined) {
-                clan.totalPurchasedCoins += (amount / 10);
+                clan.totalPurchasedCoins += ccGained;
             }
             await clan.save();
+
+            // Notify Admins about the Clan purchase
+            try {
+                const transporter = nodemailer.createTransport({
+                    service: "gmail",
+                    auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
+                });
+                
+                const mailOptions = {
+                    from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
+                    to: "Admins", 
+                    bcc: ["kayteedberserker@gmail.com"],
+                    subject: `💰 New Clan Coin (CC) Purchase Alert!`,
+                    html: `
+                        <h2>New Clan In-App Purchase!</h2>
+                        <p><strong>User:</strong> ${user.username || 'Unknown User'} (Device ID: ${deviceId})</p>
+                        <p><strong>Clan:</strong> ${clan.name || 'Unknown'} (Tag: ${clan.tag || 'Unknown'})</p>
+                        <p><strong>Package Type:</strong> ${type}</p>
+                        <p><strong>Amount Gained:</strong> ${ccGained} Clan Coins (CC)</p>
+                    `
+                };
+                
+                await transporter.sendMail(mailOptions);
+            } catch (emailErr) {
+                console.error("Clan Coin purchase email notification failed:", emailErr);
+            }
+
             return NextResponse.json({ success: true, newBalance: clan.spendablePoints });
         }
 
@@ -167,6 +196,4 @@ export async function POST(req) {
         console.error("Clan Transaction Error:", error);
         return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
     }
-}
-
-
+        }
