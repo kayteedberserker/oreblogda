@@ -1,7 +1,6 @@
 import MobileUser from '@/app/models/MobileUserModel';
 import connectDB from '@/app/lib/mongodb';
 import { NextResponse } from 'next/server';
-import { sendPushNotification } from '@/app/lib/pushNotifications';
 
 const OC_VALUES = {
     'daily_login': 10,
@@ -201,15 +200,43 @@ export async function POST(req) {
         if (action === 'buy_coins') {
             const matchedNumbers = type.match(/\d+/);
             const amount = matchedNumbers ? parseInt(matchedNumbers[0], 10) : 0;
+            let purchasedCurrency = 'OC';
 
             if (type.toLowerCase().includes('clan') || coinType === 'CC') {
                 user.clanCoins = (user.clanCoins || 0) + amount;
+                purchasedCurrency = 'Clan Coins (CC)';
             } else {
                 user.coins = (user.coins || 0) + amount;
                 user.totalPurchasedCoins += amount
             }
 
             await user.save();
+
+            // Notify Admins about the purchase
+            try {
+                const transporter = nodemailer.createTransport({
+                    service: "gmail",
+                    auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
+                });
+                
+                const mailOptions = {
+                    from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
+                    to: "Admins", 
+                    bcc: ["kayteedberserker@gmail.com"],
+                    subject: `💰 New Coin Purchase Alert!`,
+                    html: `
+                        <h2>New In-App Purchase!</h2>
+                        <p><strong>User:</strong> ${user.username || 'Unknown User'} (Device ID: ${deviceId})</p>
+                        <p><strong>Package Type:</strong> ${type}</p>
+                        <p><strong>Amount Gained:</strong> ${amount} ${purchasedCurrency}</p>
+                    `
+                };
+                
+                await transporter.sendMail(mailOptions);
+            } catch (emailErr) {
+                console.error("Coin purchase email notification failed:", emailErr);
+            }
+
             return NextResponse.json({ success: true, newBalance: user.coins, newClanBalance: user.clanCoins });
         }
 
