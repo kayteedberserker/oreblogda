@@ -1,7 +1,7 @@
 import MobileUser from '@/app/models/MobileUserModel';
 import connectDB from '@/app/lib/mongodb';
 import { NextResponse } from 'next/server';
-
+import { sendPushNotification } from '@/app/lib/pushNotifications';
 const OC_VALUES = {
     'daily_login': 10,
     'daily_login_7': 50,
