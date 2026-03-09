@@ -6,6 +6,7 @@ import { sendPushNotification } from "@/app/lib/pushNotifications";
 import MobileUser from "@/app/models/MobileUserModel";
 import crypto from "crypto";
 import { awardClanPoints } from "@/app/lib/clanService";
+import Clan from "@/app/models/ClanModel";
 
 // ----------------------
 // 🛡️ SECURITY: Request Signature Verification
@@ -317,19 +318,71 @@ export async function GET(req, { params }) {
         const { id } = resolvedParams;
         if (!id) return addCorsHeaders(NextResponse.json({ message: "Post identifier required" }, { status: 400 }));
 
+        // 1. Fetch the post
         let post;
         if (id.includes("-")) {
-            post = await Post.findOne({ slug: id });
+            post = await Post.findOne({ slug: id }).lean();
         } else {
-            post = await Post.findById(id);
+            post = await Post.findById(id).lean();
         }
 
         if (!post) return addCorsHeaders(NextResponse.json({ message: "Post not found" }, { status: 404 }));
 
-        const postCount = await Post.countDocuments({ authorId: post.authorId });
-        return addCorsHeaders(NextResponse.json({ ...post.toObject(), authorPostCount: postCount }));
+        // 2. Fetch related data (Author Post Count, Author Details, Clan Details)
+        const authorId = post.authorUserId || post.authorId;
+        const clanTag = post.clanTag || post.clanId;
+
+        let authorData = null;
+        let clanData = null;
+        let authorPostCount = 0;
+
+        // Run these fetches in parallel for maximum speed
+        const promises = [];
+
+        if (authorId) {
+            promises.push(
+                Post.countDocuments({ $or: [{ authorId }, { authorUserId: authorId }] })
+                    .then(count => { authorPostCount = count; }),
+                MobileUser.findById(authorId).lean()
+                    .then(u => {
+                        if (u) {
+                            authorData = {
+                                name: u.username,
+                                image: u.profilePic?.url || null,
+                                streak: u.lastStreak || 0,
+                                rank: u.previousRank || 0,
+                                equippedGlow: u.inventory?.find(i => i.category === 'GLOW' && i.isEquipped) || null,
+                                equippedBadges: u.inventory?.filter(i => i.category === 'BADGE' && i.isEquipped) || []
+                            };
+                        }
+                    })
+            );
+        }
+
+        if (clanTag) {
+            promises.push(
+                Clan.findOne({ $or: [{ tag: clanTag }]}).lean()
+                    .then(c => {
+                        if (c) clanData = c;
+                    })
+            );
+        }
+
+        // Wait for all related data to fetch
+        await Promise.all(promises);
+
+        // 3. Package and return
+        const responseData = {
+            ...post,
+            authorPostCount,
+            authorData,
+            clanData
+        };
+
+        return addCorsHeaders(NextResponse.json(responseData));
 
     } catch (err) {
+        console.error("Single Post Fetch Error:", err);
         return addCorsHeaders(NextResponse.json({ message: "Server error", error: err.message }, { status: 500 }));
     }
 }

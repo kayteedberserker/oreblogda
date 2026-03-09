@@ -4,11 +4,12 @@ import Clan from "@/app/models/ClanModel";
 import MobileUser from "@/app/models/MobileUserModel";
 import { sendMultiplePushNotifications } from "@/app/lib/pushNotifications";
 
-// --- LOGIC FUNCTIONS (EXTRACTED FROM YOUR ROUTES) ---
+// --- LOGIC FUNCTIONS ---
 
 async function dailyClanCheck() {
     const clans = await Clan.find({});
     const now = new Date();
+    const bulkOps = [];
 
     for (const clan of clans) {
         let setFields = {};
@@ -68,40 +69,59 @@ async function dailyClanCheck() {
             finalUpdate.$addToSet = { badges: { $each: badgesToAdd } };
         }
 
+        // ⚡️ Add to bulk operation array instead of awaiting individual updates
         if (Object.keys(finalUpdate).length > 0) {
-            await Clan.updateOne({ _id: clan._id }, finalUpdate);
+            bulkOps.push({
+                updateOne: {
+                    filter: { _id: clan._id },
+                    update: finalUpdate
+                }
+            });
         }
+    }
+
+    if (bulkOps.length > 0) {
+        await Clan.bulkWrite(bulkOps);
     }
 }
 
 /**
- * Daily distribution of Spendable Points.
- * If a clan's most recent 'rankAtTime' was in the Top 10, they get 30.
- * Otherwise, they get 20.
+ * ⚡️ UPDATED: Daily distribution of Spendable Points.
+ * Base = 20. Top 10 = 30. Verified = 40.
  */
 async function dailyAllocation() {
     const clans = await Clan.find({});
+    const bulkOps = [];
+    const now = new Date();
 
-    const updatePromises = clans.map(clan => {
+    for (const clan of clans) {
         let allowance = 20;
 
-        // Check the last history entry to see the rank they achieved
-        if (clan.weeklyPointHistory && clan.weeklyPointHistory.length > 0) {
+        // 1. Check Verification Status (Highest Priority)
+        const isVerified = clan.verifiedUntil && new Date(clan.verifiedUntil) > now;
+
+        if (isVerified) {
+            allowance = 40;
+        } 
+        // 2. Check Top 10 Status (Secondary Priority)
+        else if (clan.weeklyPointHistory && clan.weeklyPointHistory.length > 0) {
             const lastHistoryEntry = clan.weeklyPointHistory[clan.weeklyPointHistory.length - 1];
-            
-            // If their rankAtTime was between 1 and 10
             if (lastHistoryEntry.rankAtTime > 0 && lastHistoryEntry.rankAtTime <= 10) {
                 allowance = 30;
             }
         }
 
-        return Clan.updateOne(
-            { _id: clan._id }, 
-            { $inc: { spendablePoints: allowance } }
-        );
-    });
+        bulkOps.push({
+            updateOne: {
+                filter: { _id: clan._id },
+                update: { $inc: { spendablePoints: allowance } }
+            }
+        });
+    }
 
-    await Promise.all(updatePromises);
+    if (bulkOps.length > 0) {
+        await Clan.bulkWrite(bulkOps);
+    }
 }
 
 async function auraReset() {
@@ -160,23 +180,24 @@ async function auraReset() {
     }
 }
 
+/**
+ * ⚡️ UPDATED: Uses bulkWrite to prevent Vercel Serverless timeouts during decay.
+ */
 async function weeklyClanReset() {
-    // 1-6 Ranks
     const rankThresholds = [0, 5000, 20000, 50000, 100000, 300000];
     const decayAmounts = [200, 500, 1000, 2000, 5000, 30000]; 
 
     const rankedClans = await Clan.find({}).sort({ currentWeeklyPoints: -1 });
-    // Based on your preference, this checks lifetime stats
     const mostDiscussedClan = await Clan.findOne({}).sort({ "stats.comments": -1 });
     const weekEnding = new Date();
+    const bulkOps = [];
 
     const weeklyTitleBadges = ["The Pirate King", "The Pillars", "Hunter Association"];
-    // Note: Removed "Talk-no-jutsu" from the pull list so it stays permanent
     await Clan.updateMany({}, { $pull: { badges: { $in: weeklyTitleBadges } } });
 
     for (let i = 0; i < rankedClans.length; i++) {
       const clan = rankedClans[i];
-      const position = i + 1; // Leaderboard position (1, 2, 3...)
+      const position = i + 1; 
       const currentRank = clan.rank || 1; 
       
       let setFields = {};
@@ -216,6 +237,7 @@ async function weeklyClanReset() {
         }
       } else {
         setFields.consecutiveWeeksNoDerank = 0;
+        // Immediate individual pull to prevent bulkWrite conflicts with $addToSet
         await Clan.updateOne({ _id: clan._id }, { $pull: { badges: "Unlimited Chakra" } });
       }
 
@@ -243,22 +265,30 @@ async function weeklyClanReset() {
         $each: [{ 
             weekEnding, 
             points: clan.currentWeeklyPoints, 
-            rankAtTime: position // Storing position (1-10+) for dailyAllocation
+            rankAtTime: position 
         }],
         $slice: -12
       };
       
-      setFields.currentWeeklyPoints = 0; // The reset happens here
+      setFields.currentWeeklyPoints = 0; 
 
       const finalUpdate = { $set: setFields, $push: pushFields };
       if (badgesToAdd.length > 0) finalUpdate.$addToSet = { badges: { $each: badgesToAdd } };
       if (Object.keys(incFields).length > 0) finalUpdate.$inc = incFields;
 
-      await Clan.updateOne({ _id: clan._id }, finalUpdate);
+      // ⚡️ Add to bulk array
+      bulkOps.push({
+          updateOne: {
+              filter: { _id: clan._id },
+              update: finalUpdate
+          }
+      });
+    }
+
+    if (bulkOps.length > 0) {
+        await Clan.bulkWrite(bulkOps);
     }
 }
-
-
 
 // --- MAIN HANDLER ---
 
@@ -272,26 +302,23 @@ export async function GET(req) {
 
   const now = new Date();
   
-  // Create a formatter to get the day of the week in WAT (Africa/Lagos)
-  // This ensures that even if UTC is behind, we check the local WAT day.
   const watDay = new Intl.DateTimeFormat('en-GB', {
     weekday: 'long',
     timeZone: 'Africa/Lagos',
   }).format(now);
 
-  // We check for "Monday" specifically for your 12:00 AM WAT requirement
   const isMondayWAT = watDay === "Monday";
 
   try {
     await connectDB();
     console.log("--- Starting Master Cron Sequence ---");
 
-    // 1. Daily Tasks (Run every night)
+    // 1. Daily Tasks
     console.log("⏳ Processing Daily Tasks...");
     await dailyClanCheck();
     await dailyAllocation();
 
-    // 2. Weekly Tasks (Run only on Mondays WAT)
+    // 2. Weekly Tasks
     if (isMondayWAT) {
       console.log("⏳ Processing Weekly Resets...");
       await auraReset();

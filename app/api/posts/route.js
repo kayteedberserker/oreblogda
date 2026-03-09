@@ -13,6 +13,7 @@ import Clan from "@/app/models/ClanModel";
 import ClanFollower from "@/app/models/ClanFollower";
 import geoip from "geoip-lite";
 import { awardClanPoints } from "@/app/lib/clanService";
+import ClanModel from "@/app/models/ClanModel";
 
 /**
  * 🔹 UPDATED 2026 MODERATOR
@@ -205,8 +206,6 @@ export async function GET(req) {
 
         if (clanIdParam) query.clanId = clanIdParam;
         if (category) {
-            // This regex matches "Memes", "ClanMemes", "FunnyMemes", etc.
-            // 'i' makes it case-insensitive
             query.category = { $regex: category, $options: "i" };
         }
 
@@ -238,13 +237,13 @@ export async function GET(req) {
                 .lean();
         } else {
             const CONFIG = {
-                likeWeight: 2.0,          // Boosted weight for engagement
-                commentWeight: 4.0,       // Comments usually imply higher value
-                freshnessBoost: 20,       // Strong boost for new content
-                freshnessWindow: 3,       // Consider "new" for 3 hours
-                gravityPower: 1.5,        // Slightly lowered so personalization lasts longer
-                prefBonus: 50,            // High bonus for matched interests
-                clanBonus: 50,            // Strong bonus for clan posts
+                likeWeight: 2.0,
+                commentWeight: 4.0,
+                freshnessBoost: 20,
+                freshnessWindow: 3,
+                gravityPower: 1.5,
+                prefBonus: 50,
+                clanBonus: 50,
                 localBonus: 25
             };
 
@@ -309,15 +308,97 @@ export async function GET(req) {
             posts = await Post.aggregate(pipeline);
         }
 
-        // Serialize the data
-        const serializedPosts = posts.map((p) => ({
-            ...p,
-            _id: p._id.toString(),
-            interests: p.interests || []
-        }));
+        // ⚡️ --- STEP 3.5: BULK FETCH AUTHOR & CLAN DATA --- ⚡️
+        let userMap = {};
+        let clanMap = {};
 
-        // --- STEP 4: RETURN DATA ---
-        // Shuffling removed as requested. Data is now purely rank-sorted for stability.
+        try {
+            const uniqueAuthorIds = [...new Set(posts.map(p => p.authorUserId || p.authorId).filter(Boolean))];
+            const uniqueClanTags = [...new Set(posts.map(p => p.clanTag || p.clanId).filter(Boolean))];
+
+            if (uniqueAuthorIds.length > 0) {
+                // 🛡️ FIXED: Safe Mongoose Object ID validation
+                
+                const validAuthorIds = uniqueAuthorIds.filter(id => id);
+                
+                if (validAuthorIds.length > 0) {
+                    // ⚡️ SERVER-SIDE RANK CALCULATION: Bulk fetch post counts instantly
+                    const authorPostCounts = await Post.aggregate([
+                        { 
+                            $match: { 
+                                $or: [
+                                    { authorId: { $in: validAuthorIds } }, 
+                                    { authorUserId: { $in: validAuthorIds } }
+                                ] 
+                            } 
+                        },
+                        { 
+                            $group: { 
+                                _id: { $ifNull: ["$authorUserId", "$authorId"] }, 
+                                count: { $sum: 1 } 
+                            } 
+                        }
+                    ]);
+
+                    const countMap = {};
+                    authorPostCounts.forEach(c => {
+                        countMap[c._id.toString()] = c.count;
+                    });
+
+                    // Fetch user details
+                    const users = await MobileUser.find({ _id: { $in: validAuthorIds } }).lean();
+                    users.forEach(u => {
+                        const inv = u.inventory || u.specialInventory || [];
+                        const userIdStr = u._id.toString();
+                        
+                        userMap[userIdStr] = {
+                            name: u.username,
+                            image: u.profilePic?.url || null,
+                            streak: u.lastStreak || 0,
+                            rank: u.previousRank || 0,
+                            postsCount: countMap[userIdStr] || 0, // ⚡️ Passed securely to the frontend
+                            equippedGlow: inv.find(i => i.category === 'GLOW' && i.isEquipped) || null,
+                            equippedBadges: inv.filter(i => i.category === 'BADGE' && i.isEquipped) || []
+                        };
+                    });
+                }
+            }
+
+            if (uniqueClanTags.length > 0) {
+                // 🛡️ FIXED: Safe Mongoose Object ID validation
+                const objectIds = uniqueClanTags.filter(id => id);
+                
+                const clanQuery = [];
+                if (objectIds.length > 0) clanQuery.push({ tag: { $in: objectIds } });
+                
+                if (clanQuery.length > 0) {
+                    const clans = await Clan.find({ $or: clanQuery }).lean();
+                    
+                    clans.forEach(c => {
+                        if (c.tag) clanMap[c.tag] = c;
+                        if (c._id) clanMap[c._id.toString()] = c;
+                    });
+                }
+            }
+        } catch (popErr) {
+            console.error("Bulk Population Error (Non-Fatal):", popErr);
+        }
+
+        // --- STEP 4: SERIALIZE & ATTACH DATA ---
+        const serializedPosts = posts.map((p) => {
+            const aId = (p.authorUserId || p.authorId)?.toString();
+            const cTag = (p.clanTag || p.clanId)?.toString();
+            
+            return {
+                ...p,
+                _id: p._id.toString(),
+                interests: p.interests || [],
+                // ⚡️ Inject pre-packaged data directly into the post
+                authorData: userMap[aId] || null,
+                clanData: clanMap[cTag] || null
+            };
+        });
+
         const res = NextResponse.json({
             posts: serializedPosts,
             total,

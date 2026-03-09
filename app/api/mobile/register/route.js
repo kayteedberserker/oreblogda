@@ -6,7 +6,6 @@ import geoip from "geoip-lite";
 import crypto from "crypto";
 import { sendPushNotification } from "@/app/lib/pushNotifications";
 
-// 🆔 Helper: Generate a unique referral ID
 const generateReferralCode = (username) => {
   const prefix = username.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, "Z");
   const random = crypto.randomBytes(2).toString("hex").toUpperCase();
@@ -16,7 +15,8 @@ const generateReferralCode = (username) => {
 export async function POST(req) {
   try {
     await connectDB();
-    const { deviceId, username, pushToken, referredBy, preferences } = await req.json();
+    // 🎭 Added 'character' to the destructured body
+    const { deviceId, username, pushToken, referredBy, preferences, character } = await req.json();
 
     if (!deviceId || !username || username.trim() === "") {
       return NextResponse.json({ message: "Username is required" }, { status: 400 });
@@ -49,8 +49,6 @@ export async function POST(req) {
 
         if (referrer && referrer.deviceId !== deviceId) {
           finalReferrer = cleanRef;
-
-          // 1. Update Referrer Record
           referrer.invitedUsers.push({ username: username, date: new Date() });
           referrer.referralCount = (referrer.referralCount || 0) + 1;
           referrer.weeklyAura = (referrer.weeklyAura || 0) + 20;
@@ -58,7 +56,6 @@ export async function POST(req) {
           referrer.doubleStreakUntil = boostExpiry;
           await referrer.save();
 
-          // 🔔 SEND NOTIFICATION TO THE REFERRER
           if (referrer.pushToken) {
             try {
               await sendPushNotification(
@@ -74,11 +71,18 @@ export async function POST(req) {
 
           auraBonus = 20;
           boostDate = boostExpiry;
-          console.log(`📈 Success: ${cleanRef} invited a new operative.`);
         }
       }
 
-      // Create the New User with Preferences
+      // --- 👗 INITIALIZE DEFAULT WARDROBE ---
+      const defaultWardrobe = [
+        { clothingId: 'default_hair', name: 'Standard Hair', type: 'hair', isDefault: true },
+        { clothingId: 'default_top', name: 'Recruit Uniform', type: 'top', isDefault: true },
+        { clothingId: 'default_pant', name: 'Training Slacks', type: 'pant', isDefault: true },
+        { clothingId: 'default_shoe', name: 'Issued Boots', type: 'shoe', isDefault: true },
+      ];
+
+      // Create the New User
       user = await MobileUser.create({
         deviceId,
         username,
@@ -86,7 +90,19 @@ export async function POST(req) {
         country: detectedCountry,
         referralCode: myNewReferralCode,
         referredBy: finalReferrer,
-        preferences, // 👈 Saved to DB
+        preferences,
+        // 🎭 Saving the Character Base + Default Wardrobe
+        character: character || {
+          base: { gender: 'male', skinTone: 'medium', name: username },
+          equipped: {
+            hair: 'default_hair',
+            top: 'default_top',
+            pant: 'default_pant',
+            shoe: 'default_shoe',
+            action: 'idle'
+          }
+        },
+        wardrobe: defaultWardrobe,
         coins: 50,
         referralCount: 0,
         weeklyAura: auraBonus,
@@ -94,18 +110,15 @@ export async function POST(req) {
         lastActive: new Date()
       });
 
-      // 🏆 DYNAMIC ROUND CALCULATION & REGISTRATION
+      // 🏆 REFERRAL EVENT LOGGING
       if (finalReferrer) {
         try {
           const referrerDoc = await MobileUser.findOne({ referralCode: finalReferrer }).select("_id");
           if (referrerDoc) {
-            
-            // 🔄 Check grand total to assign the correct round
             const grandTotal = await ReferralEvent.countDocuments({ status: 'verified' });
-            
             let assignedRound = 1;
             if (grandTotal >= 3000) assignedRound = 3;
-            else if (grandTotal >= 1000) assignedRound = 3; // Based on your logic
+            else if (grandTotal >= 1000) assignedRound = 3;
             else if (grandTotal >= 500) assignedRound = 2;
 
             await ReferralEvent.create({
@@ -113,7 +126,7 @@ export async function POST(req) {
               referredId: user._id,
               referredUsername: user.username,
               deviceId: deviceId, 
-              round: assignedRound, // 👈 Dynamically tagged
+              round: assignedRound,
               status: 'verified'
             });
           }
@@ -126,7 +139,11 @@ export async function POST(req) {
       // 🔄 EXISTING USER UPDATE
       user.username = username;
       if (pushToken) user.pushToken = pushToken;
-      if (preferences) user.preferences = preferences; // 👈 Updated on DB
+      if (preferences) user.preferences = preferences;
+      
+      // 🎭 Update Character if provided (useful for re-launching setup)
+      if (character) user.character = { ...user.character, ...character };
+
       if (!user.referralCode) user.referralCode = generateReferralCode(username);
       if (!user.country || user.country === "Unknown") user.country = detectedCountry;
 

@@ -1,6 +1,23 @@
 import mongoose from 'mongoose';
 import MobileUser from './MobileUserModel';
 
+// --- 💬 NEW: CLAN MESSAGE SCHEMA ---
+const ClanMessageSchema = new mongoose.Schema({
+    _id: {
+        type: mongoose.Schema.Types.ObjectId,
+        default: () => new mongoose.Types.ObjectId()
+    },
+    authorId: { type: String }, // Device ID / Fingerprint
+    authorUserId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "MobileUser",
+        required: true
+    },
+    authorName: { type: String, required: true },
+    text: { type: String, required: true },
+    date: { type: Date, default: Date.now }
+});
+
 const InventoryItemSchema = new mongoose.Schema({
     itemId: { type: String, required: true },
     name: { type: String, required: true },
@@ -8,17 +25,16 @@ const InventoryItemSchema = new mongoose.Schema({
         type: String,
         required: true
     },
-    // 🎨 Updated to store advanced animation and color properties
     visualConfig: {
-        svgCode: { type: String }, // The raw <svg>...</svg> string
+        svgCode: { type: String }, 
         primaryColor: { type: String },
-        secondaryColor: { type: String, default: null }, // For dual-color animations like 'triple'
+        secondaryColor: { type: String, default: null }, 
         animationType: {
             type: String,
             default: "singleSnake"
         },
-        duration: { type: Number, default: 3000 }, // Animation speed in ms
-        snakeLength: { type: Number, default: 120 }, // length of the dash
+        duration: { type: Number, default: 3000 }, 
+        snakeLength: { type: Number, default: 120 }, 
         isAnimated: { type: Boolean, default: false }
     },
     isEquipped: { type: Boolean, default: false },
@@ -36,6 +52,9 @@ const ClanSchema = new mongoose.Schema({
     viceLeader: { type: mongoose.Schema.Types.ObjectId, ref: 'MobileUser' },
     members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'MobileUser' }],
 
+    // --- 💬 NEW: THE CHAT ROOM ---
+    messages: [ClanMessageSchema],
+
     // Public Stats
     followerCount: { type: Number, default: 0 },
 
@@ -45,10 +64,7 @@ const ClanSchema = new mongoose.Schema({
         likes: { type: Number, default: 0 },
         shares: { type: Number, default: 0 },
         comments: { type: Number, default: 0 },
-        totalPosts: { type: Number, default: 0 }, // For Library of Ohara (1K posts)
-
-        // --- ⚔️ NEW: War Progress Tracking ---
-        // These track the cumulative counts specifically for engagement-based wars
+        totalPosts: { type: Number, default: 0 }, 
         warLikes: { type: Number, default: 0 },
         warComments: { type: Number, default: 0 },
     },
@@ -57,17 +73,13 @@ const ClanSchema = new mongoose.Schema({
     totalPurchasedCoins: { type: Number, default: 0 },
     spendablePoints: { type: Number, default: 0 },
 
-    // --- ⚔️ NEW: Escrow/Locked Points ---
-    // Points staked in an active war are moved here until the war ends
     lockedPoints: { type: Number, default: 0 },
-    // --- ⚡ Multiplier Logic ---
     activeMultiplier: { type: Number, default: 0 }, 
     multiplierExpiresAt: { type: Date, default: null },
-    rank: { type: Number, default: 1 }, // This represents the Clan Level (1-6)
+    rank: { type: Number, default: 1 }, 
 
-    // Add these fields to your existing ClanSchema in ClanModel.js
     isRecruiting: { type: Boolean, default: true },
-    maxSlots: { type: Number, default: 5 }, // Starts at 5, upgradeable to 13
+    maxSlots: { type: Number, default: 5 }, 
     joinRequests: [{
         userId: { type: mongoose.Schema.Types.ObjectId, ref: 'MobileUser' },
         username: String,
@@ -88,11 +100,10 @@ const ClanSchema = new mongoose.Schema({
         index: true
     },
 
-    // --- ⚔️ NEW: War & Bounty State ---
     isInWar: { type: Boolean, default: false },
     activeWarId: {
         type: String,
-        default: null, // Stores "TAG1VTAG2"
+        default: null, 
         index: true
     },
 
@@ -106,27 +117,40 @@ const ClanSchema = new mongoose.Schema({
     bountyExpiry: { type: Date },
 
     // Inventory & Customization
-    specialInventory: [InventoryItemSchema], // Permanent items like "Red Cloud Theme"
+    specialInventory: [InventoryItemSchema], 
 
-    // Quick-access for UI rendering (what is currently active)
     activeCustomizations: {
         frame: { type: String, default: null },
         theme: { type: String, default: null },
         effect: { type: String, default: null },
-        verifiedBadgeXml: { type: String, default: null }, // Store the SVG string here
-        verifiedTier: { type: String, default: 'none' }   // 'basic', 'standard', 'premium'
+        verifiedBadgeXml: { type: String, default: null }, 
+        verifiedTier: { type: String, default: 'none' }   
     },
-    verifiedUntil: { type: Date, default: null }, // Clan-wide verification
-    purchasedPacks: [{ type: String }], // To track the one-time buy per Clan
+    verifiedUntil: { type: Date, default: null }, 
+    purchasedPacks: [{ type: String }], 
 
-    // Badge Logic Helpers
-    consecutiveWeeksNoDerank: { type: Number, default: 0 }, // For Unlimited Chakra (4 weeks)
+    consecutiveWeeksNoDerank: { type: Number, default: 0 }, 
     lastActive: { type: Date, default: Date.now },
     badges: [String],
 
 }, { timestamps: true });
 
-// Index for the War/Bounty system to find targetable clans quickly
+// Index for the War/Bounty system
 ClanSchema.index({ isInWar: 1, hasBounty: 1, rank: 1 });
+
+// --- 🛡️ MIDDLEWARE: Enforce 250 Message Limit ---
+ClanSchema.pre('save', function (next) {
+    // If the messages array exists and has more than 250 items, 
+    // slice it to keep only the 250 MOST RECENT messages (the end of the array)
+    if (this.messages && this.messages.length > 250) {
+        this.messages = this.messages.slice(-250);
+    }
+    next();
+});
+
+// Hot reload safe export
+if (process.env.NODE_ENV === "development") {
+    delete mongoose.models.Clan;
+}
 
 export default mongoose.models.Clan || mongoose.model('Clan', ClanSchema);

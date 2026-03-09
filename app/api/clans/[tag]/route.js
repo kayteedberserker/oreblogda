@@ -1,4 +1,5 @@
 import connectDB from "@/app/lib/mongodb";
+import { sendMultiplePushNotifications } from "@/app/lib/pushNotifications";
 import Clan from "@/app/models/ClanModel";
 import MobileUser from "@/app/models/MobileUserModel";
 import Post from "@/app/models/PostModel"; // 🔹 Added Post model import
@@ -208,6 +209,63 @@ export async function PATCH(req, { params }) {
             if (user._id.toString() === clan.viceLeader?.toString()) clan.viceLeader = null;
             
             clan.members = clan.members.filter(m => m.toString() !== user._id.toString());
+        }
+
+        // 💬 🔹 NEW: HANDLE CLAN CHAT MESSAGES
+        if (action === "SEND_MESSAGE") {
+            const isMember = clan.members.some(m => m.toString() === user._id.toString()) || isLeader || isVice;
+            
+            if (!isMember) {
+                return NextResponse.json({ message: "Forbidden: Not a clan member" }, { status: 403 });
+            }
+
+            if (!clan.messages) clan.messages = [];
+
+            clan.messages.push({
+                authorId: user.deviceId,
+                authorUserId: user._id,
+                authorName: user.username,
+                text: payload.text,
+                date: new Date()
+            });
+
+            if (clan.messages.length > 250) {
+                clan.messages = clan.messages.slice(-250);
+            }
+
+            // 🔔 --- PUSH NOTIFICATION LOGIC ---
+            try {
+                // 1. Get all clan members except the sender
+                const memberIds = [clan.leader, clan.viceLeader, ...clan.members].filter(
+                    id => id && id.toString() !== user._id.toString()
+                );
+
+                // 2. Fetch their Expo Push Tokens
+                const recipients = await MobileUser.find({
+                    _id: { $in: memberIds },
+                    pushToken: { $exists: true, $ne: null }
+                }).select("pushToken");
+
+                const tokens = recipients.map(r => r.pushToken);
+
+                if (tokens.length > 0) {
+                    // 3. Send the broadcast
+                    await sendMultiplePushNotifications(
+                        tokens,
+                        `${clan.name} Hall`,
+                        `${user.username}: ${payload.text}`,
+                        { 
+                            screen: "/clanprofile", // Ensure this matches your Expo Router path
+                            clanTag: clan.tag,
+                            type: "CLAN_CHAT"
+                        },
+                        `clan_chat_${clan.tag}` // Group messages by clan hall
+                    );
+                }
+            } catch (pushErr) {
+                console.error("🔔 Push Notification Error:", pushErr);
+                // We don't return an error response here because the message was successfully saved
+            }
         }
 
         // 🔹 FINAL SAVE

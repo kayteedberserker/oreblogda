@@ -1,29 +1,35 @@
 import mongoose from "mongoose";
 
-// 🎒 Inventory Item Schema (Shared logic with Clans)
+// 🎒 Inventory Item Schema (Frames, Badges, etc.)
 const InventoryItemSchema = new mongoose.Schema({
   itemId: { type: String, required: true },
   name: { type: String, required: true },
-  category: {
-    type: String,
-    required: true
-  },
-  // 🎨 Add this to store the SVG string and colors dynamically
+  category: { type: String, required: true },
   visualConfig: {
-    svgCode: { type: String }, // The raw <svg>...</svg> string
+    svgCode: { type: String },
     primaryColor: { type: String },
-    secondaryColor: { type: String, default: null }, // For dual-color animations like 'triple'
-    animationType: {
-      type: String,
-      default: "singleSnake"
-    },
-    duration: { type: Number, default: 3000 }, // Animation speed in ms
-    snakeLength: { type: Number, default: 120 }, // length of the dash
+    secondaryColor: { type: String, default: null },
+    animationType: { type: String, default: "singleSnake" },
+    duration: { type: Number, default: 3000 },
+    snakeLength: { type: Number, default: 120 },
     isAnimated: { type: Boolean, default: false }
   },
   isEquipped: { type: Boolean, default: false },
   acquiredAt: { type: Date, default: Date.now },
   expiresAt: { type: Date, default: null },
+});
+
+// 👗 NEW: Wardrobe Schema for Character Clothing
+const WardrobeItemSchema = new mongoose.Schema({
+  clothingId: { type: String, required: true }, // e.g., 'cyber_jacket_01'
+  name: { type: String, required: true },
+  type: { 
+    type: String, 
+    enum: ['hair', 'top', 'pant', 'shoe', 'accessory'], 
+    required: true 
+  },
+  isDefault: { type: Boolean, default: false }, // For those initial default clothes
+  acquiredAt: { type: Date, default: Date.now }
 });
 
 const mobileUserSchema = new mongoose.Schema(
@@ -46,6 +52,25 @@ const mobileUserSchema = new mongoose.Schema(
     activityLog: [{ type: Date, default: Date.now }],
     lastStreak: { type: Number, default: 0 },
 
+    // --- 🎭 CHARACTER DESIGN ---
+    character: {
+      base: {
+        gender: { type: String, enum: ['male', 'female'], default: 'male' },
+        skinTone: { type: String, enum: ['light', 'medium', 'dark'], default: 'medium' },
+        name: { type: String, default: 'Avatar' }
+      },
+      equipped: {
+        hair: { type: String, default: 'default_hair' },
+        top: { type: String, default: 'default_top' },
+        pant: { type: String, default: 'default_pant' },
+        shoe: { type: String, default: 'default_shoe' },
+        action: { type: String, default: 'idle' } // wave, shy, jump
+      }
+    },
+
+    // --- 👗 DEDICATED WARDROBE ---
+    wardrobe: [WardrobeItemSchema],
+
     // --- 🎭 NEURAL LINK PREFERENCES ---
     preferences: {
       favAnimes: { type: [String], default: [] },
@@ -53,7 +78,7 @@ const mobileUserSchema = new mongoose.Schema(
       favCharacter: { type: String, default: "" },
     },
 
-    // --- 🎒 USER INVENTORY & CUSTOMIZATION ---
+    // --- 🎒 USER INVENTORY (Frames/Badges Only) ---
     inventory: [InventoryItemSchema],
     activeCustomizations: {
       frame: { type: String, default: null },
@@ -63,14 +88,8 @@ const mobileUserSchema = new mongoose.Schema(
     },
 
     // --- 💰 COIN SYSTEM ---
-    coins: {
-      type: Number,
-      default: 0
-    },
-    lastClaimedDate: {
-      type: Date,
-      default: null
-    },
+    coins: { type: Number, default: 0 },
+    lastClaimedDate: { type: Date, default: null },
     coinTransactionHistory: {
       type: [{
         action: String,
@@ -82,14 +101,8 @@ const mobileUserSchema = new mongoose.Schema(
     },
 
     // --- ✨ AURA SYSTEM ---
-    weeklyAura: {
-      type: Number,
-      default: 0
-    },
-    previousRank: {
-      type: Number,
-      default: null
-    },
+    weeklyAura: { type: Number, default: 0 },
+    previousRank: { type: Number, default: null },
     auraHistory: [
       {
         weekNumber: Number,
@@ -101,10 +114,7 @@ const mobileUserSchema = new mongoose.Schema(
 
     // --- 🔗 REFERRAL SYSTEM ---
     referralCode: { type: String, unique: true, sparse: true },
-    doubleStreakUntil: {
-      type: Date,
-      default: null
-    },
+    doubleStreakUntil: { type: Date, default: null },
     invitedUsers: [{
       username: String,
       date: { type: Date, default: Date.now }
@@ -115,7 +125,6 @@ const mobileUserSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Correctly handle model re-compilation in Next.js
 const MobileUser = mongoose.models.MobileUsers || mongoose.model("MobileUsers", mobileUserSchema);
 
 export default MobileUser;

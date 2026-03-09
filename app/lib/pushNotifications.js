@@ -89,6 +89,7 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
         body: JSON.stringify(messages),
       });
       const result = await response.json();
+      console.log(result)
       return result;
     } catch (error) {
       console.error(`❌ Chunk ${index + 1} Push Error:`, error);
