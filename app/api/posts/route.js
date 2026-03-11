@@ -356,6 +356,7 @@ export async function GET(req) {
                             image: u.profilePic?.url || null,
                             streak: u.lastStreak || 0,
                             rank: u.previousRank || 0,
+                            peakLevel: u.peakLevel || 0,
                             postsCount: countMap[userIdStr] || 0, // ⚡️ Passed securely to the frontend
                             equippedGlow: inv.find(i => i.category === 'GLOW' && i.isEquipped) || null,
                             equippedBadges: inv.filter(i => i.category === 'BADGE' && i.isEquipped) || []

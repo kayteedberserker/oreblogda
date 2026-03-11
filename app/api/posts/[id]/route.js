@@ -351,6 +351,7 @@ export async function GET(req, { params }) {
                                 image: u.profilePic?.url || null,
                                 streak: u.lastStreak || 0,
                                 rank: u.previousRank || 0,
+                                peakLevel: u.peakLevel || 0,
                                 equippedGlow: u.inventory?.find(i => i.category === 'GLOW' && i.isEquipped) || null,
                                 equippedBadges: u.inventory?.filter(i => i.category === 'BADGE' && i.isEquipped) || []
                             };

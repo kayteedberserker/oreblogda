@@ -2,6 +2,8 @@ import MobileUser from '@/app/models/MobileUserModel';
 import connectDB from '@/app/lib/mongodb';
 import { NextResponse } from 'next/server';
 import { sendPushNotification } from '@/app/lib/pushNotifications';
+import nodemailer from 'nodemailer'; // Assuming you have this imported for your emails
+
 const OC_VALUES = {
     'daily_login': 10,
     'daily_login_7': 50,
@@ -9,6 +11,24 @@ const OC_VALUES = {
     'create_clan': 500,
     'extra_slot': 20,
     'clan_war': 20,
+};
+
+// ⚡️ NEW: Peak Level Calculation Logic
+// Level 1 now strictly requires at least 1 purchased coin.
+const PEAK_THRESHOLDS = [1, 1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
+
+const calculatePeakLevel = (totalPurchased) => {
+    if (!totalPurchased || totalPurchased < 1) return 0; // 0 = No Peak Badge
+    if (totalPurchased < 1000) return 1;
+    if (totalPurchased < 5000) return 2;
+    if (totalPurchased < 10000) return 3;
+    if (totalPurchased < 25000) return 4;
+    if (totalPurchased < 50000) return 5;
+    if (totalPurchased < 100000) return 6;
+    if (totalPurchased < 250000) return 7;
+    if (totalPurchased < 500000) return 8;
+    if (totalPurchased < 1000000) return 9;
+    return 10; // Max level
 };
 
 // --- GET HANDLER: FETCH BALANCE & INFO ---
@@ -29,12 +49,17 @@ export async function GET(req) {
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
+        // Always calculate the accurate peak level just in case
+        const currentPeak = calculatePeakLevel(user.totalPurchasedCoins || 0);
+
         return NextResponse.json({
             success: true,
             balance: user.coins || 0,
             clanBalance: user.clanCoins || 0,
             inventory: user.inventory || [],
-            doubleStreakUntil: user.doubleStreakUntil
+            doubleStreakUntil: user.doubleStreakUntil,
+            totalPurchasedCoins: user.totalPurchasedCoins || 0,
+            peakLevel: currentPeak // ⚡️ Return peak info so the app context updates instantly
         });
 
     } catch (error) {
@@ -48,13 +73,13 @@ export async function POST(req) {
     try {
         await connectDB();
         const body = await req.json();
-        // 🔹 Destructured payload for the transfer logic
+        
         const { deviceId, action, type, packId, coinType, itemId, price, name, category, visualConfig, rewards, payload } = body;
 
         const user = await MobileUser.findOne({ deviceId });
         if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
-        // --- 🔹 NEW ACTION: TRANSFER OC TO ANOTHER USER ---
+        // --- ACTION: TRANSFER OC TO ANOTHER USER ---
         if (action === 'transfer') {
             const { recipientId, amount } = payload;
             const transferAmount = parseInt(amount);
@@ -67,25 +92,17 @@ export async function POST(req) {
                 return NextResponse.json({ error: 'Insufficient OC reserves' }, { status: 400 });
             }
 
-            // 1. Find recipient
             const recipient = await MobileUser.findById(recipientId);
             if (!recipient) {
                 return NextResponse.json({ error: 'Target shinobi not found' }, { status: 404 });
             }
 
-            // 2. Execute Atomic Update
-            // Deduct from sender
             user.coins -= transferAmount;
-            
-            // Add to recipient
             recipient.coins = (recipient.coins || 0) + transferAmount;
 
-            // 3. Save both (Note: In production, consider using a DB Transaction/Session for 100% atomicity)
             await user.save();
             await recipient.save();
 
-            // 4. Dispatch Push Notification to Recipient
-            
             try {
                 if (recipient.pushToken) {
                     await sendPushNotification(
@@ -207,8 +224,13 @@ export async function POST(req) {
                 purchasedCurrency = 'Clan Coins (CC)';
             } else {
                 user.coins = (user.coins || 0) + amount;
-                user.totalPurchasedCoins += amount
             }
+
+            // ⚡️ Add to total purchased REGARDLESS of OC or CC (since both use real money)
+            user.totalPurchasedCoins = (user.totalPurchasedCoins || 0) + amount;
+            
+            // ⚡️ Automatically calculate and upgrade Peak Level
+            user.peakLevel = calculatePeakLevel(user.totalPurchasedCoins);
 
             await user.save();
 
@@ -229,6 +251,7 @@ export async function POST(req) {
                         <p><strong>User:</strong> ${user.username || 'Unknown User'} (Device ID: ${deviceId})</p>
                         <p><strong>Package Type:</strong> ${type}</p>
                         <p><strong>Amount Gained:</strong> ${amount} ${purchasedCurrency}</p>
+                        <p><strong>New Peak Level:</strong> ${user.peakLevel}</p>
                     `
                 };
                 
@@ -237,7 +260,14 @@ export async function POST(req) {
                 console.error("Coin purchase email notification failed:", emailErr);
             }
 
-            return NextResponse.json({ success: true, newBalance: user.coins, newClanBalance: user.clanCoins });
+            // ⚡️ Return the new total and peak back to the app context
+            return NextResponse.json({ 
+                success: true, 
+                newBalance: user.coins, 
+                newClanBalance: user.clanCoins,
+                totalPurchasedCoins: user.totalPurchasedCoins,
+                peakLevel: user.peakLevel
+            });
         }
 
         // --- ACTION: CLAIM DAILY ---

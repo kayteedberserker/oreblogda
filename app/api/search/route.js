@@ -168,7 +168,7 @@ export async function GET(req) {
                         { clanName: { $in: searchRegexes } }
                     ]
                 })
-                .select("username profilePic weeklyAura lastStreak previousRank description")
+                .select("username profilePic weeklyAura lastStreak previousRank peakLevel description")
                 .limit(5)
                 .lean(),
 

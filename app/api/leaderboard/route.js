@@ -11,13 +11,12 @@ export async function GET(req) {
     
     // category: authors | clans
     const category = searchParams.get("category") || "authors";
-    // type: posts/streak/aura (for authors) OR points/followers/weekly/badges (for clans)
+    // type: posts/streak/aura/peak (for authors) OR points/followers/weekly/badges (for clans)
     const type = searchParams.get("type") || (category === "authors" ? "posts" : "points");
     const limit = Math.min(Number(searchParams.get("limit")) || 100, 200);
 
     if (category === "clans") {
       const clans = await Clan.find({});
-      console.log(clans) 
       
       const formattedClans = clans.map(clan => ({
         clanId: clan._id,
@@ -46,7 +45,7 @@ export async function GET(req) {
       });
     }
 
-    // --- AUTHOR LOGIC (Existing) ---
+    // --- AUTHOR LOGIC ---
     const posts = await Post.find({
       authorUserId: { $ne: null },
       status: "approved"
@@ -63,15 +62,28 @@ export async function GET(req) {
       .map((user) => ({
           ...user._doc,
           postCount: postCountMap[user._id.toString()] || 0,
-          streak: user.lastStreak || 0 
+          streak: user.lastStreak || 0,
+          peakLevel: user.peakLevel || 0,
+          totalPurchasedCoins: user.totalPurchasedCoins || 0
       }))
-      .filter((u) => u.postCount > 0);
+      // Allow users into the leaderboard if they have posts, OR if we are searching by peak and they have a peak.
+      .filter((u) => u.postCount > 0 || (type === "peak" && u.peakLevel > 0));
 
     combinedUsers.sort((a, b) => {
       if (type === "streak") return (b.streak || 0) - (a.streak || 0);
       if (type === "aura") return (b.weeklyAura || 0) - (a.weeklyAura || 0);
-      return b.postCount - a.postCount;
+      
+      // ⚡️ NEW: Peak Sorting Logic
+      if (type === "peak") {
+          // Primary sort: Peak Level
+          if (b.peakLevel !== a.peakLevel) return (b.peakLevel || 0) - (a.peakLevel || 0);
+          // Tie-breaker: Total Purchased Coins
+          return (b.totalPurchasedCoins || 0) - (a.totalPurchasedCoins || 0);
+      }
+      
+      return b.postCount - a.postCount; // Default: posts
     });
+    console.log(combinedUsers[0])
     return NextResponse.json({
       category,
       type,
@@ -81,7 +93,10 @@ export async function GET(req) {
         postCount: u.postCount,
         streak: u.streak,
         weeklyAura: u.weeklyAura || 0,
-        previousRank: u.previousRank || null
+        previousRank: u.previousRank || null,
+        // ⚡️ Expose Peak Data to the frontend
+        peakLevel: u.peakLevel,
+        totalPurchasedCoins: u.totalPurchasedCoins
       })),
     });
 

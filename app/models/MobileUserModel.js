@@ -44,6 +44,7 @@ const mobileUserSchema = new mongoose.Schema(
       public_id: { type: String, default: "" },
     },
     totalPurchasedCoins: { type: Number, default: 0 },
+    peakLevel: { type: Number, default: 0 },
     totalRejectedPost: { type: Number, default: 0 },
     consecutiveStreak: { type: Number, default: 0 },
     country: { type: String, default: 'Unknown' },
