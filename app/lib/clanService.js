@@ -12,49 +12,64 @@ export async function awardClanPoints(post, actionPoints, type = null) {
     if (!clanTag) return;
 
     // --- 💎 MULTIPLIER LOGIC (VERIFIED + ITEM) ---
-    // Fetch the clan with all multiplier-related fields
     const clanDoc = await Clan.findOne({ tag: clanTag })
-        .select('verifiedUntil activeMultiplier multiplierExpiresAt');
+        .select('totalPoints verifiedUntil activeMultiplier multiplierExpiresAt badges consecutiveWeeksNoDerank');
     
+    if (!clanDoc) return;
+
     let totalMultiplier = 1;
     const now = new Date();
 
-    if (clanDoc) {
-        // 1. Check if the clan is verified (1.5x boost)
-        if (clanDoc.verifiedUntil && new Date(clanDoc.verifiedUntil) > now) {
-            totalMultiplier += 0.5;
-        }
+    // 1. Check if the clan is verified (1.5x boost)
+    if (clanDoc.verifiedUntil && new Date(clanDoc.verifiedUntil) > now) {
+        totalMultiplier += 0.5;
+    }
 
-        // 2. Check for an active item multiplier (e.g., 2x, 3x)
-        if (
-            clanDoc.activeMultiplier > 1 && 
-            clanDoc.multiplierExpiresAt && 
-            new Date(clanDoc.multiplierExpiresAt) > now
-        ) {
-            // If activeMultiplier is 2, we add 1 to the base multiplier
-            totalMultiplier += (clanDoc.activeMultiplier - 1);
-        }
+    // 2. Check for an active item multiplier (e.g., 2x, 3x)
+    if (
+        clanDoc.activeMultiplier > 1 && 
+        clanDoc.multiplierExpiresAt && 
+        clanDoc.multiplierExpiresAt > now
+    ) {
+        totalMultiplier += (clanDoc.activeMultiplier - 1);
     }
 
     const finalPoints = Math.round(actionPoints * totalMultiplier);
 
-    // 1. Build the dynamic increment query based on action type
-    const incQuery = { 
-        totalPoints: finalPoints,
-        currentWeeklyPoints: finalPoints 
-    };
+    // --- 🛡️ DEBT FORGIVENESS & REDEMPTION LOGIC ---
+    const isNegative = (clanDoc.totalPoints || 0) < 0;
 
-    // Increment the specific stats based on your ClanModel schema
-    if (type === 'like') incQuery['stats.likes'] = 1;
-    if (type === 'view') incQuery['stats.views'] = 5;
-    if (type === 'comment') incQuery['stats.comments'] = 1;
-    if (type === 'share') incQuery['stats.shares'] = 1;
-
-    const updateQuery = { 
-        $inc: incQuery,
+    let updateQuery = { 
         $set: { lastActive: new Date() }
     };
-    
+
+    if (isNegative) {
+        // 🔥 Instant recovery: Reset debt to 0 and add new points
+        updateQuery.$set.totalPoints = finalPoints;
+        updateQuery.$set.currentWeeklyPoints = finalPoints;
+        
+        // 🎖️ Grant Redemption badge for clearing the debt
+        updateQuery.$addToSet = { badges: "Redemption" };
+    } else {
+        // Normal behavior for positive or zero point clans
+        updateQuery.$inc = { 
+            totalPoints: finalPoints,
+            currentWeeklyPoints: finalPoints 
+        };
+    }
+
+    // Initialize $inc if it doesn't exist yet
+    if (!updateQuery.$inc) updateQuery.$inc = {};
+
+    // Increment specific stats
+    if (type === 'like') updateQuery.$inc['stats.likes'] = 1;
+    if (type === 'view') updateQuery.$inc['stats.views'] = 5;
+    if (type === 'comment') updateQuery.$inc['stats.comments'] = 1;
+    if (type === 'share') updateQuery.$inc['stats.shares'] = 1;
+
+    // Clean up empty $inc if necessary
+    if (Object.keys(updateQuery.$inc).length === 0) delete updateQuery.$inc;
+
     // 2. Update the clan in the database
     const updatedClan = await Clan.findOneAndUpdate(
         { tag: clanTag }, 
@@ -65,7 +80,6 @@ export async function awardClanPoints(post, actionPoints, type = null) {
     if (!updatedClan) return;
 
     // --- ⚔️ UPDATE WAR SCORE ---
-    // We pass finalPoints (boosted) so the war score reflects multipliers
     await updateWarProgress(clanTag, finalPoints, type);
 
     // --- 🏅 ONE-SHOT BADGE CHECK (Only on likes) ---

@@ -193,6 +193,7 @@ async function weeklyClanReset() {
     const bulkOps = [];
 
     const weeklyTitleBadges = ["The Pirate King", "The Pillars", "Hunter Association"];
+    // Clear previous weekly badges
     await Clan.updateMany({}, { $pull: { badges: { $in: weeklyTitleBadges } } });
 
     for (let i = 0; i < rankedClans.length; i++) {
@@ -205,10 +206,12 @@ async function weeklyClanReset() {
       let incFields = {};
       let badgesToAdd = [];
 
-      // --- 📉 DECAY LOGIC ---
+      // --- 📉 DECAY LOGIC (ALLOWS NEGATIVE POINTS) ---
       const decayValue = decayAmounts[currentRank - 1] || 0;
-      let decayedPoints = Math.max(0, (clan.totalPoints || 0) - decayValue);
+      // Removed Math.max(0, ...) so totalPoints can become negative
+      let decayedPoints = (clan.totalPoints || 0) - decayValue;
 
+      // Calculate new rank based on thresholds
       let newRank = 1;
       for (let r = rankThresholds.length - 1; r >= 0; r--) {
         if (decayedPoints >= rankThresholds[r]) {
@@ -224,6 +227,7 @@ async function weeklyClanReset() {
       const nextRankThreshold = rankThresholds[newRank];
       let hit80PercentLimit = false;
 
+      // Logic stays the same: if points are 80% of next rank, they are safe
       if (nextRankThreshold) {
         if (decayedPoints >= (nextRankThreshold * 0.8)) hit80PercentLimit = true;
       } else if (newRank === 6) {
