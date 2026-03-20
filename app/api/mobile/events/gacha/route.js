@@ -46,7 +46,7 @@ const GACHA_POOL = [
             svgCode: `
                 <?xml version="1.0" encoding="utf-8"?>
 <svg version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="-388.65 -388.65 1173.89 1173.89" style="enable-background:new 0 0 1173.89 1173.89;" xml:space="preserve">
-<g id="Objects" transform="translate(696.59, -410) scale(-3, 3)">
+<g id="Objects" transform="translate(796.59, -410) scale(-3, 3)">
     <path fill="#FFD700" d="M281.603,179.637c0.828,0,1.5-0.671,1.5-1.5v-4.601h4.451c0.828,0,1.5-0.671,1.5-1.5v-9.699c0-0.829-0.672-1.5-1.5-1.5
         h-24.146c-3.842-27.97-40.149-45.072-56.818-51.509c0.26-0.794,0.404-1.637,0.404-2.515c0-3.405-2.109-6.332-5.133-7.646
         c1.078-0.939,1.76-2.294,1.76-3.806c0-1.994-1.182-3.722-2.906-4.57l-0.781-6.204c3.354-0.748,5.861-3.736,5.861-7.315v-0.5
@@ -209,7 +209,7 @@ const GACHA_POOL = [
             svgCode: `
                 <?xml version="1.0" encoding="utf-8"?>
 <svg version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="-388.65 -388.65 1173.89 1173.89" style="enable-background:new 0 0 1173.89 1173.89;" xml:space="preserve">
-<g id="Objects" transform="translate(696.59, -410) scale(-3, 3)">
+<g id="Objects" transform="translate(796.59, -410) scale(-3, 3)">
     <path fill="#FFD700" d="M281.603,179.637c0.828,0,1.5-0.671,1.5-1.5v-4.601h4.451c0.828,0,1.5-0.671,1.5-1.5v-9.699c0-0.829-0.672-1.5-1.5-1.5
         h-24.146c-3.842-27.97-40.149-45.072-56.818-51.509c0.26-0.794,0.404-1.637,0.404-2.515c0-3.405-2.109-6.332-5.133-7.646
         c1.078-0.939,1.76-2.294,1.76-3.806c0-1.994-1.182-3.722-2.906-4.57l-0.781-6.204c3.354-0.748,5.861-3.736,5.861-7.315v-0.5
