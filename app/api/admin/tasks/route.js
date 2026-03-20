@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/app/lib/mongodb';
 import MobileUser from '@/app/models/MobileUserModel';
 import Post from '@/app/models/PostModel';
-import { sendPushNotification } from "@/app/lib/pushNotifications"; 
+// ⚡️ IMPORT THE MULTI PUSH HELPER INSTEAD
+import { sendMultiplePushNotifications } from "@/app/lib/pushNotifications"; 
 
 // ==========================================
 // ⚡️ GET HANDLER: FETCH ALL POSTS FOR ADMIN
@@ -46,9 +47,12 @@ export async function POST(req) {
 
         switch (task) {
             case 'BROADCAST_ALL':
+                // ⚡️ IMPLEMENTED GLOBAL PUSH NOTIFICATION
                 if (!payload.title || !payload.message) {
                     return NextResponse.json({ success: false, message: 'Missing title or message' }, { status: 400 });
                 }
+
+                // Fetch all users who have an active push token
                 const allUsersWithTokens = await MobileUser.find({
                     pushToken: { $exists: true, $ne: "" }
                 }).select("pushToken");
@@ -56,15 +60,15 @@ export async function POST(req) {
                 if (allUsersWithTokens.length === 0) {
                     return NextResponse.json({ success: false, message: 'No users with active push tokens found.' });
                 }
-                const pushPromises = allUsersWithTokens.map(u => 
-                    sendPushNotification(u.pushToken, payload.title, payload.message)
-                );
-                await Promise.all(pushPromises);
+
+                // ⚡️ Extract tokens and use the chunked multi-push helper
+                const tokensArray = allUsersWithTokens.map(u => u.pushToken);
+                await sendMultiplePushNotifications(tokensArray, payload.title, payload.message);
                 
-                console.log(`BROADCAST TO ALL: [${payload.title}] ${payload.message}. Sent to ${allUsersWithTokens.length} users.`);
+                console.log(`BROADCAST TO ALL: [${payload.title}] ${payload.message}. Sent to ${tokensArray.length} users.`);
                 return NextResponse.json({ 
                     success: true, 
-                    message: `Broadcast initiated successfully to ${allUsersWithTokens.length} operatives.` 
+                    message: `Broadcast initiated successfully to ${tokensArray.length} operatives.` 
                 });
 
             case 'GIVE_OC':
