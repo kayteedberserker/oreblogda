@@ -6,7 +6,7 @@ const MY_DOMAIN = "oreblogda" ;
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const userAgent = req.headers.get('user-agent') || '';
-  const response = NextResponse.next();
+  const response = NextResponse.next()
 
   // --- 1. HANDLE API ROUTES (Security & CORS) ---
   if (pathname.startsWith("/api")) {
