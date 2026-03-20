@@ -47,7 +47,6 @@ const MetricCard = ({ title, value, color, loading, trend }) => (
 // --- MAIN COMPONENT ---
 const getOptimizedCloudinaryUrl = (url) => {
     if (!url || !url.includes("cloudinary.com")) return url || "/default-avatar.png";
-    // Inserts transformation params: width 300, fill, face detection, auto format, auto quality
     return url.replace("/upload/", "/upload/w_300,c_fill,g_face,f_auto,q_auto/");
 };
 
@@ -58,7 +57,7 @@ export default function FullAdminDashboard() {
     const [dormantCount, setDormantCount] = useState(0);
 
     // New State for Posts Tab
-    const [activeTab, setActiveTab] = useState("users"); // "users" | "posts"
+    const [activeTab, setActiveTab] = useState("users"); 
     const [postList, setPostList] = useState([]);
     const [postsPage, setPostsPage] = useState(1);
     const [postsTotalPages, setPostsTotalPages] = useState(1);
@@ -72,13 +71,13 @@ export default function FullAdminDashboard() {
     const [tableLoading, setTableLoading] = useState(false);
     const [userMetaLoading, setUserMetaLoading] = useState(false);
     const [sendingPush, setSendingPush] = useState(false);
-    const [taskLoading, setTaskLoading] = useState(false); // Used for unified task actions
+    const [taskLoading, setTaskLoading] = useState(false);
 
     // Selection & Notification State
     const [selectedUser, setSelectedUser] = useState(null);
     const [pushMessage, setPushMessage] = useState({ title: "", body: "" });
 
-    // Updated Filters: "thisMonth" and "lastMonth" added
+    // Updated Filters
     const [range, setRange] = useState("7days");
     const [selectedCountry, setSelectedCountry] = useState("All");
     const [showOnlyActive, setShowOnlyActive] = useState(false);
@@ -148,14 +147,12 @@ export default function FullAdminDashboard() {
     const fetchDashboardData = async (isInitial = false) => {
         if (!isInitial) setStatsLoading(true);
         try {
-            // The range value (24h, 7days, thisMonth, lastMonth) is passed to your API
             const res = await fetch(`/api/admin/stats?range=${range}`);
             const json = await res.json();
             if (json.success) setStats(json.data);
         } catch (err) {
             toast.error("Overview relay error");
         } finally {
-            // Simulated delay to ensure the loading animation is visible as requested
             setTimeout(() => setStatsLoading(false), 500);
         }
     };
@@ -179,8 +176,8 @@ export default function FullAdminDashboard() {
     const fetchPosts = async () => {
         setTableLoading(true);
         try {
-            // Note: Update this endpoint to wherever you fetch posts from in admin view
-            const res = await fetch(`/api/admin/posts?page=${postsPage}`); 
+            // ⚡️ UPDATED: Now fetches from the unified task route
+            const res = await fetch(`/api/admin/tasks?page=${postsPage}`); 
             const data = await res.json();
             setPostList(data.posts || []);
             setPostsTotalPages(data.pages || 1);
@@ -195,7 +192,6 @@ export default function FullAdminDashboard() {
     const executeAdminTask = async (taskType, payload) => {
         setTaskLoading(true);
         try {
-            // This is the single route you mentioned for new additions
             const res = await fetch('/api/admin/tasks', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -276,33 +272,32 @@ export default function FullAdminDashboard() {
         finally { setSendingPush(false); }
     };
 
-    // New Broadcast All Action
     const handleBroadcastAll = async () => {
         const msg = prompt(`GLOBAL TRANSMISSION: Target ALL registered users. Enter message:`);
         if (!msg) return;
         await executeAdminTask('BROADCAST_ALL', { title: "Global Update", message: msg });
     };
 
-    // New Give OC Action
     const handleGiveOC = async () => {
         if (!selectedUser) return;
         const amount = prompt(`Grant OC to ${selectedUser.username}. Enter amount:`);
         if (!amount || isNaN(amount)) return toast.warning("Invalid amount");
         
         await executeAdminTask('GIVE_OC', { userId: selectedUser._id, amount: parseInt(amount) });
+        // Refresh users list to reflect new coin balance
+        fetchUsers(); 
     };
 
-    // New Post Management Actions
     const handleUpdatePostStatus = async (postId, newStatus) => {
         const result = await executeAdminTask('UPDATE_POST_STATUS', { postId, status: newStatus });
-        if (result) fetchPosts(); // Refresh list
+        if (result) fetchPosts(); 
     };
 
     const handleDeletePost = async (postId) => {
         const confirm = window.confirm("Are you sure you want to permanently delete this post?");
         if (!confirm) return;
         const result = await executeAdminTask('DELETE_POST', { postId });
-        if (result) fetchPosts(); // Refresh list
+        if (result) fetchPosts(); 
     };
 
     const handleSaveEditedPost = async (e) => {
@@ -375,7 +370,6 @@ export default function FullAdminDashboard() {
                 </div>
             </div>
 
-            {/* TAILWIND CUSTOM ANIMATION CONFIG (Add to your global CSS if needed) */}
             <style jsx>{`
           @keyframes loading {
             0% { transform: translateX(-100%); }
@@ -404,7 +398,7 @@ export default function FullAdminDashboard() {
                             </div>
                         </div>
 
-                        {/* Mobile-only Push Button (Visible only on small screens next to title) */}
+                        {/* Mobile-only Push Button */}
                         <div className="md:hidden flex gap-2">
                             <button
                                 onClick={sendBulkPush}
@@ -458,16 +452,7 @@ export default function FullAdminDashboard() {
                         </div>
 
                         {/* RANGE SELECTOR GRID */}
-                        <div className="
-            grid grid-cols-3 sm:grid-cols-4 md:flex 
-            w-full md:w-auto
-            bg-white dark:bg-gray-800 
-            p-1.5 
-            rounded-2xl 
-            border border-gray-200 dark:border-gray-700 
-            shadow-sm 
-            gap-1
-        ">
+                        <div className="grid grid-cols-3 sm:grid-cols-4 md:flex w-full md:w-auto bg-white dark:bg-gray-800 p-1.5 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm gap-1">
                             {[
                                 { id: 'today', label: 'Today' },
                                 { id: 'yesterday', label: 'Yesterday' },
@@ -480,13 +465,12 @@ export default function FullAdminDashboard() {
                                 <button
                                     key={r.id}
                                     onClick={() => setRange(r.id)}
-                                    className={`
-                        px-3 py-2.5 md:py-2 rounded-xl text-[9px] font-black uppercase transition-all
-                        ${range === r.id
+                                    className={`px-3 py-2.5 md:py-2 rounded-xl text-[9px] font-black uppercase transition-all
+                                        ${range === r.id
                                             ? "bg-blue-600 text-white shadow-md shadow-blue-600/30 active:scale-95"
                                             : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-200"
                                         }
-                    `}
+                                    `}
                                 >
                                     {r.label}
                                 </button>
@@ -499,7 +483,6 @@ export default function FullAdminDashboard() {
                 <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
                     <MetricCard title="Total Users" value={stats?.totalUsers} color="text-blue-600" loading={statsLoading} />
                     <MetricCard title="App Opens (Total)" value={stats?.totalAppOpens} color="text-purple-500" loading={statsLoading} trend={stats?.activityTrend} />
-                    {/* NEW METRIC CARD FOR UNIQUE DAU */}
                     <MetricCard title="Unique Active (24h)" value={stats?.uniqueDailyActive || 0} color="text-indigo-500" loading={statsLoading} />
                     <MetricCard title="Pending" value={stats?.postStats?.pending} color="text-orange-500" loading={statsLoading} />
                     <MetricCard title="Approved" value={stats?.postStats?.approved} color="text-green-500" loading={statsLoading} />
@@ -515,11 +498,9 @@ export default function FullAdminDashboard() {
                                 <span className="h-2 w-2 rounded-full bg-blue-600 animate-ping"></span>
                                 Activity Flow
                             </h3>
-                            {/* Mobile Instruction Hint */}
                             <span className="md:hidden text-[8px] font-bold text-gray-400 uppercase tracking-widest italic">Swipe to view →</span>
                         </div>
 
-                        {/* LOADING ANIMATION FOR CHART */}
                         {statsLoading && (
                             <div className="absolute inset-0 bg-white/60 dark:bg-gray-800/60 z-30 flex items-center justify-center backdrop-blur-[2px] transition-all">
                                 <div className="flex flex-col items-center">
@@ -529,13 +510,11 @@ export default function FullAdminDashboard() {
                             </div>
                         )}
 
-                        {/* SCROLLABLE WRAPPER */}
                         <div className="overflow-x-auto pb-4 scrollbar-hide">
-                            {/* Min-width ensures bars don't get too thin on small screens */}
                             <div className="flex items-end justify-between h-64 gap-1 md:gap-2 min-w-[600px] md:min-w-full px-2">
                                 {stats?.dailyActivity?.map((data, idx) => {
                                     const maxVal = Math.max(...stats.dailyActivity.map(d => d.count), 1);
-                                    const barHeight = (data.count / maxVal) * 140; // Adjusted for label space
+                                    const barHeight = (data.count / maxVal) * 140; 
 
                                     let displayDate = data._id;
                                     if (!['24h', 'today', 'yesterday'].includes(range)) {
@@ -543,29 +522,22 @@ export default function FullAdminDashboard() {
                                         displayDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
                                     }
 
-                                    // Show only every 3rd label on long ranges to keep it clean, or all on short ranges
                                     const shouldShowLabel = stats.dailyActivity.length <= 10 || idx % (stats.dailyActivity.length > 24 ? 4 : 1) === 0;
 
                                     return (
                                         <div key={idx} className="flex-1 flex flex-col items-center group relative">
-                                            {/* PERMANENT COUNT LABEL (Visible on Mobile) */}
                                             <div className="mb-2 transition-all">
                                                 <span className={`text-[9px] font-black ${data.count > 0 ? 'text-blue-600' : 'text-gray-300 dark:text-gray-600'}`}>
                                                     {data.count}
                                                 </span>
                                             </div>
 
-                                            {/* BAR */}
                                             <div
                                                 className={`w-full max-w-[24px] rounded-t-md md:rounded-t-lg transition-all duration-1000 ease-out group-hover:brightness-110 
-                                ${data.count > 0
-                                                        ? 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.1)]'
-                                                        : 'bg-gray-100 dark:bg-gray-700'
-                                                    }`}
+                                                ${data.count > 0 ? 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.1)]' : 'bg-gray-100 dark:bg-gray-700'}`}
                                                 style={{ height: `${Math.max(barHeight, 4)}px` }}
                                             ></div>
 
-                                            {/* X-AXIS DATE LABEL */}
                                             <div className="h-6 flex items-center justify-center">
                                                 {shouldShowLabel ? (
                                                     <p className="text-[8px] mt-3 text-gray-400 font-black uppercase text-center tracking-tighter group-hover:text-blue-600 transition-colors whitespace-nowrap">
@@ -646,6 +618,8 @@ export default function FullAdminDashboard() {
                                         <th className="px-8 py-5">Operator Info</th>
                                         <th className="px-8 py-5">Location</th>
                                         <th className="px-8 py-5">Activity</th>
+                                        {/* ⚡️ ADDED: COINS COLUMN */}
+                                        <th className="px-8 py-5">OC Balance</th>
                                         <th className="px-8 py-5">Last Comms</th>
                                         <th className="px-8 py-5 text-center">Status</th>
                                     </tr>
@@ -653,7 +627,7 @@ export default function FullAdminDashboard() {
                                 <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                                     {tableLoading ? (
                                         <tr>
-                                            <td colSpan="5" className="p-20 text-center">
+                                            <td colSpan="6" className="p-20 text-center">
                                                 <div className="flex flex-col items-center">
                                                     <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-600 border-t-transparent mb-4"></div>
                                                     <p className="font-black text-gray-300 text-[9px] uppercase tracking-[0.3em]">Querying Database...</p>
@@ -689,6 +663,10 @@ export default function FullAdminDashboard() {
                                             </td>
                                             <td className="px-8 py-4">
                                                 <span className="font-black text-[11px] text-purple-500 bg-purple-500/10 px-2 py-1 rounded-lg">{u.appOpens || 0}</span>
+                                            </td>
+                                            {/* ⚡️ ADDED: COINS DATA CELL */}
+                                            <td className="px-8 py-4">
+                                                <span className="font-black text-[11px] text-yellow-600 bg-yellow-500/10 px-2 py-1 rounded-lg border border-yellow-500/20">{u.coins || 0} OC</span>
                                             </td>
                                             <td className="px-8 py-4 text-[10px] font-bold text-gray-400 uppercase">
                                                 {u.lastActive ? new Date(u.lastActive).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' }) : 'Never'}

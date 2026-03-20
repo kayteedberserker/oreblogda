@@ -2,7 +2,43 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/app/lib/mongodb';
 import MobileUser from '@/app/models/MobileUserModel';
 import Post from '@/app/models/PostModel';
+import { sendPushNotification } from "@/app/lib/pushNotifications"; 
 
+// ==========================================
+// ⚡️ GET HANDLER: FETCH ALL POSTS FOR ADMIN
+// ==========================================
+export async function GET(req) {
+    try {
+        await connectDB();
+        const { searchParams } = new URL(req.url);
+        const page = parseInt(searchParams.get("page")) || 1;
+        const limit = 20; // 20 posts per page
+        const skip = (page - 1) * limit;
+
+        const [posts, total] = await Promise.all([
+            Post.find()
+                .sort({ createdAt: -1 }) // Newest first
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            Post.countDocuments()
+        ]);
+
+        return NextResponse.json({
+            success: true,
+            posts,
+            pages: Math.ceil(total / limit),
+            total
+        });
+    } catch (error) {
+        console.error("Failed to fetch admin posts:", error);
+        return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
+    }
+}
+
+// ==========================================
+// ⚡️ POST HANDLER: UNIFIED ADMIN ACTIONS
+// ==========================================
 export async function POST(req) {
     try {
         await connectDB();
@@ -10,10 +46,26 @@ export async function POST(req) {
 
         switch (task) {
             case 'BROADCAST_ALL':
-                // Note: Implement your actual push notification logic here
-                // e.g., using Expo Push API or Firebase
-                console.log(`BROADCAST TO ALL: [${payload.title}] ${payload.message}`);
-                return NextResponse.json({ success: true, message: 'Broadcast initiated' });
+                if (!payload.title || !payload.message) {
+                    return NextResponse.json({ success: false, message: 'Missing title or message' }, { status: 400 });
+                }
+                const allUsersWithTokens = await MobileUser.find({
+                    pushToken: { $exists: true, $ne: "" }
+                }).select("pushToken");
+
+                if (allUsersWithTokens.length === 0) {
+                    return NextResponse.json({ success: false, message: 'No users with active push tokens found.' });
+                }
+                const pushPromises = allUsersWithTokens.map(u => 
+                    sendPushNotification(u.pushToken, payload.title, payload.message)
+                );
+                await Promise.all(pushPromises);
+                
+                console.log(`BROADCAST TO ALL: [${payload.title}] ${payload.message}. Sent to ${allUsersWithTokens.length} users.`);
+                return NextResponse.json({ 
+                    success: true, 
+                    message: `Broadcast initiated successfully to ${allUsersWithTokens.length} operatives.` 
+                });
 
             case 'GIVE_OC':
                 if (!payload.userId || !payload.amount) {
