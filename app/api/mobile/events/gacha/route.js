@@ -100,7 +100,7 @@ const GACHA_POOL = [
     { id: 'eid_epic_starlight_border', name: 'Starlight Frame', category: 'BORDER', tier: 'EPIC', baseDropRate: 12.5, visualConfig: { primaryColor: '#FEFAD4', secondaryColor: '#fb923c', animationType: 'breathingYoyo', duration: 1500 } },
     
     // 🔵 RARE (72.5% Total) - Temporary cosmetics & standard consumables
-    { id: 'eid_rare_dates', name: 'Dates of Fortune (20 OC)', category: 'CONSUMABLE', tier: 'RARE', baseDropRate: 25.5, rewardAmount: 20, visualConfig: { primaryColor: '#8B4513', svgCode: `
+    { id: 'eid_rare_dates', name: 'Dates of Fortune (20 OC)', category: 'CONSUMABLE', tier: 'RARE', baseDropRate: 27, rewardAmount: 20, visualConfig: { primaryColor: '#8B4513', svgCode: `
             <?xml version="1.0" encoding="utf-8"?>
 <svg version="1.1" id="Capa_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
      viewBox="0 0 2122 2122" style="enable-background:new 0 0 2122 2122;" xml:space="preserve">
@@ -291,7 +291,7 @@ const GACHA_POOL = [
 </svg>
 
         `} },
-    { id: 'eid_rare_zakat', name: 'Eidi Pouch (100 OC)', category: 'CONSUMABLE', tier: 'EPIC', baseDropRate: 2, rewardAmount: 70, visualConfig: { primaryColor: '#22c55e', 
+    { id: 'eid_rare_zakat', name: 'Eidi Pouch (100 OC)', category: 'CONSUMABLE', tier: 'EPIC', baseDropRate: 0.5, rewardAmount: 70, visualConfig: { primaryColor: '#22c55e', 
         svgCode: `
             <?xml version="1.0" encoding="utf-8"?>
 <svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
