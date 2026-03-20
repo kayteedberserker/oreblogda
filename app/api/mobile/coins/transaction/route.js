@@ -283,6 +283,11 @@ export async function POST(req) {
                     return NextResponse.json({ error: 'Already claimed today' }, { status: 400 });
                 }
                 user.lastClaimedDate = new Date();
+                if (user.consecutiveStreak == 7) {
+                    user.consecutiveStreak = 1
+                }else {
+                    user.consecutiveStreak += 1
+                }
             } 
             // 🔹 Validation 2: Special One-Time Events (e.g., '1kpostevent')
             else {
