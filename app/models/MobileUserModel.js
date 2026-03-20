@@ -11,7 +11,7 @@ const InventoryItemSchema = new mongoose.Schema({
     secondaryColor: { type: String, default: null },
     animationType: { type: String, default: "singleSnake" },
     duration: { type: Number, default: 3000 },
-    snakeLength: { type: Number, default: 120 },
+    snakeLength: { type: Number, default: 400 },
     isAnimated: { type: Boolean, default: false }
   },
   isEquipped: { type: Boolean, default: false },

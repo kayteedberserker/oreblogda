@@ -97,7 +97,7 @@ const GACHA_POOL = [
     
     // 🟣 EPIC (25% Total) - High-tier permanent cosmetics
     { id: 'eid_epic_aura', name: 'Lunar Aura', category: 'GLOW', tier: 'EPIC', baseDropRate: 12.5, visualConfig: { primaryColor: '#FEFAD4', isAnimated: true, svgCode: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#FEFAD4" fill-opacity="0.4" stroke="#FEFAD4" stroke-width="1.5"/></svg>` } },
-    { id: 'eid_epic_starlight_border', name: 'Starlight Frame', category: 'BORDER', tier: 'EPIC', baseDropRate: 12.5, visualConfig: { primaryColor: '#FEFAD4', secondaryColor: '#fb923c', animationType: 'borderChaser', duration: 1500 } },
+    { id: 'eid_epic_starlight_border', name: 'Starlight Frame', category: 'BORDER', tier: 'EPIC', baseDropRate: 12.5, visualConfig: { primaryColor: '#FEFAD4', secondaryColor: '#fb923c', animationType: 'breathingYoyo', duration: 1500 } },
     
     // 🔵 RARE (72.5% Total) - Temporary cosmetics & standard consumables
     { id: 'eid_rare_dates', name: 'Dates of Fortune (30 OC)', category: 'CONSUMABLE', tier: 'RARE', baseDropRate: 22.5, rewardAmount: 30, visualConfig: { primaryColor: '#8B4513', svgCode: `
