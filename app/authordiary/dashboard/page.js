@@ -50,11 +50,21 @@ const getOptimizedCloudinaryUrl = (url) => {
     // Inserts transformation params: width 300, fill, face detection, auto format, auto quality
     return url.replace("/upload/", "/upload/w_300,c_fill,g_face,f_auto,q_auto/");
 };
+
 export default function FullAdminDashboard() {
     const [user, setUser] = useState(null)
     const [stats, setStats] = useState(null);
     const [userList, setUserList] = useState([]);
     const [dormantCount, setDormantCount] = useState(0);
+
+    // New State for Posts Tab
+    const [activeTab, setActiveTab] = useState("users"); // "users" | "posts"
+    const [postList, setPostList] = useState([]);
+    const [postsPage, setPostsPage] = useState(1);
+    const [postsTotalPages, setPostsTotalPages] = useState(1);
+    
+    // New State for Edit Modal
+    const [editingPost, setEditingPost] = useState(null);
 
     // Loading States
     const [initialLoading, setInitialLoading] = useState(true);
@@ -62,6 +72,7 @@ export default function FullAdminDashboard() {
     const [tableLoading, setTableLoading] = useState(false);
     const [userMetaLoading, setUserMetaLoading] = useState(false);
     const [sendingPush, setSendingPush] = useState(false);
+    const [taskLoading, setTaskLoading] = useState(false); // Used for unified task actions
 
     // Selection & Notification State
     const [selectedUser, setSelectedUser] = useState(null);
@@ -74,6 +85,7 @@ export default function FullAdminDashboard() {
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const router = useRouter() 
+
     // --- DATA FETCHING ---
     useEffect(() => {
         const fetchUser = async () => {
@@ -116,10 +128,14 @@ export default function FullAdminDashboard() {
 
     useEffect(() => {
         if (!initialLoading) {
-            fetchUsers();
-            setSelectedUser(null);
+            if (activeTab === "users") {
+                fetchUsers();
+                setSelectedUser(null);
+            } else if (activeTab === "posts") {
+                fetchPosts();
+            }
         }
-    }, [page, selectedCountry, showOnlyActive]);
+    }, [page, postsPage, selectedCountry, showOnlyActive, activeTab]);
 
     const fetchDormantCount = async () => {
         try {
@@ -157,6 +173,48 @@ export default function FullAdminDashboard() {
             toast.error("User registry sync error");
         } finally {
             setTableLoading(false);
+        }
+    };
+
+    const fetchPosts = async () => {
+        setTableLoading(true);
+        try {
+            // Note: Update this endpoint to wherever you fetch posts from in admin view
+            const res = await fetch(`/api/admin/posts?page=${postsPage}`); 
+            const data = await res.json();
+            setPostList(data.posts || []);
+            setPostsTotalPages(data.pages || 1);
+        } catch (err) {
+            toast.error("Post registry sync error");
+        } finally {
+            setTableLoading(false);
+        }
+    };
+
+    // --- NEW UNIFIED TASK ACTION DISPATCHER ---
+    const executeAdminTask = async (taskType, payload) => {
+        setTaskLoading(true);
+        try {
+            // This is the single route you mentioned for new additions
+            const res = await fetch('/api/admin/tasks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ task: taskType, payload })
+            });
+            const data = await res.json();
+            
+            if (res.ok) {
+                toast.success(`Task ${taskType} executed successfully`);
+                return data;
+            } else {
+                toast.error(data.message || `Failed to execute ${taskType}`);
+                return null;
+            }
+        } catch (err) {
+            toast.error("Transmission Error");
+            return null;
+        } finally {
+            setTaskLoading(false);
         }
     };
 
@@ -216,6 +274,49 @@ export default function FullAdminDashboard() {
             if (res.ok) toast.success("Mass Signal Broadcasted!");
         } catch (err) { toast.error("Broadcast Failed"); }
         finally { setSendingPush(false); }
+    };
+
+    // New Broadcast All Action
+    const handleBroadcastAll = async () => {
+        const msg = prompt(`GLOBAL TRANSMISSION: Target ALL registered users. Enter message:`);
+        if (!msg) return;
+        await executeAdminTask('BROADCAST_ALL', { title: "Global Update", message: msg });
+    };
+
+    // New Give OC Action
+    const handleGiveOC = async () => {
+        if (!selectedUser) return;
+        const amount = prompt(`Grant OC to ${selectedUser.username}. Enter amount:`);
+        if (!amount || isNaN(amount)) return toast.warning("Invalid amount");
+        
+        await executeAdminTask('GIVE_OC', { userId: selectedUser._id, amount: parseInt(amount) });
+    };
+
+    // New Post Management Actions
+    const handleUpdatePostStatus = async (postId, newStatus) => {
+        const result = await executeAdminTask('UPDATE_POST_STATUS', { postId, status: newStatus });
+        if (result) fetchPosts(); // Refresh list
+    };
+
+    const handleDeletePost = async (postId) => {
+        const confirm = window.confirm("Are you sure you want to permanently delete this post?");
+        if (!confirm) return;
+        const result = await executeAdminTask('DELETE_POST', { postId });
+        if (result) fetchPosts(); // Refresh list
+    };
+
+    const handleSaveEditedPost = async (e) => {
+        e.preventDefault();
+        const result = await executeAdminTask('EDIT_POST', { 
+            postId: editingPost._id, 
+            title: editingPost.title, 
+            message: editingPost.message,
+            category: editingPost.category
+        });
+        if (result) {
+            setEditingPost(null);
+            fetchPosts();
+        }
     };
 
     // --- RENDER ---
@@ -304,17 +405,20 @@ export default function FullAdminDashboard() {
                         </div>
 
                         {/* Mobile-only Push Button (Visible only on small screens next to title) */}
-                        <div className="md:hidden">
+                        <div className="md:hidden flex gap-2">
                             <button
                                 onClick={sendBulkPush}
-                                disabled={sendingPush}
+                                disabled={sendingPush || taskLoading}
                                 className="bg-orange-500 text-white p-3 rounded-2xl shadow-lg shadow-orange-500/20 active:scale-95 disabled:opacity-50"
                             >
-                                {sendingPush ? (
-                                    <div className="h-5 w-5 border-2 border-white border-t-transparent animate-spin rounded-full"></div>
-                                ) : (
-                                    "🚀"
-                                )}
+                                {sendingPush ? <div className="h-5 w-5 border-2 border-white border-t-transparent animate-spin rounded-full"></div> : "🚀"}
+                            </button>
+                            <button
+                                onClick={handleBroadcastAll}
+                                disabled={taskLoading || sendingPush}
+                                className="bg-blue-600 text-white p-3 rounded-2xl shadow-lg shadow-blue-500/20 active:scale-95 disabled:opacity-50"
+                            >
+                                {taskLoading ? <div className="h-5 w-5 border-2 border-white border-t-transparent animate-spin rounded-full"></div> : "📢"}
                             </button>
                         </div>
                     </div>
@@ -322,24 +426,36 @@ export default function FullAdminDashboard() {
                     {/* ACTIONS SECTION */}
                     <div className="flex flex-col md:flex-row items-start md:items-center gap-4 w-full xl:w-auto">
 
-                        {/* DESKTOP PUSH BUTTON */}
-                        <button
-                            onClick={sendBulkPush}
-                            disabled={sendingPush}
-                            className="hidden md:flex bg-orange-500/10 border border-orange-500/20 px-4 py-2 rounded-2xl items-center gap-4 group hover:bg-orange-500 transition-all active:scale-95 disabled:opacity-50"
-                        >
-                            <div className="text-left">
-                                <p className="text-[8px] font-black text-orange-500 group-hover:text-white uppercase tracking-widest">Dormant (30d+)</p>
-                                <p className="text-sm font-black text-gray-900 dark:text-white group-hover:text-white">{dormantCount}</p>
-                            </div>
-                            <span className="bg-orange-500 text-white p-2 rounded-xl group-hover:bg-white group-hover:text-orange-500 transition-colors">
-                                {sendingPush ? (
-                                    <div className="h-4 w-4 border-2 border-current border-t-transparent animate-spin rounded-full"></div>
-                                ) : (
-                                    "🚀"
-                                )}
-                            </span>
-                        </button>
+                        {/* DESKTOP PUSH BUTTONS */}
+                        <div className="hidden md:flex gap-2">
+                            <button
+                                onClick={sendBulkPush}
+                                disabled={sendingPush || taskLoading}
+                                className="flex bg-orange-500/10 border border-orange-500/20 px-4 py-2 rounded-2xl items-center gap-4 group hover:bg-orange-500 transition-all active:scale-95 disabled:opacity-50"
+                            >
+                                <div className="text-left">
+                                    <p className="text-[8px] font-black text-orange-500 group-hover:text-white uppercase tracking-widest">Dormant (30d+)</p>
+                                    <p className="text-sm font-black text-gray-900 dark:text-white group-hover:text-white">{dormantCount}</p>
+                                </div>
+                                <span className="bg-orange-500 text-white p-2 rounded-xl group-hover:bg-white group-hover:text-orange-500 transition-colors">
+                                    {sendingPush ? <div className="h-4 w-4 border-2 border-current border-t-transparent animate-spin rounded-full"></div> : "🚀"}
+                                </span>
+                            </button>
+
+                            <button
+                                onClick={handleBroadcastAll}
+                                disabled={taskLoading || sendingPush}
+                                className="flex bg-blue-600/10 border border-blue-600/20 px-4 py-2 rounded-2xl items-center gap-4 group hover:bg-blue-600 transition-all active:scale-95 disabled:opacity-50"
+                            >
+                                <div className="text-left">
+                                    <p className="text-[8px] font-black text-blue-600 group-hover:text-white uppercase tracking-widest">Global Broadcast</p>
+                                    <p className="text-sm font-black text-gray-900 dark:text-white group-hover:text-white">All Users</p>
+                                </div>
+                                <span className="bg-blue-600 text-white p-2 rounded-xl group-hover:bg-white group-hover:text-blue-600 transition-colors">
+                                    {taskLoading ? <div className="h-4 w-4 border-2 border-current border-t-transparent animate-spin rounded-full"></div> : "📢"}
+                                </span>
+                            </button>
+                        </div>
 
                         {/* RANGE SELECTOR GRID */}
                         <div className="
@@ -380,9 +496,11 @@ export default function FullAdminDashboard() {
                 </header>
 
                 {/* --- METRICS GRID --- */}
-                <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+                <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
                     <MetricCard title="Total Users" value={stats?.totalUsers} color="text-blue-600" loading={statsLoading} />
-                    <MetricCard title="App Opens" value={stats?.totalAppOpens} color="text-purple-500" loading={statsLoading} trend={stats?.activityTrend} />
+                    <MetricCard title="App Opens (Total)" value={stats?.totalAppOpens} color="text-purple-500" loading={statsLoading} trend={stats?.activityTrend} />
+                    {/* NEW METRIC CARD FOR UNIQUE DAU */}
+                    <MetricCard title="Unique Active (24h)" value={stats?.uniqueDailyActive || 0} color="text-indigo-500" loading={statsLoading} />
                     <MetricCard title="Pending" value={stats?.postStats?.pending} color="text-orange-500" loading={statsLoading} />
                     <MetricCard title="Approved" value={stats?.postStats?.approved} color="text-green-500" loading={statsLoading} />
                     <MetricCard title="Rejected" value={stats?.postStats?.rejected} color="text-red-500" loading={statsLoading} />
@@ -481,117 +599,219 @@ export default function FullAdminDashboard() {
                     </div>
                 </div>
 
-                {/* --- USER TABLE --- */}
-                <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-200 dark:border-gray-700 overflow-hidden shadow-xl mb-20">
-                    <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4">
-                        <h3 className="font-black text-xl italic uppercase tracking-tighter">User Registry</h3>
-                        <div className="flex items-center gap-4">
-                            <button
-                                onClick={() => setShowOnlyActive(!showOnlyActive)}
-                                className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all flex items-center gap-2 ${showOnlyActive ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-gray-100 dark:bg-gray-900 text-gray-400 border border-gray-200 dark:border-gray-700'}`}
-                            >
-                                <span className={`h-1.5 w-1.5 rounded-full ${showOnlyActive ? 'bg-white animate-pulse' : 'bg-gray-400'}`}></span>
-                                Active Pulse
-                            </button>
-                            <select
-                                value={selectedCountry}
-                                onChange={(e) => { setSelectedCountry(e.target.value); setPage(1); }}
-                                className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-2 px-4 rounded-xl text-[9px] font-black uppercase outline-none focus:ring-2 ring-blue-500"
-                            >
-                                <option value="All">Global Feed</option>
-                                {stats?.countries?.map(c => <option key={c._id} value={c._id}>{c._id}</option>)}
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="overflow-x-auto min-h-[400px]">
-                        <table className="w-full text-left">
-                            <thead className="bg-gray-50 dark:bg-gray-900 text-[9px] uppercase font-black text-gray-400 tracking-[0.2em]">
-                                <tr>
-                                    <th className="px-8 py-5">Operator Info</th>
-                                    <th className="px-8 py-5">Location</th>
-                                    <th className="px-8 py-5">Activity</th>
-                                    <th className="px-8 py-5">Last Comms</th>
-                                    <th className="px-8 py-5 text-center">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
-                                {tableLoading ? (
-                                    <tr>
-                                        <td colSpan="5" className="p-20 text-center">
-                                            <div className="flex flex-col items-center">
-                                                <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-600 border-t-transparent mb-4"></div>
-                                                <p className="font-black text-gray-300 text-[9px] uppercase tracking-[0.3em]">Querying Database...</p>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ) : userList.map((u) => (
-                                    <tr
-                                        key={u._id}
-                                        onClick={() => handleUserSelect(u)}
-                                        className={`cursor-pointer transition-all ${selectedUser?._id === u._id ? 'bg-blue-600/5 border-l-4 border-blue-600' : 'hover:bg-gray-50 dark:hover:bg-white/5 border-l-4 border-transparent'}`}
-                                    >
-                                        <td className="px-8 py-4">
-                                            <div className="flex items-center gap-4">
-                                                <Image
-                                                    height={40}
-                                                    width={40}
-                                                    src={getOptimizedCloudinaryUrl(u.profilePic?.url || u.image || u.avatar) || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'}
-                                                    className="h-10 w-10 rounded-2xl object-cover border border-gray-200 dark:border-gray-700 bg-gray-100 shadow-sm"
-                                                    alt="pfp"
-                                                />
-                                                <div>
-                                                    <p className="font-black text-gray-900 dark:text-white text-sm">{u.username || "ANONYMOUS"}</p>
-                                                    <p className="text-[9px] text-gray-400 font-mono uppercase tracking-tighter">ID: {u._id.slice(-8)}</p>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-8 py-4">
-                                            <span className="font-black text-[10px] uppercase flex items-center gap-2">
-                                                <span className="text-base leading-none">{getFlagEmoji(u.country)}</span>
-                                                {u.country || "---"}
-                                            </span>
-                                        </td>
-                                        <td className="px-8 py-4">
-                                            <span className="font-black text-[11px] text-purple-500 bg-purple-500/10 px-2 py-1 rounded-lg">{u.appOpens || 0}</span>
-                                        </td>
-                                        <td className="px-8 py-4 text-[10px] font-bold text-gray-400 uppercase">
-                                            {u.lastActive ? new Date(u.lastActive).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' }) : 'Never'}
-                                        </td>
-                                        <td className="px-8 py-4">
-                                            <div className="flex justify-center">
-                                                <div className={`h-2.5 w-2.5 rounded-full ${Date.now() - new Date(u.lastActive) < 600000 ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.6)] animate-pulse' : 'bg-gray-200 dark:bg-gray-700'}`}></div>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <div className="p-4 bg-gray-50 dark:bg-gray-900/30 flex justify-between items-center px-8 border-t border-gray-100 dark:border-gray-700">
-                        <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Relay {page} / {totalPages}</span>
-                        <div className="flex gap-2">
-                            <button
-                                disabled={page === 1 || tableLoading}
-                                onClick={() => { setPage(p => p - 1); setSelectedUser(null); }}
-                                className="px-5 py-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-30 font-black text-[9px] uppercase hover:shadow-md transition-all active:scale-95"
-                            >
-                                PREV
-                            </button>
-                            <button
-                                disabled={page === totalPages || tableLoading}
-                                onClick={() => { setPage(p => p + 1); setSelectedUser(null); }}
-                                className="px-5 py-2 rounded-xl bg-blue-600 text-white font-black text-[9px] uppercase hover:bg-blue-700 shadow-lg shadow-blue-500/20 active:scale-95"
-                            >
-                                NEXT
-                            </button>
-                        </div>
-                    </div>
+                {/* --- MAIN DATA TABS --- */}
+                <div className="flex items-center gap-4 mb-6 px-2">
+                    <button 
+                        onClick={() => setActiveTab('users')}
+                        className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-white dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                    >
+                        User Registry
+                    </button>
+                    <button 
+                        onClick={() => setActiveTab('posts')}
+                        className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${activeTab === 'posts' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-white dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+                    >
+                        Transmission Logs (Posts)
+                    </button>
                 </div>
 
+                {/* --- USER TABLE SECTION --- */}
+                {activeTab === 'users' && (
+                    <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-200 dark:border-gray-700 overflow-hidden shadow-xl mb-20 animate-in fade-in duration-300">
+                        <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4">
+                            <h3 className="font-black text-xl italic uppercase tracking-tighter">User Registry</h3>
+                            <div className="flex items-center gap-4">
+                                <button
+                                    onClick={() => setShowOnlyActive(!showOnlyActive)}
+                                    className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase transition-all flex items-center gap-2 ${showOnlyActive ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-gray-100 dark:bg-gray-900 text-gray-400 border border-gray-200 dark:border-gray-700'}`}
+                                >
+                                    <span className={`h-1.5 w-1.5 rounded-full ${showOnlyActive ? 'bg-white animate-pulse' : 'bg-gray-400'}`}></span>
+                                    Active Pulse
+                                </button>
+                                <select
+                                    value={selectedCountry}
+                                    onChange={(e) => { setSelectedCountry(e.target.value); setPage(1); }}
+                                    className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 p-2 px-4 rounded-xl text-[9px] font-black uppercase outline-none focus:ring-2 ring-blue-500"
+                                >
+                                    <option value="All">Global Feed</option>
+                                    {stats?.countries?.map(c => <option key={c._id} value={c._id}>{c._id}</option>)}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="overflow-x-auto min-h-[400px]">
+                            <table className="w-full text-left">
+                                <thead className="bg-gray-50 dark:bg-gray-900 text-[9px] uppercase font-black text-gray-400 tracking-[0.2em]">
+                                    <tr>
+                                        <th className="px-8 py-5">Operator Info</th>
+                                        <th className="px-8 py-5">Location</th>
+                                        <th className="px-8 py-5">Activity</th>
+                                        <th className="px-8 py-5">Last Comms</th>
+                                        <th className="px-8 py-5 text-center">Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                                    {tableLoading ? (
+                                        <tr>
+                                            <td colSpan="5" className="p-20 text-center">
+                                                <div className="flex flex-col items-center">
+                                                    <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-600 border-t-transparent mb-4"></div>
+                                                    <p className="font-black text-gray-300 text-[9px] uppercase tracking-[0.3em]">Querying Database...</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ) : userList.map((u) => (
+                                        <tr
+                                            key={u._id}
+                                            onClick={() => handleUserSelect(u)}
+                                            className={`cursor-pointer transition-all ${selectedUser?._id === u._id ? 'bg-blue-600/5 border-l-4 border-blue-600' : 'hover:bg-gray-50 dark:hover:bg-white/5 border-l-4 border-transparent'}`}
+                                        >
+                                            <td className="px-8 py-4">
+                                                <div className="flex items-center gap-4">
+                                                    <Image
+                                                        height={40}
+                                                        width={40}
+                                                        src={getOptimizedCloudinaryUrl(u.profilePic?.url || u.image || u.avatar) || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'}
+                                                        className="h-10 w-10 rounded-2xl object-cover border border-gray-200 dark:border-gray-700 bg-gray-100 shadow-sm"
+                                                        alt="pfp"
+                                                    />
+                                                    <div>
+                                                        <p className="font-black text-gray-900 dark:text-white text-sm">{u.username || "ANONYMOUS"}</p>
+                                                        <p className="text-[9px] text-gray-400 font-mono uppercase tracking-tighter">ID: {u._id.slice(-8)}</p>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td className="px-8 py-4">
+                                                <span className="font-black text-[10px] uppercase flex items-center gap-2">
+                                                    <span className="text-base leading-none">{getFlagEmoji(u.country)}</span>
+                                                    {u.country || "---"}
+                                                </span>
+                                            </td>
+                                            <td className="px-8 py-4">
+                                                <span className="font-black text-[11px] text-purple-500 bg-purple-500/10 px-2 py-1 rounded-lg">{u.appOpens || 0}</span>
+                                            </td>
+                                            <td className="px-8 py-4 text-[10px] font-bold text-gray-400 uppercase">
+                                                {u.lastActive ? new Date(u.lastActive).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' }) : 'Never'}
+                                            </td>
+                                            <td className="px-8 py-4">
+                                                <div className="flex justify-center">
+                                                    <div className={`h-2.5 w-2.5 rounded-full ${Date.now() - new Date(u.lastActive) < 600000 ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.6)] animate-pulse' : 'bg-gray-200 dark:bg-gray-700'}`}></div>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="p-4 bg-gray-50 dark:bg-gray-900/30 flex justify-between items-center px-8 border-t border-gray-100 dark:border-gray-700">
+                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Relay {page} / {totalPages}</span>
+                            <div className="flex gap-2">
+                                <button
+                                    disabled={page === 1 || tableLoading}
+                                    onClick={() => { setPage(p => p - 1); setSelectedUser(null); }}
+                                    className="px-5 py-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-30 font-black text-[9px] uppercase hover:shadow-md transition-all active:scale-95"
+                                >
+                                    PREV
+                                </button>
+                                <button
+                                    disabled={page === totalPages || tableLoading}
+                                    onClick={() => { setPage(p => p + 1); setSelectedUser(null); }}
+                                    className="px-5 py-2 rounded-xl bg-blue-600 text-white font-black text-[9px] uppercase hover:bg-blue-700 shadow-lg shadow-blue-500/20 active:scale-95"
+                                >
+                                    NEXT
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* --- POSTS TABLE SECTION --- */}
+                {activeTab === 'posts' && (
+                    <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-200 dark:border-gray-700 overflow-hidden shadow-xl mb-20 animate-in fade-in duration-300">
+                        <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center gap-4">
+                            <h3 className="font-black text-xl italic uppercase tracking-tighter">Transmission Logs</h3>
+                            {taskLoading && <div className="h-6 w-6 border-2 border-blue-600 border-t-transparent animate-spin rounded-full"></div>}
+                        </div>
+
+                        <div className="overflow-x-auto min-h-[400px]">
+                            <table className="w-full text-left">
+                                <thead className="bg-gray-50 dark:bg-gray-900 text-[9px] uppercase font-black text-gray-400 tracking-[0.2em]">
+                                    <tr>
+                                        <th className="px-8 py-5">Log Data</th>
+                                        <th className="px-8 py-5">Author</th>
+                                        <th className="px-8 py-5">Category</th>
+                                        <th className="px-8 py-5 text-center">Status</th>
+                                        <th className="px-8 py-5 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
+                                    {tableLoading ? (
+                                        <tr>
+                                            <td colSpan="5" className="p-20 text-center">
+                                                <div className="flex flex-col items-center">
+                                                    <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-600 border-t-transparent mb-4"></div>
+                                                    <p className="font-black text-gray-300 text-[9px] uppercase tracking-[0.3em]">Querying Transmissions...</p>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ) : postList.map((post) => (
+                                        <tr key={post._id} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-all">
+                                            <td className="px-8 py-4 max-w-xs">
+                                                <p className="font-black text-gray-900 dark:text-white text-sm truncate">{post.title}</p>
+                                                <p className="text-[9px] text-gray-400 font-mono uppercase truncate">{post.message}</p>
+                                            </td>
+                                            <td className="px-8 py-4 text-[11px] font-bold text-gray-500 uppercase">
+                                                {post.authorName || "Unknown"}
+                                            </td>
+                                            <td className="px-8 py-4">
+                                                <span className="font-black text-[9px] uppercase bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-md">{post.category || "News"}</span>
+                                            </td>
+                                            <td className="px-8 py-4 text-center">
+                                                <span className={`font-black text-[9px] uppercase px-3 py-1 rounded-xl ${
+                                                    post.status === 'approved' ? 'bg-green-500/10 text-green-500' :
+                                                    post.status === 'rejected' ? 'bg-red-500/10 text-red-500' :
+                                                    'bg-orange-500/10 text-orange-500'
+                                                }`}>
+                                                    {post.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-8 py-4 flex items-center justify-end gap-2">
+                                                <button onClick={() => handleUpdatePostStatus(post._id, 'approved')} className="p-2 bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white rounded-lg transition-colors" title="Approve">✔️</button>
+                                                <button onClick={() => handleUpdatePostStatus(post._id, 'rejected')} className="p-2 bg-orange-500/10 text-orange-500 hover:bg-orange-500 hover:text-white rounded-lg transition-colors" title="Reject">⚠️</button>
+                                                <button onClick={() => setEditingPost(post)} className="p-2 bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white rounded-lg transition-colors" title="Edit">✏️</button>
+                                                <button onClick={() => handleDeletePost(post._id)} className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors" title="Delete">🗑️</button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <div className="p-4 bg-gray-50 dark:bg-gray-900/30 flex justify-between items-center px-8 border-t border-gray-100 dark:border-gray-700">
+                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Log Page {postsPage} / {postsTotalPages}</span>
+                            <div className="flex gap-2">
+                                <button
+                                    disabled={postsPage === 1 || tableLoading}
+                                    onClick={() => setPostsPage(p => p - 1)}
+                                    className="px-5 py-2 rounded-xl bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 disabled:opacity-30 font-black text-[9px] uppercase hover:shadow-md transition-all active:scale-95"
+                                >
+                                    PREV
+                                </button>
+                                <button
+                                    disabled={postsPage === postsTotalPages || tableLoading}
+                                    onClick={() => setPostsPage(p => p + 1)}
+                                    className="px-5 py-2 rounded-xl bg-blue-600 text-white font-black text-[9px] uppercase hover:bg-blue-700 shadow-lg shadow-blue-500/20 active:scale-95"
+                                >
+                                    NEXT
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* --- USER INTELLIGENCE & SIGNAL PANEL --- */}
-                {selectedUser && (
+                {selectedUser && activeTab === 'users' && (
                     <div className="bg-white dark:bg-gray-800 rounded-[3rem] border-2 border-blue-600/30 p-8 shadow-2xl animate-in fade-in slide-in-from-bottom-8 duration-500 mb-20 relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-6">
                             <button
@@ -629,13 +849,21 @@ export default function FullAdminDashboard() {
                                         <p className="text-[10px] font-mono text-blue-500 break-all bg-blue-500/5 p-2 rounded-lg inline-block border border-blue-500/10">{selectedUser._id}</p>
                                     </div>
 
-                                    <div className="bg-blue-600/5 p-4 rounded-3xl border border-blue-600/10 text-center flex flex-col justify-center">
-                                        <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Transmissions</label>
+                                    {/* Updated Transmissions + Grant OC Actions */}
+                                    <div className="bg-blue-600/5 p-4 rounded-3xl border border-blue-600/10 text-center flex flex-col justify-center gap-2">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase block">Transmissions</label>
                                         {userMetaLoading ? (
                                             <div className="h-8 w-12 bg-gray-200 dark:bg-gray-700 animate-pulse rounded mx-auto"></div>
                                         ) : (
                                             <p className="text-4xl font-black text-blue-600">{selectedUser.postCount} <span className="text-[10px] tracking-widest italic opacity-50 uppercase">Posts</span></p>
                                         )}
+                                        <button 
+                                            onClick={handleGiveOC}
+                                            disabled={taskLoading}
+                                            className="mt-2 text-[9px] font-black bg-yellow-500 text-white uppercase tracking-widest py-2 rounded-xl shadow-lg shadow-yellow-500/30 hover:bg-yellow-600 active:scale-95 transition-all"
+                                        >
+                                            {taskLoading ? "Processing..." : "Grant OC 🪙"}
+                                        </button>
                                     </div>
 
                                     {/* SIGNAL COMPOSER */}
@@ -706,6 +934,59 @@ export default function FullAdminDashboard() {
                     </div>
                 )}
             </div>
+
+            {/* --- MODAL FOR EDITING POSTS --- */}
+            {editingPost && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 w-full max-w-lg border border-gray-200 dark:border-gray-700 shadow-2xl relative">
+                        <button 
+                            onClick={() => setEditingPost(null)}
+                            className="absolute top-6 right-6 p-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-red-100 hover:text-red-500 transition-colors"
+                        >
+                            ❌
+                        </button>
+                        <h3 className="text-2xl font-black italic uppercase tracking-tighter mb-6">Edit Transmission</h3>
+                        
+                        <form onSubmit={handleSaveEditedPost} className="space-y-4">
+                            <div>
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Title</label>
+                                <input 
+                                    type="text" 
+                                    value={editingPost.title}
+                                    onChange={(e) => setEditingPost({...editingPost, title: e.target.value})}
+                                    className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-blue-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Category</label>
+                                <input 
+                                    type="text" 
+                                    value={editingPost.category || "News"}
+                                    onChange={(e) => setEditingPost({...editingPost, category: e.target.value})}
+                                    className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-blue-500"
+                                />
+                            </div>
+                            <div>
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Message</label>
+                                <textarea 
+                                    rows="5"
+                                    value={editingPost.message}
+                                    onChange={(e) => setEditingPost({...editingPost, message: e.target.value})}
+                                    className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-medium outline-none focus:ring-2 ring-blue-500 resize-none"
+                                />
+                            </div>
+                            
+                            <button 
+                                type="submit"
+                                disabled={taskLoading}
+                                className="w-full bg-blue-600 text-white p-4 rounded-2xl font-black uppercase tracking-[0.2em] text-xs hover:bg-blue-700 transition-all flex justify-center items-center mt-4"
+                            >
+                                {taskLoading ? <div className="h-4 w-4 border-2 border-white border-t-transparent animate-spin rounded-full"></div> : "Save Override"}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

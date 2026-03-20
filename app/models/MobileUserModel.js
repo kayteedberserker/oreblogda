@@ -91,6 +91,13 @@ const mobileUserSchema = new mongoose.Schema(
     // --- 💰 COIN SYSTEM ---
     coins: { type: Number, default: 0 },
     lastClaimedDate: { type: Date, default: null },
+    // ⚡️ NEW: Track one-time event claims to prevent double-dipping
+    claimedEvents: [{
+        eventId: { type: String, required: true },
+        claimedAt: { type: Date, default: Date.now }
+    }],
+    // ⚡️ NEW: GACHA PITY SYSTEM
+    gachaPityCounter: { type: Number, default: 0 },
     coinTransactionHistory: {
       type: [{
         action: String,

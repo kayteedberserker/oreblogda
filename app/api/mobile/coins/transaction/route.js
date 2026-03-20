@@ -7,6 +7,7 @@ import nodemailer from 'nodemailer'; // Assuming you have this imported for your
 const OC_VALUES = {
     'daily_login': 10,
     'daily_login_7': 50,
+    "1kpostevent": 1000,
     'streak_restore': 50,
     'create_clan': 500,
     'extra_slot': 20,
@@ -270,18 +271,36 @@ export async function POST(req) {
             });
         }
 
-        // --- ACTION: CLAIM DAILY ---
+        // --- ACTION: CLAIM DAILY OR EVENTS ---
         if (action === 'claim') {
             const amount = OC_VALUES[type];
             if (!amount) return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
 
+            // 🔹 Validation 1: Daily Login Streak
             if (type === 'daily_login' || type === 'daily_login_7') {
                 const today = new Date().setHours(0, 0, 0, 0);
                 if (user.lastClaimedDate && new Date(user.lastClaimedDate).setHours(0, 0, 0, 0) === today) {
-                    return NextResponse.json({ error: 'Already claimed' }, { status: 400 });
+                    return NextResponse.json({ error: 'Already claimed today' }, { status: 400 });
                 }
                 user.lastClaimedDate = new Date();
+            } 
+            // 🔹 Validation 2: Special One-Time Events (e.g., '1kpostevent')
+            else {
+                // Ensure the array exists
+                if (!user.claimedEvents) user.claimedEvents = [];
+                
+                // Check if they already claimed this specific event
+                const hasClaimed = user.claimedEvents.some(event => event.eventId === type);
+                
+                if (hasClaimed) {
+                    // ⚡️ Note: The frontend explicitly looks for the word "Already claimed" to lock the button!
+                    return NextResponse.json({ error: 'Reward already claimed.' }, { status: 400 });
+                }
+                
+                // Record the claim so they can never get it again
+                user.claimedEvents.push({ eventId: type });
             }
+
             user.coins = (user.coins || 0) + amount;
             await user.save();
             return NextResponse.json({ success: true, newBalance: user.coins });
