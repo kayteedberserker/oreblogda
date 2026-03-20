@@ -76,7 +76,7 @@ export async function GET(req) {
       steps = 7;
     }
 
-    const [postStatsArray, totalUsers, countries, rawActivity, currentPeriodOpens, prevPeriodOpens] = await Promise.all([
+    const [postStatsArray, totalUsers, countries, rawActivity, currentPeriodOpens, prevPeriodOpens, uniqueActiveUsers] = await Promise.all([
       Post.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
       MobileUser.countDocuments(),
       MobileUser.aggregate([
@@ -104,11 +104,21 @@ export async function GET(req) {
         { $unwind: "$activityLog" },
         { $match: { activityLog: { $gte: prevStartDate, $lte: prevEndDate } } },
         { $group: { _id: null, total: { $sum: 1 } } }
+      ]),
+      // ⚡️ NEW: Unique Active Users in Period
+      MobileUser.aggregate([
+        { $unwind: "$activityLog" },
+        { $match: { activityLog: { $gte: startDate, $lte: endDate } } },
+        // Group by user ID first to ensure uniqueness
+        { $group: { _id: "$_id" } },
+        // Count the total number of unique IDs
+        { $group: { _id: null, totalUnique: { $sum: 1 } } }
       ])
     ]);
 
     const currentTotal = currentPeriodOpens[0]?.total || 0;
     const prevTotal = prevPeriodOpens[0]?.total || 0;
+    const uniqueDailyActive = uniqueActiveUsers[0]?.totalUnique || 0; // ⚡️ Extract Unique Count
     
     let activityTrend = 0;
     if (prevTotal > 0) {
@@ -150,7 +160,8 @@ export async function GET(req) {
         countries, 
         dailyActivity,
         activityTrend, 
-        totalAppOpens: currentTotal 
+        totalAppOpens: currentTotal,
+        uniqueDailyActive // ⚡️ Passed to Frontend
       }
     });
   } catch (err) {
