@@ -75,7 +75,8 @@ export async function POST(req) {
         await connectDB();
         const body = await req.json();
         
-        const { deviceId, action, type, packId, coinType, itemId, price, name, category, visualConfig, rewards, payload } = body;
+        // ⚡️ Added expiresInDays to the destructured body
+        const { deviceId, action, type, packId, coinType, itemId, price, name, category, visualConfig, rewards, payload, expiresInDays } = body;
 
         const user = await MobileUser.findOne({ deviceId });
         if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -133,11 +134,53 @@ export async function POST(req) {
                 return NextResponse.json({ error: `Insufficient ${isCC ? 'CC' : 'OC'}` }, { status: 400 });
             }
 
-            const alreadyOwned = user.inventory?.some(i => i.itemId === itemId);
-            if (alreadyOwned) return NextResponse.json({ error: 'Already owned' }, { status: 400 });
-
-            user[balanceKey] -= price;
             if (!user.inventory) user.inventory = [];
+
+            // 1. Find if the user already owns this exact item
+            const existingItemIndex = user.inventory.findIndex(i => i.itemId === itemId);
+
+            if (existingItemIndex > -1) {
+                // 2. If owned, check if it's a temporary item
+                if (!expiresInDays) {
+                    // It is permanent. Reject it.
+                    return NextResponse.json({ error: 'Already owned permanently' }, { status: 400 });
+                } else {
+                    // It is temporary. We stack/extend the duration!
+                    const existingItem = user.inventory[existingItemIndex];
+                    let newExpiryDate;
+
+                    // If it hasn't expired yet, add days to the existing future date
+                    if (existingItem.expiresAt && new Date(existingItem.expiresAt) > new Date()) {
+                        newExpiryDate = new Date(existingItem.expiresAt);
+                    } else {
+                        // If it already expired (or didn't have a date), start fresh from right now
+                        newExpiryDate = new Date();
+                    }
+
+                    // Add the new days
+                    newExpiryDate.setDate(newExpiryDate.getDate() + parseInt(expiresInDays));
+                    
+                    // Update the item and deduct coins
+                    existingItem.expiresAt = newExpiryDate;
+                    user[balanceKey] -= price;
+                    
+                    // Tell Mongoose the inventory array was modified so it saves correctly
+                    user.markModified('inventory');
+
+                    await user.save();
+                    return NextResponse.json({ success: true, balance: user.coins, clanBalance: user.clanCoins, inventory: user.inventory });
+                }
+            }
+
+            // 3. If NOT owned, proceed with normal addition
+            user[balanceKey] -= price;
+
+            // ⚡️ Expiration Logic Added Here
+            let expiryDate = null;
+            if (expiresInDays) {
+                expiryDate = new Date();
+                expiryDate.setDate(expiryDate.getDate() + parseInt(expiresInDays));
+            }
             
             user.inventory.push({
                 itemId,
@@ -152,7 +195,8 @@ export async function POST(req) {
                     snakeLength: visualConfig?.snakeLength || 120,
                     isAnimated: !!(visualConfig?.animated || visualConfig?.animationType)
                 },
-                acquiredAt: new Date()
+                acquiredAt: new Date(),
+                expiresAt: expiryDate // ⚡️ Applied here
             });
 
             await user.save();
@@ -184,6 +228,14 @@ export async function POST(req) {
                 if (inventoryCategories.includes(reward.type)) {
                     const alreadyHasItem = user.inventory.some(inv => inv.itemId === reward.id);
                     if (!alreadyHasItem) {
+
+                        // ⚡️ Expiration Logic Added Here for Pack Rewards
+                        let expiryDate = null;
+                        if (reward.expiresInDays) {
+                            expiryDate = new Date();
+                            expiryDate.setDate(expiryDate.getDate() + parseInt(reward.expiresInDays));
+                        }
+
                         user.inventory.push({
                             itemId: reward.id,
                             name: reward.name,
@@ -196,7 +248,8 @@ export async function POST(req) {
                                 duration: reward.visualConfig?.duration || 3000,
                                 isAnimated: reward.visualConfig?.isAnimated || false
                             },
-                            acquiredAt: new Date()
+                            acquiredAt: new Date(),
+                            expiresAt: expiryDate // ⚡️ Applied here
                         });
                     }
                 }
