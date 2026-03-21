@@ -67,10 +67,11 @@ const AUTHOR_CATALOG = {
 				// --- WATERMARK ---
 				{
 					id: 'fire_watermark_author',
-					name: 'Eternal Flame',
-					price: 350,
+					name: 'Eternal Flame - 3 days',
+					price: 150,
 					currency: 'OC',
 					category: 'WATERMARK',
+					expiresInDays: 3,
 					visualData: {
 						color: '#f97316',
 						opacity: 0.1,
@@ -86,10 +87,11 @@ const AUTHOR_CATALOG = {
 				},
 				{
 					id: 'willoffire',
-					name: 'The Will of Fire',
-					price: 2000,
+					name: 'The Will of Fire - 3 days',
+					price: 300,
 					currency: 'OC',
 					category: 'WATERMARK',
+				expiresInDays: 3,
 					visualData: {
 						color: '#f97316',
 						opacity: 0.4,
@@ -111,10 +113,11 @@ const AUTHOR_CATALOG = {
 				// --- BADGE ---
 				{
 					id: 'burning_quill_badge',
-					name: 'The Burning Quill',
-					price: 700,
+					name: 'The Burning Quill - 3 days',
+					price: 100,
 					currency: 'OC',
 					category: 'BADGE',
+				expiresInDays: 3,
 					visualData: {
 						icon: 'pen-tool',
 						color: '#ef4444',
@@ -124,10 +127,11 @@ const AUTHOR_CATALOG = {
 				},
 				{
 					id: 'pheonix_badge',
-					name: 'The Pheonix',
-					price: 2000,
+					name: 'The Pheonix - 3 days',
+					price: 200,
 					currency: 'OC',
 					category: 'BADGE',
+				expiresInDays: 3,
 					visualData: {
 						icon: 'pheonix-tool',
 						color: '#ef4444',
@@ -142,10 +146,11 @@ const AUTHOR_CATALOG = {
 				// --- BACKGROUND ---
 				{
 					id: 'embers_bg_author',
-					name: 'Dancing Embers',
-					price: 1000,
+					name: 'Dancing Embers - 3 days',
+					price: 80,
 					currency: 'OC',
 					category: 'BACKGROUND',
+					expiresInDays: 3,
 					visualData: {
 						type: 'pulse',
 						primaryColor: '#7c2d12',
@@ -158,9 +163,10 @@ const AUTHOR_CATALOG = {
 				// --- BORDER ---
 				{
 					id: 'inferno_chaser_author',
-					name: 'Inferno Circuit',
-					price: 1300,
+					name: 'Inferno Circuit - 3 days',
+					price: 100,
 					currency: 'OC',
+			expiresInDays: 3,
 					category: 'BORDER',
 					visualData: {
 						type: 'borderChaser',
@@ -182,10 +188,11 @@ const AUTHOR_CATALOG = {
 				// --- WATERMARK ---
 				{
 					id: 'yinyang_watermark_author',
-					name: 'Divided Harmony',
-					price: 3000,
+					name: 'Divided Harmony - 3 days',
+					price: 400,
 					currency: 'OC',
 					category: 'WATERMARK',
+			expiresInDays: 3,
 					visualData: {
 						color: '#ffffff',
 						opacity: 0.4,
@@ -198,9 +205,10 @@ const AUTHOR_CATALOG = {
 				// --- BADGE ---
 				{
 					id: 'dual_path_badge',
-					name: 'The Dual Path',
-					price: 500,
+					name: 'The Dual Path - 3 days',
+					price: 40,
 					currency: 'OC',
+			expiresInDays: 3,
 					category: 'BADGE',
 					visualData: {
 						icon: 'split',
@@ -212,8 +220,9 @@ const AUTHOR_CATALOG = {
 				},
 				{
 					id: 'dual_path_badge2',
-					name: 'The Dual Path',
-					price: 500,
+					name: 'The Dual Path - 3 days',
+					expiresInDays: 3,
+					price: 40,
 					currency: 'OC',
 					category: 'BADGE',
 					visualData: {
@@ -231,10 +240,11 @@ const AUTHOR_CATALOG = {
 				// --- BACKGROUND ---
 				{
 					id: 'zen_monochrome_bg',
-					name: 'Zen Monochrome',
-					price: 1000,
+					name: 'Zen Monochrome - 3 days',
+					price: 100,
 					currency: 'OC',
 					category: 'BACKGROUND',
+					expiresInDays: 3,
 					visualData: {
 						type: 'shimmer',
 						primaryColor: '#ffffff', // CHANGED TO WHITE SO IT SHOWS UP ON DARK
@@ -247,9 +257,10 @@ const AUTHOR_CATALOG = {
 				// --- BORDER ---
 				{
 					id: 'equilibrium_border',
-					name: 'Equilibrium Frame',
-					price: 1400,
+					name: 'Equilibrium Frame - 3 days',
+					price: 140,
 					currency: 'OC',
+					expiresInDays: 3,
 					category: 'BORDER',
 					visualData: {
 						type: 'borderChaser',
@@ -262,9 +273,10 @@ const AUTHOR_CATALOG = {
 				// --- GLOW ---
 				{
 					id: 'balanced_aura',
-					name: 'Balanced Aura',
-					price: 1500,
+					name: 'Balanced Aura - 3 days',
+					price: 150,
 					currency: 'OC',
+					expiresInDays: 3,
 					category: 'GLOW',
 					visualData: {
 						type: 'crestGlow',
@@ -286,9 +298,10 @@ const AUTHOR_CATALOG = {
 				// --- WATERMARK ---
 				{
 					id: 'watertrident',
-					name: 'Trident',
-					price: 2200,
+					name: 'Trident - 3 days',
+					price: 300,
 					currency: 'OC',
+					expiresInDays: 3,
 					category: 'WATERMARK',
 					visualData: {
 						color: '#3b82f6',
@@ -300,9 +313,10 @@ const AUTHOR_CATALOG = {
 				},
 				{
 					id: 'bluewave',
-					name: 'The way of water',
-					price: 3500,
+					name: 'The way of water - 3 days',
+					price: 350,
 					currency: 'OC',
+					expiresInDays: 3,
 					category: 'WATERMARK',
 					visualData: {
 						color: '#3b82f6',
@@ -317,9 +331,10 @@ const AUTHOR_CATALOG = {
 				// --- BADGE ---
 				{
 					id: 'dragonscrest',
-					name: "Dragon's Crest",
-					price: 3000,
+					name: "Dragon's Crest - 3 days",
+					price: 200,
 					currency: 'OC',
+					expiresInDays: 3,
 					category: 'BADGE',
 					visualData: {
 						icon: 'droplets',
@@ -330,9 +345,10 @@ const AUTHOR_CATALOG = {
 				// --- BACKGROUND ---
 				{
 					id: 'tranquil_tide_bg',
-					name: 'Tranquil Tide',
-					price: 1000,
+					name: 'Tranquil Tide - 3 days',
+					price: 100,
 					currency: 'OC',
+					expiresInDays: 3,
 					category: 'BACKGROUND',
 					visualData: {
 						type: 'shimmer',
@@ -346,9 +362,10 @@ const AUTHOR_CATALOG = {
 				// --- BORDER ---
 				{
 					id: 'current_chaser_author',
-					name: 'Flowing Current',
-					price: 1200,
+					name: 'Flowing Current - 3 days',
+					price: 120,
 					currency: 'OC',
+					expiresInDays: 3,
 					category: 'BORDER',
 					visualData: {
 						type: 'borderChaser',
@@ -361,9 +378,10 @@ const AUTHOR_CATALOG = {
 				// --- GLOW ---
 				{
 					id: 'deep_sea_glow',
-					name: 'Deep Sea Radiance',
-					price: 1100,
+					name: 'Deep Sea Radiance - 3 days',
+					price: 110,
 					currency: 'OC',
+					expiresInDays: 3,
 					category: 'GLOW',
 					visualData: {
 						type: 'crestGlow',
