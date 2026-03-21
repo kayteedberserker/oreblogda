@@ -7,7 +7,7 @@ const AUTHOR_CATALOG = {
 	standaloneItems: [
 		{
 			id: 'JadeDragon',
-			name: 'Jade Dragon',
+			name: 'Jade Dragon - 3 days',
 			price: 500,
 			currency: 'OC',
 			category: 'WATERMARK',
@@ -29,7 +29,7 @@ const AUTHOR_CATALOG = {
 			id: 'jade_glow_item',
 			price: 200,
 			currency: 'OC',
-			name: 'Jade Glow',
+			name: 'Jade Glow - 3 days',
 			durationDays: 3,
 			visualConfig: {
 				svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" fill="currentColor" fill-opacity="0.3"/></svg>`,
@@ -42,7 +42,7 @@ const AUTHOR_CATALOG = {
 			id: 'yonko_glow_item',
 			price: 300,
 			currency: 'OC',
-			name: 'Yonko Glow',
+			name: 'Yonko Glow - 3 days',
 			durationDays: 3,
 			visualConfig: {
 				svgCode: `<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="8" fill="#ef4444" fill-opacity="0.3"/></svg>`,
