@@ -25,7 +25,7 @@ export async function GET() {
                 eventType: 'achievement',
                 icon: 'star-shooting',       // ⚡️ Passed to Frontend
                 themeColor: '#3b82f6',       // ⚡️ Cyber Blue
-                endsAt: new Date('2026-03-23T23:59:59Z').toISOString(), 
+                endsAt: new Date('2026-03-27T23:59:59Z').toISOString(), 
             }
         };
 
