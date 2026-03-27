@@ -26,7 +26,7 @@ const GACHA_POOLS = {
             rarity: 'Mythic',
             baseDropRate: 0.3,
             exchangePrice: 700,
-            visualConfig: { lottieUrl: 'https://oreblogda.com/lottie/blossom_vfx.json' }
+            visualConfig: { lottieUrl: 'https://oreblogda.com/lottie/blossom_vfx.json', scale: 0.8, }
         },
 
         // ==========================================
@@ -50,8 +50,8 @@ const GACHA_POOLS = {
             exchangePrice: 600, // ⚡️ The Ultimate Prize
             visualConfig: {
                 lottieUrl: 'https://oreblogda.com/lottie/goldaura_vfx.json',
-                zoom: 1.7,
-                offsetY: -10,
+                zoom: 1,
+                offsetY: 0,
             }
         },
         {

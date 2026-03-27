@@ -83,8 +83,8 @@ const AUTHOR_CATALOG = {
 				lottieUrl: 'https://oreblogda.com/lottie/fire_vfx_wm.json',
 				primaryColor: '#FF4500', // Orange-Red for the fallback glow
 				isAnimated: true,
-				zoom: 1.35,
-				offsetY: 40,
+				zoom: 0.85,
+				offsetY: -12,
 			}
 		},
 	],
