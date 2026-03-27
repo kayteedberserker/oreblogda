@@ -29,6 +29,63 @@ const getBranchData = (comment) => {
   return { participants: Array.from(userIds), totalMessages: count - 1 };
 };
 
+// --- Helper: Populate and Derive Author Data for UI Components ---
+const populateAuthors = async (comments) => {
+  if (!comments || comments.length === 0) return [];
+  
+  const userIds = new Set();
+  
+  const extractIds = (nodes) => {
+    nodes.forEach(node => {
+      if (node.authorUserId) userIds.add(node.authorUserId.toString());
+      if (node.replies) extractIds(node.replies);
+    });
+  };
+  
+  extractIds(comments);
+
+  // Fetch only the necessary fields to derive our UI requirements
+  const users = await MobileUser.find({ _id: { $in: Array.from(userIds) } })
+    .select("username peakLevel lastStreak consecutiveStreak inventory previousRank")
+    .lean();
+  const userMap = users.reduce((acc, user) => {
+    // 1. Get all equipped inventory items
+    const equippedItems = user.inventory ? user.inventory.filter(i => i.isEquipped) : [];
+    
+    // 2. Derive specific items
+    // Checking a few common categories for glows, adjust if your specific category name is different
+    const equippedGlow = equippedItems.find(i => ['GLOW'].includes(i.category?.toUpperCase())) || null;
+
+    const badges = equippedItems.filter(i => i.category?.toUpperCase() === 'BADGE') || [];
+
+    // 3. Map to the exact structure the frontend expects
+    acc[user._id.toString()] = {
+      username: user.username || "Guest",
+      name: user.username || "Guest",
+      peakLevel: user.peakLevel || 0,
+      lastStreak: user.lastStreak || 0,
+      streak: user.consecutiveStreak || 0,
+      auraRank: user.previousRank || null, // Mapping previousRank to auraRank
+      equippedGlow,
+      badges
+    };
+    return acc;
+  }, {});
+
+  const attach = (nodes) => {
+    return nodes.map(node => {
+      const authorData = node.authorUserId ? userMap[node.authorUserId.toString()] : null;
+      return {
+        ...node,
+        author: authorData || { name: node.name || "Anonymous", peakLevel: 0, lastStreak: 0 },
+        replies: node.replies ? attach(node.replies) : []
+      };
+    });
+  };
+
+  return attach(comments);
+};
+
 export async function GET(req, { params }) {
   const { id } = await params;
   const { searchParams } = new URL(req.url);
@@ -45,12 +102,16 @@ export async function GET(req, { params }) {
       .select({
         comments: { $slice: [skip, limit] },
         commentCount: { $size: "$comments" }
-      });
+      })
+      .lean(); 
 
     if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
 
+    // Populate and derive authors before sending response
+    const populatedComments = await populateAuthors(post.comments);
+
     return NextResponse.json({
-      comments: post.comments,
+      comments: populatedComments,
       total: post.commentCount,
       hasMore: skip + post.comments.length < post.commentCount
     });
@@ -59,7 +120,6 @@ export async function GET(req, { params }) {
     return NextResponse.json({ message: "Server error" }, { status: 500 });
   }
 }
-// ... (keep all imports and helpers)
 
 export async function POST(req, { params }) {
   await connectDB();
@@ -139,7 +199,7 @@ export async function POST(req, { params }) {
         title: "New Reply 💬",
         message: `${name} replied: "${text.substring(0, 20)}..."`,
         type: "reply",
-        commentId: targetRootComment?._id || parentCommentId, // 👈 KEY ADDITION
+        commentId: targetRootComment?._id || parentCommentId, 
         isMongoId: true
       });
     }
@@ -150,7 +210,7 @@ export async function POST(req, { params }) {
         title: "New Signal 📝",
         message: `${name} started a new signal (#${post.comments.length})`,
         type: "comment",
-        commentId: newComment._id, // 👈 KEY ADDITION
+        commentId: newComment._id, 
         isMongoId: true
       });
     }
@@ -174,7 +234,7 @@ export async function POST(req, { params }) {
               title: "Discussion Active 🔥",
               message: discussionMsg,
               type: "discussion",
-              commentId: targetRootComment._id, // 👈 KEY ADDITION
+              commentId: targetRootComment._id, 
               isMongoId: true
             });
           }
@@ -204,7 +264,7 @@ export async function POST(req, { params }) {
             { 
               postId: post._id.toString(), 
               type: n.type, 
-              commentId: n.commentId?.toString() // 👈 PASSING TO PUSH
+              commentId: n.commentId?.toString() 
             },
             groupId
           );
@@ -212,7 +272,28 @@ export async function POST(req, { params }) {
       }
     }));
 
-    return NextResponse.json({ comment: newComment }, { status: 201 });
+    // Attach derived author data to the newly created comment so the UI updates properly right away
+    let enrichedAuthor = { name: newComment.name };
+    if (foundMobileUser) {
+      const equippedItems = foundMobileUser.inventory ? foundMobileUser.inventory.filter(i => i.isEquipped) : [];
+      enrichedAuthor = {
+        username: foundMobileUser.username,
+        name: foundMobileUser.username,
+        peakLevel: foundMobileUser.peakLevel || 0,
+        lastStreak: foundMobileUser.lastStreak || 0,
+        streak: foundMobileUser.consecutiveStreak || 0,
+        auraRank: foundMobileUser.previousRank || null,
+        equippedGlow: equippedItems.find(i => ['GLOW', 'NAME_GLOW', 'TEXT_GLOW', 'EFFECT'].includes(i.category?.toUpperCase())) || null,
+        badges: equippedItems.filter(i => i.category?.toUpperCase() === 'BADGE') || []
+      };
+    }
+
+    const enrichedNewComment = {
+      ...newComment,
+      author: enrichedAuthor
+    };
+
+    return NextResponse.json({ comment: enrichedNewComment }, { status: 201 });
   } catch (err) {
     console.error("POST error:", err);
     return NextResponse.json({ message: "Error", error: err.message }, { status: 500 });

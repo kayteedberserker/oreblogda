@@ -76,7 +76,7 @@ export async function POST(req) {
         const body = await req.json();
         
         // ⚡️ Added expiresInDays to the destructured body
-        const { deviceId, action, type, packId, coinType, itemId, price, name, category, visualConfig, rewards, payload, expiresInDays } = body;
+        const { deviceId, action, type, packId, coinType, itemId, price, name, category, rarity, visualConfig, rewards, payload, expiresInDays } = body;
 
         const user = await MobileUser.findOne({ deviceId });
         if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
@@ -125,7 +125,6 @@ export async function POST(req) {
             });
         }
 
-        // --- ACTION: BUY INDIVIDUAL ITEM ---
         if (action === 'buy_item') {
             const isCC = coinType === 'CC' || body.currency === 'CC';
             const balanceKey = isCC ? 'clanCoins' : 'coins';
@@ -186,18 +185,24 @@ export async function POST(req) {
                 itemId,
                 name: name || 'Unnamed Item',
                 category,
+                rarity,
                 visualConfig: {
                     svgCode: visualConfig?.svgCode || '',
+                    lottieUrl: visualConfig?.lottieUrl || '',
                     primaryColor: visualConfig?.primaryColor || visualConfig?.color || '#22c55e',
                     secondaryColor: visualConfig?.secondaryColor || null,
                     animationType: visualConfig?.animationType || null,
-                    duration: visualConfig?.duration || 3000,
-                    snakeLength: visualConfig?.snakeLength || 120,
-                    isAnimated: !!(visualConfig?.animated || visualConfig?.animationType)
+                    duration: visualConfig?.duration,
+                    zoom: visualConfig?.zoom || null,
+                    opacity: visualConfig?.opacity || null,
+                    offsetY: visualConfig?.offsetY || null,
+                    snakeLength: visualConfig?.snakeLength,
+                    isAnimated: visualConfig?.isAnimated || !!(visualConfig?.animated || visualConfig?.animationType)
                 },
                 acquiredAt: new Date(),
                 expiresAt: expiryDate // ⚡️ Applied here
             });
+            console.log(user.inventory);
 
             await user.save();
             return NextResponse.json({ success: true, balance: user.coins, clanBalance: user.clanCoins, inventory: user.inventory });
@@ -242,6 +247,7 @@ export async function POST(req) {
                             category: reward.type,
                             visualConfig: {
                                 svgCode: reward.visualConfig?.svgCode || '',
+                                lottieUrl: reward.visualConfig?.lottieUrl || '',
                                 primaryColor: reward.visualConfig?.primaryColor || '#ffffff',
                                 secondaryColor: reward.visualConfig?.secondaryColor || null,
                                 animationType: reward.visualConfig?.animationType || null,

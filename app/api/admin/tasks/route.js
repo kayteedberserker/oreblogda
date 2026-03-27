@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import connectDB from '@/app/lib/mongodb';
 import MobileUser from '@/app/models/MobileUserModel';
 import Post from '@/app/models/PostModel';
-// ⚡️ IMPORT THE MULTI PUSH HELPER INSTEAD
-import { sendMultiplePushNotifications } from "@/app/lib/pushNotifications"; 
+// ⚡️ IMPORT BOTH MULTI AND SINGLE PUSH HELPERS
+import { sendMultiplePushNotifications, sendPushNotification } from "@/app/lib/pushNotifications"; 
 
 // ==========================================
 // ⚡️ GET HANDLER: FETCH ALL POSTS FOR ADMIN
@@ -81,18 +81,66 @@ export async function POST(req) {
                     { new: true }
                 );
                 if (!user) return NextResponse.json({ success: false, message: 'User not found' }, { status: 404 });
+                
+                // Notify user they received OC
+                if (user.pushToken) {
+                    await sendPushNotification(
+                        user.pushToken, 
+                        "Energy Received 🪙", 
+                        `THE SYSTEM has granted you ${payload.amount} OC.`,
+                        { type: 'WALLET_UPDATE' }
+                    );
+                }
+                
                 return NextResponse.json({ success: true, message: `Granted ${payload.amount} OC to ${user.username}` });
 
             case 'UPDATE_POST_STATUS':
                 if (!payload.postId || !payload.status) {
                     return NextResponse.json({ success: false, message: 'Missing post ID or status' }, { status: 400 });
                 }
+
+                const postToUpdate = await Post.findById(payload.postId);
+                if (!postToUpdate) return NextResponse.json({ success: false, message: 'Post not found' }, { status: 404 });
+
+                let updateData = { status: payload.status };
+                let unsetData = {};
+
+                // Append the system message to existing rejection reason if it exists
+                const baseReason = payload.reason ? payload.reason + " | " : (postToUpdate.rejectionReason ? postToUpdate.rejectionReason + " | " : "");
+
+                if (payload.status === 'approved') {
+                    updateData.rejectionReason = baseReason + "Approved by THE SYSTEM!!";
+                    unsetData.expiresAt = 1; // ⚡️ Removes the TTL so it doesn't get deleted
+                } else if (payload.status === 'rejected') {
+                    updateData.rejectionReason = baseReason + "Rejected by THE SYSTEM!!";
+                    updateData.expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000); // ⚡️ Sets TTL for 12 hours from now
+                }
+
+                // Build the final mongo update query safely
+                let mongoUpdateQuery = { $set: updateData };
+                if (Object.keys(unsetData).length > 0) {
+                    mongoUpdateQuery.$unset = unsetData;
+                }
+
                 const updatedPost = await Post.findByIdAndUpdate(
                     payload.postId,
-                    { status: payload.status },
+                    mongoUpdateQuery,
                     { new: true }
                 );
-                if (!updatedPost) return NextResponse.json({ success: false, message: 'Post not found' }, { status: 404 });
+
+                // ⚡️ Notify the Author of the status change
+                if (updatedPost.authorUserId) {
+                    const author = await MobileUser.findById(updatedPost.authorUserId);
+                    if (author && author.pushToken) {
+                        const title = payload.status === 'approved' ? "Scroll Approved! ✅" : "Scroll Rejected ❌";
+                        const body = payload.status === 'approved' 
+                            ? `Your log "${updatedPost.title}" is now live in the village.` 
+                            : `Your log "${updatedPost.title}" was rejected and will be burned in 12 hours.`;
+                        
+                        await sendPushNotification(author.pushToken, title, body, { type: 'POST_STATUS', postId: updatedPost._id });
+                    }
+                }
+
                 return NextResponse.json({ success: true, message: `Post marked as ${payload.status}` });
 
             case 'DELETE_POST':
@@ -101,6 +149,18 @@ export async function POST(req) {
                 }
                 const deletedPost = await Post.findByIdAndDelete(payload.postId);
                 if (!deletedPost) return NextResponse.json({ success: false, message: 'Post not found' }, { status: 404 });
+                
+                // Note: Usually we don't notify on hard-delete as the data is gone, but you can add it here if needed.
+                // ⚡️ Notify the Author of the status change
+                if (deletedPost) {
+                    const author = await MobileUser.findById(deletedPost.authorUserId);
+                    if (author && author.pushToken) {
+                        const title = "Scroll Deleted ❌";
+                        const body = `Your log "${deletedPost.title}" was deleted due to not following platform rules.`;
+                        
+                        await sendPushNotification(author.pushToken, title, body, { type: 'POST_STATUS', postId: updatedPost._id });
+                    }
+                }
                 return NextResponse.json({ success: true, message: 'Post permanently deleted' });
 
             case 'EDIT_POST':
@@ -117,6 +177,20 @@ export async function POST(req) {
                     { new: true }
                 );
                 if (!editedPost) return NextResponse.json({ success: false, message: 'Post not found' }, { status: 404 });
+
+                // ⚡️ Notify the Author of the edit
+                if (editedPost.authorUserId) {
+                    const author = await MobileUser.findById(editedPost.authorUserId);
+                    if (author && author.pushToken) {
+                        await sendPushNotification(
+                            author.pushToken, 
+                            "Scroll Edited 📝", 
+                            `Your log "${editedPost.title}" was updated by THE SYSTEM.`, 
+                            { type: 'POST_EDIT', postId: editedPost._id }
+                        );
+                    }
+                }
+
                 return NextResponse.json({ success: true, message: 'Post updated successfully' });
 
             default:

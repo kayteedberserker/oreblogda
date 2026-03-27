@@ -5,13 +5,21 @@ const InventoryItemSchema = new mongoose.Schema({
   itemId: { type: String, required: true },
   name: { type: String, required: true },
   category: { type: String, required: true },
+  rarity: { 
+    type: String, 
+    default: 'Common' 
+  },
   visualConfig: {
     svgCode: { type: String },
+    lottieUrl: { type: String },
     primaryColor: { type: String },
     secondaryColor: { type: String, default: null },
-    animationType: { type: String, default: "singleSnake" },
-    duration: { type: Number, default: 3000 },
-    snakeLength: { type: Number, default: 400 },
+    animationType: { type: String },
+    opacity:{ type: Number },
+    zoom: { type: Number },
+		offsetY: { type: Number },
+    duration: { type: Number},
+    snakeLength: { type: Number},
     isAnimated: { type: Boolean, default: false }
   },
   isEquipped: { type: Boolean, default: false },
@@ -19,16 +27,16 @@ const InventoryItemSchema = new mongoose.Schema({
   expiresAt: { type: Date, default: null },
 });
 
-// 👗 NEW: Wardrobe Schema for Character Clothing
+// 👗 Wardrobe Schema for Character Clothing
 const WardrobeItemSchema = new mongoose.Schema({
-  clothingId: { type: String, required: true }, // e.g., 'cyber_jacket_01'
+  clothingId: { type: String, required: true }, 
   name: { type: String, required: true },
   type: { 
     type: String, 
     enum: ['hair', 'top', 'pant', 'shoe', 'accessory'], 
     required: true 
   },
-  isDefault: { type: Boolean, default: false }, // For those initial default clothes
+  isDefault: { type: Boolean, default: false }, 
   acquiredAt: { type: Date, default: Date.now }
 });
 
@@ -65,7 +73,7 @@ const mobileUserSchema = new mongoose.Schema(
         top: { type: String, default: 'default_top' },
         pant: { type: String, default: 'default_pant' },
         shoe: { type: String, default: 'default_shoe' },
-        action: { type: String, default: 'idle' } // wave, shy, jump
+        action: { type: String, default: 'idle' } 
       }
     },
 
@@ -91,13 +99,15 @@ const mobileUserSchema = new mongoose.Schema(
     // --- 💰 COIN SYSTEM ---
     coins: { type: Number, default: 0 },
     lastClaimedDate: { type: Date, default: null },
-    // ⚡️ NEW: Track one-time event claims to prevent double-dipping
     claimedEvents: [{
         eventId: { type: String, required: true },
         claimedAt: { type: Date, default: Date.now }
     }],
-    // ⚡️ NEW: GACHA PITY SYSTEM
-    gachaPityCounter: { type: Number, default: 0 },
+    
+    // ⚡️ DYNAMIC EVENT TRACKERS (Mapped by eventId)
+    gachaPityCounters: { type: Map, of: Number, default: {} },
+    eventPoints: { type: Map, of: Number, default: {} },
+    
     coinTransactionHistory: {
       type: [{
         action: String,

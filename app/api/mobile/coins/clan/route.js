@@ -87,7 +87,7 @@ export async function POST(req) {
             clan.spendablePoints -= price;
             clan.specialInventory.push({
                 itemId, name, category,
-                visualConfig: { ...visualConfig, isAnimated: !!visualConfig?.animationType }
+                visualConfig: { ...visualConfig, isAnimated: visualConfig?.isAnimated || !!visualConfig?.animationType }
             });
             await clan.save();
             return NextResponse.json({ success: true, newBalance: clan.spendablePoints });

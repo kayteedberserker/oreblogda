@@ -15,12 +15,6 @@ import geoip from "geoip-lite";
 import { awardClanPoints } from "@/app/lib/clanService";
 import ClanModel from "@/app/models/ClanModel";
 
-/**
- * 🔹 UPDATED 2026 MODERATOR
- * Uses the new @google/genai SDK and Gemini 2.5 Flash
- * Enhanced with Deep Inference for Tagging
- */
-
 // ----------------------
 // AI MODERATOR & AUTO-TAGGER
 // ----------------------
@@ -241,8 +235,8 @@ export async function GET(req) {
                 commentWeight: 4.0,
                 freshnessBoost: 20,
                 freshnessWindow: 3,
-                gravityPower: 1.5,
-                prefBonus: 50,
+                gravityPower: 1.2, // ⚡️ Reduced from 1.5 to let good posts survive longer
+                prefBonus: 15,     // ⚡️ Scaled down to 15 because it now multiplies per matching tag!
                 clanBonus: 50,
                 localBonus: 25
             };
@@ -251,17 +245,19 @@ export async function GET(req) {
 
             const pipeline = [
                 { $match: query },
+                // ⚡️ PERFORMANCE FIX: Sort and limit BEFORE heavy math. 
+                // Only calculate scores for the 1000 most recent potential posts.
+                { $sort: { createdAt: -1 } },
+                { $limit: 1000 },
                 {
                     $addFields: {
                         ageInHours: {
                             $max: [0.5, { $divide: [{ $subtract: [now, "$createdAt"] }, 3600000] }]
                         },
                         commentsCount: { $size: { $ifNull: ["$comments", []] } },
-                        hasInterestMatch: {
-                            $gt: [
-                                { $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] } },
-                                0
-                            ]
+                        // ⚡️ SCALED INTERESTS: Count the exact number of matching tags
+                        matchCount: {
+                            $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] }
                         }
                     }
                 },
@@ -275,7 +271,8 @@ export async function GET(req) {
                         },
                         relevanceBonus: {
                             $add: [
-                                { $cond: ["$hasInterestMatch", CONFIG.prefBonus, 0] },
+                                // ⚡️ Multiply the base bonus by the number of matched tags
+                                { $multiply: ["$matchCount", CONFIG.prefBonus] },
                                 { $cond: [{ $in: ["$clanId", followedClanTags] }, CONFIG.clanBonus, 0] },
                                 { $cond: [{ $eq: ["$country", userCountry] }, CONFIG.localBonus, 0] }
                             ]
@@ -297,8 +294,8 @@ export async function GET(req) {
                 },
                 {
                     $sort: {
-                        finalScore: -1,
-                        createdAt: -1
+                        finalScore: -1, // Sort by our new algorithm score
+                        createdAt: -1   // Tie-breaker
                     }
                 },
                 { $skip: skip },
@@ -318,7 +315,6 @@ export async function GET(req) {
 
             if (uniqueAuthorIds.length > 0) {
                 // 🛡️ FIXED: Safe Mongoose Object ID validation
-                
                 const validAuthorIds = uniqueAuthorIds.filter(id => id);
                 
                 if (validAuthorIds.length > 0) {
@@ -357,7 +353,8 @@ export async function GET(req) {
                             streak: u.lastStreak || 0,
                             rank: u.previousRank || 0,
                             peakLevel: u.peakLevel || 0,
-                            postsCount: countMap[userIdStr] || 0, // ⚡️ Passed securely to the frontend
+                            inventory: inv,
+                            postsCount: countMap[userIdStr] || 0, 
                             equippedGlow: inv.find(i => i.category === 'GLOW' && i.isEquipped) || null,
                             equippedBadges: inv.filter(i => i.category === 'BADGE' && i.isEquipped) || []
                         };
@@ -366,7 +363,6 @@ export async function GET(req) {
             }
 
             if (uniqueClanTags.length > 0) {
-                // 🛡️ FIXED: Safe Mongoose Object ID validation
                 const objectIds = uniqueClanTags.filter(id => id);
                 
                 const clanQuery = [];
