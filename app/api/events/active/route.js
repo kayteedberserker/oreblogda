@@ -15,7 +15,7 @@ export async function GET() {
                 eventType: 'holiday',
                 icon: 'moon-waning-crescent',
                 themeColor: '#facc15',
-                endsAt: new Date('2026-04-05T21:59:59Z').toISOString(), // Extended slightly past Eid
+                endsAt: new Date('2026-03-27T21:59:59Z').toISOString(), // Extended slightly past Eid
             },
 
             // ✨ 2. The Claim Tab (1K Milestone)
