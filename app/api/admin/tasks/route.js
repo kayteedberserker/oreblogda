@@ -134,7 +134,7 @@ export async function POST(req) {
                     if (author && author.pushToken) {
                         const title = payload.status === 'approved' ? "Scroll Approved! ✅" : "Scroll Rejected ❌";
                         const body = payload.status === 'approved' 
-                            ? `Your log "${updatedPost.title}" is now live in the village.` 
+                            ? `Your log "${updatedPost.title}" has been approved by THE SYSTEM after validation.` 
                             : `Your log "${updatedPost.title}" was rejected and will be burned in 12 hours.`;
                         
                         await sendPushNotification(author.pushToken, title, body, { type: 'POST_STATUS', postId: updatedPost._id });
