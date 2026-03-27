@@ -50,7 +50,7 @@ const AUTHOR_CATALOG = {
 			rarity: "Legendary",
 			visualConfig: {
 				// We replace svgCode with lottieUrl
-				lottieUrl: 'https://oreblogda.com/lottie/fire.json',
+				lottieUrl: 'https://oreblogda.com/lottie/fire_vfx_wm.json.json',
 				primaryColor: '#FF4500', // Orange-Red for the fallback glow
 				isAnimated: true
 			}
@@ -80,7 +80,7 @@ const AUTHOR_CATALOG = {
 			rarity: "Legendary",
 			visualConfig: {
 				// We replace svgCode with lottieUrl
-				lottieUrl: 'https://oreblogda.com/lottie/fire.json',
+				lottieUrl: 'https://oreblogda.com/lottie/fire_vfx_wm.json.json',
 				primaryColor: '#FF4500', // Orange-Red for the fallback glow
 				isAnimated: true,
 				zoom: 1.35,
