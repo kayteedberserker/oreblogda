@@ -334,7 +334,7 @@ const GACHA_POOLS = {
     //         name: 'Hello ',
     //         category: 'AVATAR',
     //         rarity: 'Legendary',
-    //         baseDropRate: 1,
+    //         baseDropRate: 0.8,
     //         exchangePrice: 650,
     //         visualConfig: { lottieUrl: 'https://oreblogda.com/lottie/hianim.json' }
     //     },
@@ -347,8 +347,8 @@ const GACHA_POOLS = {
     //         exchangePrice: 600, // ⚡️ The Ultimate Prize
     //         visualConfig: {
     //             lottieUrl: 'https://oreblogda.com/lottie/goldaura_vfx.json',
-    //             zoom: 1.35,
-    //             offsetY: 40,
+    //             zoom: 1.7,
+    //             offsetY: -10,
     //         }
     //     },
     //     {
@@ -356,7 +356,7 @@ const GACHA_POOLS = {
     //         name: 'Dark Space',
     //         category: 'BACKGROUND',
     //         rarity: 'Legendary',
-    //         baseDropRate: 1,
+    //         baseDropRate: 0.7,
     //         exchangePrice: 650,
     //         visualConfig: {
     //             lottieUrl: 'https://oreblogda.com/lottie/infinitevoid_bg.json',
@@ -368,7 +368,7 @@ const GACHA_POOLS = {
     //         name: 'S-Rank Hunter',
     //         category: 'BADGE',
     //         rarity: 'Legendary',
-    //         baseDropRate: 1.5,
+    //         baseDropRate: 2,
     //         exchangePrice: 350,
     //         visualConfig: { lottieUrl: 'https://oreblogda.com/lottie/srank_badge.json' }
     //     },
@@ -484,7 +484,7 @@ const GACHA_POOLS = {
     //         visualConfig: {
     //             primaryColor: '#a855f7',
     //             isAnimated: false,
-    //              svgCode: `
+    //             svgCode: `
     //                  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="45" fill="#a855f7" fill-opacity=".1"/><circle cx="50" cy="50" r="35" fill="#d946ef" fill-opacity=".15"/><g fill="#fdf4ff" opacity=".6"><circle cx="20" cy="50" r="2"/><circle cx="80" cy="50" r="2.5"/><circle cx="50" cy="20" r="1.5"/><circle cx="50" cy="80" r="2"/><path d="M30 30q5-5 10 0m30 40q-5 5-10 0" fill="none" stroke="#d946ef"/></g><circle cx="50" cy="50" r="20" fill="none" stroke="#a855f7" stroke-width="2" stroke-dasharray="5 5" opacity=".8"/></svg>
     //              `
     //         }
@@ -504,7 +504,7 @@ const GACHA_POOLS = {
     //         name: 'Triple Kunai (5d)',
     //         category: 'BORDER',
     //         rarity: 'Rare',
-    //         baseDropRate: 4.0,
+    //         baseDropRate: 2.5,
     //         exchangePrice: 180,
     //         expiresInDays: 5,
     //         visualConfig: { primaryColor: '#3b82f6', animationType: 'tripleChaser', isAnimated: true }
