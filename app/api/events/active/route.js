@@ -11,11 +11,11 @@ export async function GET() {
                 gachaType: "ROULETTE",
                 title: 'Eid al-Fitr Celebration',
                 description: 'Eid Mubarak! Spin the Golden Vault to unlock exclusive Eid cosmetics and Clan boosts!',
-                status: 'active',
+                status: 'ended',
                 eventType: 'holiday',
                 icon: 'moon-waning-crescent',
                 themeColor: '#facc15',
-                endsAt: new Date('2026-04-05T23:59:59Z').toISOString(), // Extended slightly past Eid
+                endsAt: new Date('2026-04-05T21:59:59Z').toISOString(), // Extended slightly past Eid
             },
 
             // ✨ 2. The Claim Tab (1K Milestone)
@@ -25,11 +25,11 @@ export async function GET() {
                 title: '1K Milestone',
                 description: 'The Great Library has recorded its 1,000th entry. Thank you for your service, Operative. Claim your reward below.',
                 amount: 1000,
-                status: "active",
+                status: "ended",
                 eventType: 'achievement',
                 icon: 'star-shooting',
                 themeColor: '#3b82f6',
-                endsAt: new Date('2026-03-27T22:59:59Z').toISOString(),
+                endsAt: new Date('2026-03-27T21:59:59Z').toISOString(),
             },
 
             // 🌌 3. THE NEW ANIME EVENT (Astral Awakening - GRID)
