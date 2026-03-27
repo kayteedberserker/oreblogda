@@ -51,7 +51,7 @@ export async function GET() {
                 icon: 'flare', 
                 themeColor: '#a855f7', 
                 // ⚡️ FIXED: Ensure endsAt is AFTER startsAt so it actually shows up!
-                endsAt: new Date('2026-05-8T23:59:59Z').toISOString(),
+                endsAt: new Date('2026-05-08T23:59:59Z').toISOString(),
             }
         ];
 
@@ -85,7 +85,8 @@ export async function GET() {
                     status: currentStatus,
                 };
             });
-
+            console.log(activeEvents);
+            
         return NextResponse.json({
             success: true,
             events: activeEvents // ⚡️ Send back the filtered & formatted array
