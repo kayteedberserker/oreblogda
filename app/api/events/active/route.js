@@ -39,7 +39,9 @@ export async function GET() {
                 gachaType: "GRID",
                 title: 'Astral Awakening - Coming Soon',
                 description: 'Tap into the cosmic flow! Roll the grid to unlock Legendary Auras and Mythic prowess, Update the App to Access.',
-                status: 'active',
+                status: "coming_soon",
+                isComing: true,
+                startsAt: "2026-03-28T00:00:00Z",
                 eventType: 'seasonal',
                 tokenName: 'Astral Fragments', // Custom name!
                 tokenVisual: {
