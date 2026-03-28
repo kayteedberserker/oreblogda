@@ -39,7 +39,7 @@ const GACHA_POOLS = {
             rarity: 'Legendary',
             baseDropRate: 0.8,
             exchangePrice: 650,
-            visualConfig: { lottieUrl: 'https://oreblogda.com/lottie/hianim.json' }
+            visualConfig: { lottieUrl: 'https://oreblogda.com/lottie/hianim_avatar.json' }
         },
         {
             id: 'astral_leg_aura',
