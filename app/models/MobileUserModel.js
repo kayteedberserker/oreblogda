@@ -5,9 +5,9 @@ const InventoryItemSchema = new mongoose.Schema({
   itemId: { type: String, required: true },
   name: { type: String, required: true },
   category: { type: String, required: true },
-  rarity: { 
-    type: String, 
-    default: 'Common' 
+  rarity: {
+    type: String,
+    default: 'Common'
   },
   visualConfig: {
     svgCode: { type: String },
@@ -15,11 +15,11 @@ const InventoryItemSchema = new mongoose.Schema({
     primaryColor: { type: String },
     secondaryColor: { type: String, default: null },
     animationType: { type: String },
-    opacity:{ type: Number },
+    opacity: { type: Number },
     zoom: { type: Number },
-		offsetY: { type: Number },
-    duration: { type: Number},
-    snakeLength: { type: Number},
+    offsetY: { type: Number },
+    duration: { type: Number },
+    snakeLength: { type: Number },
     isAnimated: { type: Boolean, default: false }
   },
   isEquipped: { type: Boolean, default: false },
@@ -29,20 +29,27 @@ const InventoryItemSchema = new mongoose.Schema({
 
 // 👗 Wardrobe Schema for Character Clothing
 const WardrobeItemSchema = new mongoose.Schema({
-  clothingId: { type: String, required: true }, 
+  clothingId: { type: String, required: true },
   name: { type: String, required: true },
-  type: { 
-    type: String, 
-    enum: ['hair', 'top', 'pant', 'shoe', 'accessory'], 
-    required: true 
+  type: {
+    type: String,
+    enum: ['hair', 'top', 'pant', 'shoe', 'accessory'],
+    required: true
   },
-  isDefault: { type: Boolean, default: false }, 
+  isDefault: { type: Boolean, default: false },
   acquiredAt: { type: Date, default: Date.now }
 });
 
 const mobileUserSchema = new mongoose.Schema(
   {
+    // --- 🔑 IDENTITY SYSTEM ---
+    // uid is the human-readable 'ORE-USER-XXXX-DA' used for login/recovery
+    uid: { type: String, unique: true, sparse: true },
+    // deviceId is the software fingerprint (unique slot per app install)
     deviceId: { type: String, required: true, unique: true },
+    // hardwareId is the physical DNA of the phone (used for the 3-account limit)
+    hardwareId: { type: String, index: true },
+
     username: { type: String, default: "Guest Author" },
     pushToken: { type: String, default: null },
     role: { type: String, default: "Author" },
@@ -73,7 +80,7 @@ const mobileUserSchema = new mongoose.Schema(
         top: { type: String, default: 'default_top' },
         pant: { type: String, default: 'default_pant' },
         shoe: { type: String, default: 'default_shoe' },
-        action: { type: String, default: 'idle' } 
+        action: { type: String, default: 'idle' }
       }
     },
 
@@ -100,14 +107,14 @@ const mobileUserSchema = new mongoose.Schema(
     coins: { type: Number, default: 0 },
     lastClaimedDate: { type: Date, default: null },
     claimedEvents: [{
-        eventId: { type: String, required: true },
-        claimedAt: { type: Date, default: Date.now }
+      eventId: { type: String, required: true },
+      claimedAt: { type: Date, default: Date.now }
     }],
-    
+
     // ⚡️ DYNAMIC EVENT TRACKERS (Mapped by eventId)
     gachaPityCounters: { type: Map, of: Number, default: {} },
     eventPoints: { type: Map, of: Number, default: {} },
-    
+
     coinTransactionHistory: {
       type: [{
         action: String,
@@ -117,12 +124,12 @@ const mobileUserSchema = new mongoose.Schema(
       }],
       default: []
     },
-    // ⚡️ NEW: Store their current calculated level so you can easily query/sort by it
+    // ⚡️ Store their current calculated level so you can easily query/sort by it
     currentRankLevel: { type: Number, default: 1 },
 
     // --- ✨ AURA SYSTEM ---
     weeklyAura: { type: Number, default: 0 },
-    aura: {type: Number, default: 0},
+    aura: { type: Number, default: 0 },
     previousRank: { type: Number, default: null },
     auraHistory: [
       {
@@ -145,6 +152,9 @@ const mobileUserSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// Pre-save index for Hardware ID to ensure efficient account-limit lookups
+mobileUserSchema.index({ hardwareId: 1 });
 
 const MobileUser = mongoose.models.MobileUsers || mongoose.model("MobileUsers", mobileUserSchema);
 

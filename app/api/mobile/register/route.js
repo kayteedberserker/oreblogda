@@ -1,10 +1,25 @@
-import { NextResponse } from "next/server";
 import connectDB from "@/app/lib/mongodb";
-import MobileUser from "@/app/models/MobileUserModel";
-import ReferralEvent from "@/app/models/ReferralEvent"; 
-import geoip from "geoip-lite";
-import crypto from "crypto";
 import { sendPushNotification } from "@/app/lib/pushNotifications";
+import MobileUser from "@/app/models/MobileUserModel";
+import ReferralEvent from "@/app/models/ReferralEvent";
+import crypto from "crypto";
+import geoip from "geoip-lite";
+import { NextResponse } from "next/server";
+
+// ⚡️ HELPER: Generate secure random suffix for UID
+const generateSecureSuffix = () => {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let suffix = "";
+  while (true) {
+    suffix = "";
+    for (let i = 0; i < 4; i++) {
+      suffix += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    // Basic check to avoid 1111 or 1234
+    if (!/^(\w)\1+$/.test(suffix) && !"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".includes(suffix)) break;
+  }
+  return suffix;
+};
 
 const generateReferralCode = (username) => {
   const prefix = username.substring(0, 3).toUpperCase().replace(/[^A-Z]/g, "Z");
@@ -15,15 +30,11 @@ const generateReferralCode = (username) => {
 export async function POST(req) {
   try {
     await connectDB();
-    // 🎭 Added 'character' to the destructured body
-    const { deviceId, username, pushToken, referredBy, preferences, character } = await req.json();
+    // ⚡️ Destructure hardwareId
+    const { deviceId, hardwareId, username, pushToken, referredBy, preferences, character } = await req.json();
 
     if (!deviceId || !username || username.trim() === "") {
-      return NextResponse.json({ message: "Username is required" }, { status: 400 });
-    }
-
-    if (username.trim().toLowerCase().startsWith("admin")) {
-      return NextResponse.json({ message: "This callsign is restricted." }, { status: 400 });
+      return NextResponse.json({ message: "Neural credentials incomplete." }, { status: 400 });
     }
 
     const forwarded = req.headers.get("x-forwarded-for");
@@ -31,23 +42,47 @@ export async function POST(req) {
     const geo = geoip.lookup(ip);
     const detectedCountry = geo ? geo.country : "Unknown";
 
+    // ⚡️ Master Check: Find how many accounts already exist on this physical hardware
+    const existingAccounts = await MobileUser.find({ hardwareId });
+
+    // ⚡️ Check if the SPECIFIC software instance (deviceId) already has an account
     let user = await MobileUser.findOne({ deviceId });
 
     if (!user) {
-      // 🚀 NEW USER REGISTRATION
+      // 🚀 REGISTRATION PHASE
+
+      // 1. Limit Check: Max 3 accounts per hardwareId
+      if (existingAccounts.length >= 3) {
+        return NextResponse.json({
+          message: "SECURITY_PROTOCOL: Device limit reached. Maximum 3 operatives allowed per hardware unit."
+        }, { status: 403 });
+      }
+
+      // 2. Generate the Public UID (Login ID)
+      const suffix = generateSecureSuffix();
+      const cleanName = username.trim().toUpperCase().replace(/\s+/g, "_");
+      const generatedUid = `ORE-${cleanName}-${suffix}-DA`;
+
+      // 3. Handle Duplicate deviceId for DB uniqueness
+      // If this is the 2nd or 3rd account on the same phone, we tweak the deviceId
+      let finalDeviceId = deviceId;
+      if (existingAccounts.length > 0) {
+        finalDeviceId = `${deviceId}-ACC${existingAccounts.length + 1}`;
+      }
+
       const myNewReferralCode = generateReferralCode(username);
       let finalReferrer = null;
       let auraBonus = 0;
       let boostDate = null;
-
       const boostExpiry = new Date();
       boostExpiry.setHours(boostExpiry.getHours() + 72);
 
+      // Referral Logic
       if (referredBy && referredBy.trim() !== "") {
         const cleanRef = referredBy.trim();
         const referrer = await MobileUser.findOne({ referralCode: cleanRef });
 
-        if (referrer && referrer.deviceId !== deviceId) {
+        if (referrer && referrer.hardwareId !== hardwareId) { // Prevent self-referral via multi-account
           finalReferrer = cleanRef;
           referrer.invitedUsers.push({ username: username, date: new Date() });
           referrer.referralCount = (referrer.referralCount || 0) + 1;
@@ -61,20 +96,16 @@ export async function POST(req) {
               await sendPushNotification(
                 referrer.pushToken,
                 "New Recruit Joined! 🌀",
-                `${username} has joined your clan via your link. Your 72h boost is active!`,
+                `${username} joined your clan. 72h boost active!`,
                 { type: "referral_success" }
               );
-            } catch (pErr) {
-              console.error("Referrer Notification Failed:", pErr);
-            }
+            } catch (pErr) { console.error(pErr); }
           }
-
           auraBonus = 20;
           boostDate = boostExpiry;
         }
       }
 
-      // --- 👗 INITIALIZE DEFAULT WARDROBE ---
       const defaultWardrobe = [
         { clothingId: 'default_hair', name: 'Standard Hair', type: 'hair', isDefault: true },
         { clothingId: 'default_top', name: 'Recruit Uniform', type: 'top', isDefault: true },
@@ -82,57 +113,43 @@ export async function POST(req) {
         { clothingId: 'default_shoe', name: 'Issued Boots', type: 'shoe', isDefault: true },
       ];
 
-      // Create the New User
+      // ⚡️ CREATE NEW ACCOUNT
       user = await MobileUser.create({
-        deviceId,
+        uid: generatedUid,    // The Login ID
+        deviceId: finalDeviceId, // Unique for DB
+        hardwareId,           // Linked to physical phone
         username,
         pushToken,
         country: detectedCountry,
         referralCode: myNewReferralCode,
         referredBy: finalReferrer,
         preferences,
-        // 🎭 Saving the Character Base + Default Wardrobe
         character: character || {
           base: { gender: 'male', skinTone: 'medium', name: username },
-          equipped: {
-            hair: 'default_hair',
-            top: 'default_top',
-            pant: 'default_pant',
-            shoe: 'default_shoe',
-            action: 'idle'
-          }
+          equipped: { hair: 'default_hair', top: 'default_top', pant: 'default_pant', shoe: 'default_shoe', action: 'idle' }
         },
         wardrobe: defaultWardrobe,
-        coins: 50,
-        referralCount: 0,
+        coins: 20,
+        aura: auraBonus,
         weeklyAura: auraBonus,
         doubleStreakUntil: boostDate,
         lastActive: new Date()
       });
 
-      // 🏆 REFERRAL EVENT LOGGING
+      // Log referral event
       if (finalReferrer) {
         try {
           const referrerDoc = await MobileUser.findOne({ referralCode: finalReferrer }).select("_id");
           if (referrerDoc) {
-            const grandTotal = await ReferralEvent.countDocuments({ status: 'verified' });
-            let assignedRound = 1;
-            if (grandTotal >= 3000) assignedRound = 3;
-            else if (grandTotal >= 1000) assignedRound = 3;
-            else if (grandTotal >= 500) assignedRound = 2;
-
             await ReferralEvent.create({
               referrerId: referrerDoc._id,
               referredId: user._id,
               referredUsername: user.username,
-              deviceId: deviceId, 
-              round: assignedRound,
+              deviceId: hardwareId, // Use hardwareId for tracking
               status: 'verified'
             });
           }
-        } catch (eventErr) {
-          console.error("ReferralEvent Logging Failed:", eventErr);
-        }
+        } catch (e) { console.error(e); }
       }
 
     } else {
@@ -140,12 +157,8 @@ export async function POST(req) {
       user.username = username;
       if (pushToken) user.pushToken = pushToken;
       if (preferences) user.preferences = preferences;
-      
-      // 🎭 Update Character if provided (useful for re-launching setup)
       if (character) user.character = { ...user.character, ...character };
-
-      if (!user.referralCode) user.referralCode = generateReferralCode(username);
-      if (!user.country || user.country === "Unknown") user.country = detectedCountry;
+      if (hardwareId) user.hardwareId = hardwareId;
 
       user.lastActive = new Date();
       await user.save();
@@ -153,14 +166,11 @@ export async function POST(req) {
 
     return NextResponse.json({
       message: "Neural Link Established",
-      user
+      user // Frontend saves user.uid and user.deviceId
     }, { status: 201 });
 
   } catch (err) {
     console.error("Registration Error:", err);
-    return NextResponse.json({
-      message: "Uplink Error",
-      error: err.message
-    }, { status: 500 });
+    return NextResponse.json({ message: "Uplink Error", error: err.message }, { status: 500 });
   }
 }
