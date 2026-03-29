@@ -6,7 +6,8 @@ import MobileUser from "@/app/models/MobileUserModel";
 import { sendPushNotification } from "@/app/lib/pushNotifications";
 import mongoose from "mongoose";
 import { awardClanPoints } from "@/app/lib/clanService";
-
+// ⚡️ Add this import at the top of your file
+import { awardAura } from "@/app/lib/auraManager";
 // --- Helper: Milestone Check Logic ---
 const shouldNotifyMilestone = (count) => {
   if (count <= 5) return true;
@@ -165,34 +166,36 @@ export async function POST(req, { params }) {
       }
     };
 
-    if (mobileUserId) {
-      await MobileUser.updateOne({ _id: mobileUserId }, { $inc: { weeklyAura: 5 } });
-      await awardClanPoints(post, 10, 'comment');
-    }
-
+    // ⚡️ RULE 1: TOP-LEVEL COMMENT AURA
     if (!parentCommentId) {
       post.comments.unshift(newComment);
       immediateRecipientId = post.authorUserId;
+      
+      // The Author of the Post gets +10 Aura when someone comments on their thread
       if (post.authorUserId && post.authorUserId.toString() !== mobileUserId?.toString()) {
-        await MobileUser.updateOne({ _id: post.authorUserId }, { $inc: { weeklyAura: 10 } });
+        // ⚡️ Using Centralized Aura Manager
+        await awardAura(post.authorUserId, 10);
         await awardClanPoints(post, 20, 'comment');
       }
-    } else {
+    } 
+    // ⚡️ RULE 2: REPLY AURA
+    else {
       immediateRecipientId = findAndReply(post.comments);
       if (!immediateRecipientId) return NextResponse.json({ message: "Signal lost" }, { status: 404 });
       post.markModified("comments");
 
+      // The Main Commenter gets +5 Aura when someone replies to them
       if (immediateRecipientId.toString() !== mobileUserId?.toString()) {
-        await MobileUser.updateOne({ _id: immediateRecipientId }, { $inc: { weeklyAura: 10 } });
-        await awardClanPoints(post, 20, 'comment');
+        // ⚡️ Using Centralized Aura Manager
+        await awardAura(immediateRecipientId, 5);
+        await awardClanPoints(post, 10, 'comment'); 
       }
     }
 
     await post.save();
-
     const notifications = [];
 
-    // --- NOTIFICATION LOGIC UPDATED TO INCLUDE commentId ---
+    // --- NOTIFICATION LOGIC ---
     if (parentCommentId && immediateRecipientId?.toString() !== mobileUserId?.toString()) {
       notifications.push({
         recipientId: immediateRecipientId,
@@ -215,13 +218,25 @@ export async function POST(req, { params }) {
       });
     }
 
+    // ⚡️ RULE 3: THE DISCUSSION MULTIPLIER (Every 5 Replies)
     if (parentCommentId && targetRootComment) {
       const { participants, totalMessages } = getBranchData(targetRootComment);
 
       if (totalMessages > 0 && totalMessages % 5 === 0) {
-        if (targetRootComment.authorUserId && targetRootComment.authorUserId.toString() !== mobileUserId?.toString()) {
-          await MobileUser.updateOne({ _id: targetRootComment.authorUserId }, { $inc: { weeklyAura: 1 } });
-          await awardClanPoints(post, 2, 'comment');
+        
+        // Gather everyone who deserves the +1 Discussion Aura
+        const rewardIds = new Set(participants); // This includes all repliers and the main commenter
+        if (post.authorUserId) rewardIds.add(post.authorUserId.toString()); // Add the original post author
+        
+        // Remove the person who just commented so they can't farm Aura by replying to themselves
+        if (mobileUserId) rewardIds.delete(mobileUserId.toString());
+
+        const idsToReward = Array.from(rewardIds);
+
+        if (idsToReward.length > 0) {
+            // ⚡️ Using Promise.all to run the Aura Manager for every participant concurrently
+            await Promise.all(idsToReward.map(id => awardAura(id, 1)));
+            await awardClanPoints(post, 5, 'comment'); 
         }
       }
 

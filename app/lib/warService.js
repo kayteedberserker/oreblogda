@@ -2,13 +2,13 @@ import ClanWar from '@/app/models/ClanWar';
 import Clan from '@/app/models/ClanModel';
 import MobileUser from '@/app/models/MobileUserModel'; 
 import { sendMultiplePushNotifications } from '@/app/lib/pushNotifications'; 
+import { createMessagePill } from '@/app/lib/messagePillService'; // ⚡️ IMPORT THE PILL SERVICE
 
 /**
  * Updates the war progress if the clan is currently in an ACTIVE war.
  * Checks for expiration before every update.
  */
 export async function updateWarProgress(clanTag, actionPoints, type) {
-    // 1. Find if this clan is in an ACTIVE war
     const activeWar = await ClanWar.findOne({
         status: "ACTIVE",
         $or: [{ challengerTag: clanTag }, { defenderTag: clanTag }]
@@ -16,14 +16,12 @@ export async function updateWarProgress(clanTag, actionPoints, type) {
 
     if (!activeWar) return;
 
-    // 2. CHECK EXPIRATION: Passive Settlement
     const now = new Date();
     if (activeWar.endTime && now > activeWar.endTime) {
         await completeWar(activeWar);
-        return; // Stop point calculation
+        return; 
     }
 
-    // 3. Map the interaction type to categories
     const isPointsMatch = activeWar.warType === "POINTS" || activeWar.warType === "ALL";
     const isLikesMatch = (type === 'like' && activeWar.warType === "LIKES") || activeWar.warType === "ALL";
     const isCommentsMatch = (type === 'comment' && activeWar.warType === "COMMENTS") || activeWar.warType === "ALL";
@@ -32,10 +30,11 @@ export async function updateWarProgress(clanTag, actionPoints, type) {
         const isChallenger = activeWar.challengerTag === clanTag;
         const updateField = isChallenger ? 'currentProgress.challengerScore' : 'currentProgress.defenderScore';
 
-        // Update the War Record
-        await ClanWar.updateOne(
+        // ⚡️ UPDATED: Use findOneAndUpdate to get the fresh scores instantly
+        const updatedWar = await ClanWar.findOneAndUpdate(
             { _id: activeWar._id },
-            { $inc: { [updateField]: actionPoints } }
+            { $inc: { [updateField]: actionPoints } },
+            { new: true } // Returns the document AFTER the points were added
         );
 
         // Update Cumulative Clan War Stats in Clan Model
@@ -45,6 +44,53 @@ export async function updateWarProgress(clanTag, actionPoints, type) {
 
         if (Object.keys(clanStatsUpdate).length > 0) {
             await Clan.updateOne({ tag: clanTag }, { $inc: clanStatsUpdate });
+        }
+
+        // ====================================================================
+        // ⚡️ THE LIVE SCOREBOARD PILL SYSTEM
+        // ====================================================================
+        if (updatedWar) {
+            const { challengerScore, defenderScore } = updatedWar.currentProgress;
+            const diff = Math.abs(challengerScore - defenderScore);
+            
+            let challengerMsg, defenderMsg;
+
+            // Generate dynamic, competitive messages based on who is winning
+            if (challengerScore === defenderScore) {
+                challengerMsg = `WAR UPDATE: TIED with ${activeWar.defenderTag} at ${challengerScore} PTS!`;
+                defenderMsg = `WAR UPDATE: TIED with ${activeWar.challengerTag} at ${defenderScore} PTS!`;
+            } else if (challengerScore > defenderScore) {
+                challengerMsg = `WAR UPDATE: 🟢 Dominating ${activeWar.defenderTag} by ${diff} PTS!`;
+                defenderMsg = `WAR UPDATE: 🔴 Falling behind ${activeWar.challengerTag} by ${diff} PTS. FIGHT BACK!`;
+            } else {
+                challengerMsg = `WAR UPDATE: 🔴 Falling behind ${activeWar.defenderTag} by ${diff} PTS. FIGHT BACK!`;
+                defenderMsg = `WAR UPDATE: 🟢 Dominating ${activeWar.challengerTag} by ${diff} PTS!`;
+            }
+
+            // NOTE: We strictly use type: 'event' so the `replaceExistingType` logic successfully 
+            // wipes the old score pill and replaces it with this fresh one, preventing spam.
+            
+            // Dispatch to Challenger
+            await createMessagePill({
+                text: challengerMsg,
+                type: 'event', 
+                targetAudience: 'clan',
+                targetId: activeWar.challengerTag,
+                priority: 8, // High priority so they see the score instantly
+                expiresInHours: 2, // Short lifespan, war scores change fast
+                replaceExistingType: true 
+            });
+
+            // Dispatch to Defender
+            await createMessagePill({
+                text: defenderMsg,
+                type: 'event',
+                targetAudience: 'clan',
+                targetId: activeWar.defenderTag,
+                priority: 8,
+                expiresInHours: 2,
+                replaceExistingType: true
+            });
         }
     }
 }
@@ -58,7 +104,6 @@ async function completeWar(war) {
     const totalPrize = stake * 2;
     let winner = null;
 
-    // Determine Winner
     if (challengerScore > defenderScore) {
         winner = war.challengerTag;
     } else if (defenderScore > challengerScore) {
@@ -67,54 +112,50 @@ async function completeWar(war) {
         winner = "DRAW";
     }
 
-    // 1. GET CLAN DATA & MEMBERS
     const challengerClan = await Clan.findOne({ tag: war.challengerTag });
     const defenderClan = await Clan.findOne({ tag: war.defenderTag });
 
     if (!challengerClan || !defenderClan) return;
 
-    /**
-     * Helper to finalize clan stats using Total Points
-     * @param {Object} clan - The clan document
-     * @param {Number} share - The total amount to return/award to TotalPoints
-     */
     const finalizeClan = async (clan, share) => {
         await Clan.updateOne(
             { _id: clan._id },
             { 
                 $set: { isInWar: false, activeWarId: null },
                 $inc: { 
-                    lockedPoints: -stake, // Clear the escrow
-                    totalPoints: share    // Add the winnings/refund back to Total Points
+                    lockedPoints: -stake, 
+                    totalPoints: share    
                 } 
             }
         );
     };
 
-    // 2. DISTRIBUTION LOGIC (Total Points based)
+    let cShare = 0;
+    let dShare = 0;
+
     if (winner === "DRAW") {
-        // Refund original stakes to Total Points
+        cShare = stake; dShare = stake;
         await finalizeClan(challengerClan, stake);
         await finalizeClan(defenderClan, stake);
     } else if (war.winCondition === "FULL") {
-        // Winner gets the whole pot (2x stake) added to Total Points, Loser gets 0
-        await finalizeClan(challengerClan, winner === war.challengerTag ? totalPrize : 0);
-        await finalizeClan(defenderClan, winner === war.defenderTag ? totalPrize : 0);
+        cShare = winner === war.challengerTag ? totalPrize : 0;
+        dShare = winner === war.defenderTag ? totalPrize : 0;
+        await finalizeClan(challengerClan, cShare);
+        await finalizeClan(defenderClan, dShare);
     } else if (war.winCondition === "PERCENTAGE") {
         const totalScore = challengerScore + defenderScore;
         if (totalScore > 0) {
-            const cShare = Math.floor((challengerScore / totalScore) * totalPrize);
-            const dShare = totalPrize - cShare;
+            cShare = Math.floor((challengerScore / totalScore) * totalPrize);
+            dShare = totalPrize - cShare;
             await finalizeClan(challengerClan, cShare);
             await finalizeClan(defenderClan, dShare);
         } else {
-            // No activity: Refund original stakes
+            cShare = stake; dShare = stake;
             await finalizeClan(challengerClan, stake);
             await finalizeClan(defenderClan, stake);
         }
     }
 
-    // 3. SEND PUSH NOTIFICATIONS
     const notifyMembers = async (memberIds, title, message) => {
         const users = await MobileUser.find({ _id: { $in: memberIds } }).select('pushToken');
         const tokens = users.map(u => u.pushToken).filter(t => t);
@@ -136,20 +177,48 @@ async function completeWar(war) {
     if (winner === "DRAW") {
         await notifyMembers(challengerClan.members, "War Ended: Draw", drawMsg);
         await notifyMembers(defenderClan.members, "War Ended: Draw", drawMsg);
+        
+        // ⚡️ DRAW PILLS
+        await createMessagePill({ text: `WAR CONCLUDED: DRAW AGAINST ${war.defenderTag}`, type: 'event', targetAudience: 'clan', targetId: war.challengerTag, priority: 10, expiresInHours: 24, replaceExistingType: true });
+        await createMessagePill({ text: `WAR CONCLUDED: DRAW AGAINST ${war.challengerTag}`, type: 'event', targetAudience: 'clan', targetId: war.defenderTag, priority: 10, expiresInHours: 24, replaceExistingType: true });
+
     } else {
         const winningMembers = winner === war.challengerTag ? challengerClan.members : defenderClan.members;
         const losingMembers = winner === war.challengerTag ? defenderClan.members : challengerClan.members;
         
         await notifyMembers(winningMembers, "War Victory! ⚔️", winMsg);
         await notifyMembers(losingMembers, "War Defeat 🛡️", loseMsg);
+
+        // ⚡️ VICTORY & DEFEAT PILLS
+        const loser = winner === war.challengerTag ? war.defenderTag : war.challengerTag;
+        const winnerShare = winner === war.challengerTag ? cShare : dShare;
+
+        // Give the winner an Achievement Pill
+        await createMessagePill({
+            text: `VICTORY! CRUSHED ${loser} AND SECURED +${winnerShare} POINTS!`,
+            type: 'achievement',
+            targetAudience: 'clan',
+            targetId: winner,
+            priority: 10,
+            expiresInHours: 24,
+            replaceExistingType: true 
+        });
+
+        // Give the loser a Warning Pill
+        await createMessagePill({
+            text: `DEFEAT: LOST THE WAR AGAINST ${winner}. REGROUP AND PREPARE.`,
+            type: 'warning',
+            targetAudience: 'clan',
+            targetId: loser,
+            priority: 10,
+            expiresInHours: 24,
+            replaceExistingType: true 
+        });
     }
 
-    // 4. UPDATE WAR DOCUMENT STATUS & HISTORY
     war.status = "COMPLETED";
     war.winner = winner;
     war.finalSnapshot = { ...war.currentProgress };
-    
-    // EXTEND EXPIRY: Ensure the record is kept for 30 days history
     war.expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); 
     
     await war.save();

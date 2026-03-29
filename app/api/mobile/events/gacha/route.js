@@ -26,7 +26,7 @@ const GACHA_POOLS = {
             rarity: 'Mythic',
             baseDropRate: 0.3,
             exchangePrice: 700,
-            visualConfig: { lottieUrl: 'https://oreblogda.com/lottie/blossom_vfx.json', scale: 0.8, }
+            visualConfig: { lottieUrl: 'https://oreblogda.com/lottie/blossom_vfx.json', zoom: 0.8, }
         },
 
         // ==========================================

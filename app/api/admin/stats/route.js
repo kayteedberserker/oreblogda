@@ -3,14 +3,15 @@ import connectDB from "@/app/lib/mongodb";
 import MobileUser from "@/app/models/MobileUserModel";
 import Post from "@/app/models/PostModel";
 
+// ⚡️ HELPER: Calculate Percentage Trend
+function calcTrend(curr, prev) {
+    if (prev > 0) return Math.round(((curr - prev) / prev) * 100);
+    if (curr > 0) return 100; // 100% growth if prev was 0 but curr has value
+    return 0;
+}
+
 export async function GET(req) {
   try {
-    // --- Loading State Animation ---
-    /* [ . ]
-       [ .. ]
-       [ ... ]
-    */
-
     await connectDB();
     const { searchParams } = new URL(req.url);
     const range = searchParams.get("range") || "7days";
@@ -23,30 +24,21 @@ export async function GET(req) {
     let groupByFormat = "%Y-%m-%d";
     let steps = 7;
 
+    // ⚡️ Determine Time Ranges
     if (range === "today") {
-      // Current Day: 12:00 AM to 11:59 PM
       startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
       endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
-      
-      // Comparison: Yesterday 12:00 AM to 11:59 PM
       prevStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
       prevEndDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
-      
       groupByFormat = "%H:00";
       steps = 24; 
-
     } else if (range === "yesterday") {
-      // Yesterday: 12:00 AM to 11:59 PM
       startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 0, 0, 0);
       endDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 23, 59, 59);
-      
-      // Comparison: Day before yesterday
       prevStartDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2, 0, 0, 0);
       prevEndDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 2, 23, 59, 59);
-      
       groupByFormat = "%H:00";
       steps = 24;
-
     } else if (range === "24h") {
       startDate.setHours(now.getHours() - 24);
       prevStartDate.setHours(now.getHours() - 48);
@@ -69,16 +61,39 @@ export async function GET(req) {
       prevStartDate = new Date(now.getFullYear(), now.getMonth() - 2, 1);
       prevEndDate = new Date(now.getFullYear(), now.getMonth() - 1, 0, 23, 59, 59);
       steps = new Date(now.getFullYear(), now.getMonth(), 0).getDate();
-    } else {
+    } else { // 7 days (default)
       startDate.setDate(now.getDate() - 7);
       prevStartDate.setDate(now.getDate() - 14);
       prevEndDate.setDate(now.getDate() - 7);
       steps = 7;
     }
 
-    const [postStatsArray, totalUsers, countries, rawActivity, currentPeriodOpens, prevPeriodOpens, uniqueActiveUsers] = await Promise.all([
+    // ⚡️ MASSIVE QUERY BLOCK: Fetch Current & Previous Period Data Simultaneously
+    const [
+      allTimePostStatsArray,
+      currPeriodPostStatsArray,
+      prevPeriodPostStatsArray,
+      totalUsers,
+      prevTotalUsers, 
+      countries,
+      rawActivity, // Current Period Bar Chart Data
+      prevRawActivity, // ⚡️ ADDED: Previous Period Bar Chart Data
+      currentPeriodOpens,
+      prevPeriodOpens,
+      uniqueActiveUsers,
+      prevUniqueActiveUsers
+    ] = await Promise.all([
       Post.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
+      Post.aggregate([
+        { $match: { createdAt: { $gte: startDate, $lte: endDate } } },
+        { $group: { _id: "$status", count: { $sum: 1 } } }
+      ]),
+      Post.aggregate([
+        { $match: { createdAt: { $gte: prevStartDate, $lte: prevEndDate } } },
+        { $group: { _id: "$status", count: { $sum: 1 } } }
+      ]),
       MobileUser.countDocuments(),
+      MobileUser.countDocuments({ createdAt: { $lt: startDate } }),
       MobileUser.aggregate([
         { $group: { _id: "$country", count: { $sum: 1 } } },
         { $sort: { count: -1 } },
@@ -87,13 +102,14 @@ export async function GET(req) {
       MobileUser.aggregate([
         { $unwind: "$activityLog" },
         { $match: { activityLog: { $gte: startDate, $lte: endDate } } },
-        { 
-          $group: { 
-            _id: { $dateToString: { format: groupByFormat, date: "$activityLog" } }, 
-            count: { $sum: 1 }
-          } 
-        },
+        { $group: { _id: { $dateToString: { format: groupByFormat, date: "$activityLog" } }, count: { $sum: 1 } } },
         { $sort: { "_id": 1 } }
+      ]),
+      // ⚡️ ADDED: Query for previous period's activity array
+      MobileUser.aggregate([
+        { $unwind: "$activityLog" },
+        { $match: { activityLog: { $gte: prevStartDate, $lte: prevEndDate } } },
+        { $group: { _id: { $dateToString: { format: groupByFormat, date: "$activityLog" } }, count: { $sum: 1 } } }
       ]),
       MobileUser.aggregate([
         { $unwind: "$activityLog" },
@@ -105,63 +121,112 @@ export async function GET(req) {
         { $match: { activityLog: { $gte: prevStartDate, $lte: prevEndDate } } },
         { $group: { _id: null, total: { $sum: 1 } } }
       ]),
-      // ⚡️ NEW: Unique Active Users in Period
       MobileUser.aggregate([
         { $unwind: "$activityLog" },
         { $match: { activityLog: { $gte: startDate, $lte: endDate } } },
-        // Group by user ID first to ensure uniqueness
+        { $group: { _id: "$_id" } }, 
+        { $group: { _id: null, totalUnique: { $sum: 1 } } }
+      ]),
+      MobileUser.aggregate([
+        { $unwind: "$activityLog" },
+        { $match: { activityLog: { $gte: prevStartDate, $lte: prevEndDate } } },
         { $group: { _id: "$_id" } },
-        // Count the total number of unique IDs
         { $group: { _id: null, totalUnique: { $sum: 1 } } }
       ])
     ]);
 
-    const currentTotal = currentPeriodOpens[0]?.total || 0;
-    const prevTotal = prevPeriodOpens[0]?.total || 0;
-    const uniqueDailyActive = uniqueActiveUsers[0]?.totalUnique || 0; // ⚡️ Extract Unique Count
-    
-    let activityTrend = 0;
-    if (prevTotal > 0) {
-      activityTrend = Math.round(((currentTotal - prevTotal) / prevTotal) * 100);
-    } else {
-      activityTrend = currentTotal > 0 ? 100 : 0;
-    }
+    // --- 📊 CALCULATE TRENDS & TOTALS ---
 
+    // 1. App Opens
+    const totalAppOpens = currentPeriodOpens[0]?.total || 0;
+    const prevTotalAppOpens = prevPeriodOpens[0]?.total || 0;
+    const activityTrend = calcTrend(totalAppOpens, prevTotalAppOpens);
+
+    // 2. Unique Active Users
+    const uniqueDailyActive = uniqueActiveUsers[0]?.totalUnique || 0; 
+    const prevUniqueDailyActive = prevUniqueActiveUsers[0]?.totalUnique || 0;
+    const activeTrend = calcTrend(uniqueDailyActive, prevUniqueDailyActive);
+
+    // 3. User Growth
+    const usersTrend = calcTrend(totalUsers, prevTotalUsers);
+
+    // 4. Post Analytics
+    const allTimePosts = allTimePostStatsArray.reduce((acc, curr) => { acc[curr._id] = curr.count; return acc; }, { pending: 0, rejected: 0, approved: 0 });
+    const currPosts = currPeriodPostStatsArray.reduce((acc, curr) => { acc[curr._id] = curr.count; return acc; }, { pending: 0, rejected: 0, approved: 0 });
+    const prevPosts = prevPeriodPostStatsArray.reduce((acc, curr) => { acc[curr._id] = curr.count; return acc; }, { pending: 0, rejected: 0, approved: 0 });
+
+    const postStats = {
+        pending: allTimePosts.pending,
+        prevPending: allTimePosts.pending - currPosts.pending,
+        pendingTrend: calcTrend(currPosts.pending, prevPosts.pending),
+        
+        approved: allTimePosts.approved,
+        prevApproved: allTimePosts.approved - currPosts.approved,
+        approvedTrend: calcTrend(currPosts.approved, prevPosts.approved),
+        
+        rejected: allTimePosts.rejected,
+        prevRejected: allTimePosts.rejected - currPosts.rejected,
+        rejectedTrend: calcTrend(currPosts.rejected, prevPosts.rejected)
+    };
+
+    // --- 📈 BUILD CHART DATA (WITH PREV COUNT) ---
     const activityMap = new Map(rawActivity.map(i => [i._id, i.count]));
+    const prevActivityMap = new Map(prevRawActivity.map(i => [i._id, i.count])); // ⚡️ Map previous data
+    
     const dailyActivity = [];
     
-    // Create the chart labels and data
     for (let i = 0; i < steps; i++) {
         let label;
-        const d = new Date(endDate); 
+        let prevLabel;
         
-        // Handle hourly formats for 24h, today, and yesterday
+        const d = new Date(endDate); 
+        const prevD = new Date(prevEndDate); // ⚡️ We need to track the date from the previous period too
+        
         if (["24h", "today", "yesterday"].includes(range)) {
             d.setHours(d.getHours() - i);
             const h = d.getHours();
             label = `${h < 10 ? '0'+h : h}:00`;
+
+            // Calculate corresponding previous hour
+            prevD.setHours(prevD.getHours() - i);
+            const prevH = prevD.getHours();
+            prevLabel = `${prevH < 10 ? '0'+prevH : prevH}:00`;
+
         } else {
             d.setDate(d.getDate() - i);
             label = d.toISOString().split('T')[0];
-        }
-        dailyActivity.unshift({ _id: label, count: activityMap.get(label) || 0 });
-    }
 
-    const postStats = postStatsArray.reduce((acc, curr) => {
-      acc[curr._id] = curr.count;
-      return acc;
-    }, { pending: 0, rejected: 0, approved: 0 });
+            // Calculate corresponding previous day
+            prevD.setDate(prevD.getDate() - i);
+            prevLabel = prevD.toISOString().split('T')[0];
+        }
+
+        // ⚡️ ADDED: Push both count and prevCount into the array
+        dailyActivity.unshift({ 
+            _id: label, 
+            count: activityMap.get(label) || 0,
+            prevCount: prevActivityMap.get(prevLabel) || 0 // ⚡️ Get data for the corresponding point in the past
+        });
+    }
 
     return NextResponse.json({
       success: true,
       data: { 
         totalUsers, 
+        prevTotalUsers,
+        usersTrend,
+
+        totalAppOpens,
+        prevTotalAppOpens,
+        activityTrend, 
+
+        uniqueDailyActive,
+        prevUniqueDailyActive,
+        activeTrend,
+
         postStats, 
         countries, 
-        dailyActivity,
-        activityTrend, 
-        totalAppOpens: currentTotal,
-        uniqueDailyActive // ⚡️ Passed to Frontend
+        dailyActivity, // ⚡️ Now includes prevCount!
       }
     });
   } catch (err) {

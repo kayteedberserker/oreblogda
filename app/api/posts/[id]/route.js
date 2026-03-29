@@ -7,6 +7,7 @@ import MobileUser from "@/app/models/MobileUserModel";
 import crypto from "crypto";
 import { awardClanPoints } from "@/app/lib/clanService";
 import Clan from "@/app/models/ClanModel";
+import { awardAura } from "@/app/lib/auraManager";
 
 // ----------------------
 // 🛡️ SECURITY: Request Signature Verification
@@ -115,26 +116,29 @@ export async function PATCH(req, { params }) {
                 }
             }
 
-            // ✨ AURA LOGIC: +2 for Voting
+            // ✨ AURA LOGIC: +5 for Voting
             if (post.authorId !== fingerprint) {
-                await MobileUser.updateOne(
-                    { deviceId: post.authorId },
-                    { $inc: { weeklyAura: 2 } }
-                );
-                // 🛡️ CLAN: Only if the post is a Clan Post
-                await awardClanPoints(post, 10);
-                const msg = `Someone voted on your post: "${post.title.substring(0, 15)}..."`;
-                await Notification.create({ recipientId: post.authorId, senderName: "Someone", type: "like", postId: post._id, message: msg });
                 const author = await MobileUser.findOne({ deviceId: post.authorId });
-                if (author?.pushToken) {
-                    // 🔔 GROUPING ADDED: Uses "vote_<PostID>" so votes stack
-                    await sendPushNotification(
-                        author.pushToken,
-                        "New Vote! ✅",
-                        msg,
-                        { postId: post._id.toString(), type: "post_detail" },
-                        `vote_${post._id}`
-                    );
+                
+                if (author) {
+                    // ⚡️ Replaced manual $inc with centralized Aura Manager
+                    await awardAura(author._id, 5);
+
+                    // 🛡️ CLAN: Only if the post is a Clan Post
+                    await awardClanPoints(post, 10);
+                    const msg = `Someone voted on your post: "${post.title.substring(0, 15)}..."`;
+                    await Notification.create({ recipientId: post.authorId, senderName: "Someone", type: "like", postId: post._id, message: msg });
+                    
+                    if (author.pushToken) {
+                        // 🔔 GROUPING ADDED: Uses "vote_<PostID>" so votes stack
+                        await sendPushNotification(
+                            author.pushToken,
+                            "New Vote! ✅",
+                            msg,
+                            { postId: post._id.toString(), type: "post_detail" },
+                            `vote_${post._id}`
+                        );
+                    }
                 }
             }
 
@@ -166,56 +170,55 @@ export async function PATCH(req, { params }) {
 
             // ✨ AURA & CLAN LOGIC
             if (updatedPost.authorId !== fingerprint) {
-                await MobileUser.updateOne(
-                    { deviceId: updatedPost.authorId },
-                    { $inc: { weeklyAura: 5 } }
-                );
-
-                // One-Shot and stats logic
-                await awardClanPoints(updatedPost, 10, 'like');
-
-                // 3. Handle Notifications
-                const msg = `Someone liked your post: "${updatedPost.title.substring(0, 15)}..."`;
-                await Notification.create({
-                    recipientId: updatedPost.authorId,
-                    senderName: "Someone",
-                    type: "like",
-                    priority: "high",
-                    postId: updatedPost._id,
-                    message: msg
-                });
-
                 const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
-                if (author?.pushToken) {
-                    await sendPushNotification(
-                        author.pushToken,
-                        "New Like! ❤️",
-                        msg,
-                        { postId: updatedPost._id.toString(), type: "post_detail" },
-                        `like_${updatedPost._id}`
-                    );
-                }
+                
+                if (author) {
+                    // ⚡️ Centralized Aura Manager
+                    await awardAura(author._id, 5);
+                    await awardClanPoints(updatedPost, 10, 'like');
 
-                // 4. Milestone Notifications (Trending)
-                const milestones = [5, 10, 25, 50, 100];
-                if (milestones.includes(updatedPost.likes.length)) {
-                    const mMsg = `🔥 Trending! Your post reached ${updatedPost.likes.length} likes!`;
+                    // Handle Notifications
+                    const msg = `Someone liked your post: "${updatedPost.title.substring(0, 15)}..."`;
                     await Notification.create({
                         recipientId: updatedPost.authorId,
-                        senderName: "System",
-                        type: "trending",
+                        senderName: "Someone",
+                        type: "like",
+                        priority: "high",
                         postId: updatedPost._id,
-                        message: mMsg
+                        message: msg
                     });
 
-                    if (author?.pushToken) {
+                    if (author.pushToken) {
                         await sendPushNotification(
                             author.pushToken,
-                            "Going Viral!",
-                            mMsg,
+                            "New Like! ❤️",
+                            msg,
                             { postId: updatedPost._id.toString(), type: "post_detail" },
-                            `milestone_${updatedPost._id}`
+                            `like_${updatedPost._id}`
                         );
+                    }
+
+                    // Milestone Notifications (Trending)
+                    const milestones = [5, 10, 25, 50, 100];
+                    if (milestones.includes(updatedPost.likes.length)) {
+                        const mMsg = `🔥 Trending! Your post reached ${updatedPost.likes.length} likes!`;
+                        await Notification.create({
+                            recipientId: updatedPost.authorId,
+                            senderName: "System",
+                            type: "trending",
+                            postId: updatedPost._id,
+                            message: mMsg
+                        });
+
+                        if (author.pushToken) {
+                            await sendPushNotification(
+                                author.pushToken,
+                                "Going Viral!",
+                                mMsg,
+                                { postId: updatedPost._id.toString(), type: "post_detail" },
+                                `milestone_${updatedPost._id}`
+                            );
+                        }
                     }
                 }
             }
@@ -227,14 +230,14 @@ export async function PATCH(req, { params }) {
         if (action === "share") {
             const updatedPost = await Post.findByIdAndUpdate(id, { $inc: { shares: 1 } }, { new: true });
 
-            // ✨ AURA LOGIC: +5 for Sharing
+            // ✨ AURA LOGIC: +3 for Sharing
             if (updatedPost && updatedPost.authorId !== fingerprint) {
-                await MobileUser.updateOne(
-                    { deviceId: updatedPost.authorId },
-                    { $inc: { weeklyAura: 10 } }
-                );
-                // 🛡️ CLAN: Only if the post is a Clan Post
-                await awardClanPoints(updatedPost, 20, 'share');
+                const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
+                if (author) {
+                    // ⚡️ Centralized Aura Manager
+                    await awardAura(author._id, 3);
+                    await awardClanPoints(updatedPost, 20, 'share');
+                }
             }
 
             return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
@@ -253,52 +256,47 @@ export async function PATCH(req, { params }) {
                     timezone = geoData.timezone || "Unknown";
                 } catch (err) { console.log("Geo lookup failed"); }
 
-                    const updatedPost = await Post.findOneAndUpdate(
-                        { _id: id, viewsFingerprints: { $ne: fingerprint } },
-                        {
-                            $inc: { views: 1 },
-                            $push: {
-                                // Keep only the last 500 fingerprints for server-side dupe check
-                                viewsFingerprints: {
-                                    $each: [fingerprint],
-                                    $slice: -500
-                                },
-                                // Keep only the last 100 geo-data entries for recent analytics
-                                viewsData: {
-                                    $each: [{
-                                        visitorId: fingerprint,
-                                        ip, country, city,
-                                        timezone,
-                                        timestamp: new Date()
-                                    }],
-                                    $slice: -100
-                                }
+                const updatedPost = await Post.findOneAndUpdate(
+                    { _id: id, viewsFingerprints: { $ne: fingerprint } },
+                    {
+                        $inc: { views: 1 },
+                        $push: {
+                            viewsFingerprints: {
+                                $each: [fingerprint],
+                                $slice: -500
+                            },
+                            viewsData: {
+                                $each: [{
+                                    visitorId: fingerprint,
+                                    ip, country, city,
+                                    timezone,
+                                    timestamp: new Date()
+                                }],
+                                $slice: -100
                             }
-                        },
-                        { new: true }
-                    );
-
-                    if (updatedPost) {
-                        // ✨ AURA LOGIC: +1 Aura for every 50 unique views
-                        if (updatedPost.views % 5 === 0) {
-                            await MobileUser.updateOne(
-                                { deviceId: updatedPost.authorId },
-                                { $inc: { weeklyAura: 5 } }
-                            );
-
-                            // 🛡️ CLAN: Points for views
-                            // We pass 'view' as type to update clan stats
-                            await awardClanPoints(updatedPost, 20, 'view');
                         }
-                        return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
+                    },
+                    { new: true }
+                );
+
+                if (updatedPost) {
+                    // ✨ AURA LOGIC: +2 Aura for every 5 unique views
+                    if (updatedPost.views % 5 === 0) {
+                        const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
+                        if (author) {
+                            // ⚡️ Centralized Aura Manager
+                            await awardAura(author._id, 2);
+                            await awardClanPoints(updatedPost, 5, 'view');
+                        }
                     }
+                    return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
                 }
             }
 
             // Return the post if already viewed or bot
             const post = await Post.findById(id);
             return addCorsHeaders(NextResponse.json(post, { status: 200 }));
-        
+        }
 
         return addCorsHeaders(NextResponse.json({ message: "Invalid action" }, { status: 400 }));
 

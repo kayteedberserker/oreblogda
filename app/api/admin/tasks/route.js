@@ -4,7 +4,7 @@ import MobileUser from '@/app/models/MobileUserModel';
 import Post from '@/app/models/PostModel';
 // ⚡️ IMPORT BOTH MULTI AND SINGLE PUSH HELPERS
 import { sendMultiplePushNotifications, sendPushNotification } from "@/app/lib/pushNotifications"; 
-
+import MessagePill from "@/app/models/MessagePillModel";
 // ==========================================
 // ⚡️ GET HANDLER: FETCH ALL POSTS FOR ADMIN
 // ==========================================
@@ -46,13 +46,35 @@ export async function POST(req) {
         const { task, payload } = await req.json();
 
         switch (task) {
+            
+            // ⚡️ NEW: SEND PILL LOGIC
+            case 'SEND_PILL':
+                if (!payload.text || !payload.type || !payload.targetAudience) {
+                    return NextResponse.json({ success: false, message: 'Missing pill parameters' }, { status: 400 });
+                }
+                
+                let expiresAt = null;
+                // If the admin sets an expiry duration (in hours), calculate the exact future date
+                if (payload.expiresInHours) {
+                    expiresAt = new Date(Date.now() + payload.expiresInHours * 60 * 60 * 1000);
+                }
+
+                const newPill = await MessagePill.create({
+                    text: payload.text,
+                    type: payload.type,
+                    targetAudience: payload.targetAudience,
+                    targetId: payload.targetId || null,
+                    priority: payload.priority || 0,
+                    expiresAt: expiresAt
+                });
+
+                return NextResponse.json({ success: true, message: 'Message Pill deployed to the Network.' });
+
             case 'BROADCAST_ALL':
-                // ⚡️ IMPLEMENTED GLOBAL PUSH NOTIFICATION
                 if (!payload.title || !payload.message) {
                     return NextResponse.json({ success: false, message: 'Missing title or message' }, { status: 400 });
                 }
 
-                // Fetch all users who have an active push token
                 const allUsersWithTokens = await MobileUser.find({
                     pushToken: { $exists: true, $ne: "" }
                 }).select("pushToken");
@@ -61,7 +83,6 @@ export async function POST(req) {
                     return NextResponse.json({ success: false, message: 'No users with active push tokens found.' });
                 }
 
-                // ⚡️ Extract tokens and use the chunked multi-push helper
                 const tokensArray = allUsersWithTokens.map(u => u.pushToken);
                 await sendMultiplePushNotifications(tokensArray, payload.title, payload.message);
                 
@@ -82,7 +103,6 @@ export async function POST(req) {
                 );
                 if (!user) return NextResponse.json({ success: false, message: 'User not found' }, { status: 404 });
                 
-                // Notify user they received OC
                 if (user.pushToken) {
                     await sendPushNotification(
                         user.pushToken, 
@@ -105,18 +125,16 @@ export async function POST(req) {
                 let updateData = { status: payload.status };
                 let unsetData = {};
 
-                // Append the system message to existing rejection reason if it exists
                 const baseReason = payload.reason ? payload.reason + " | " : (postToUpdate.rejectionReason ? postToUpdate.rejectionReason + " | " : "");
 
                 if (payload.status === 'approved') {
                     updateData.rejectionReason = baseReason + "Approved by THE SYSTEM!!";
-                    unsetData.expiresAt = 1; // ⚡️ Removes the TTL so it doesn't get deleted
+                    unsetData.expiresAt = 1; 
                 } else if (payload.status === 'rejected') {
                     updateData.rejectionReason = baseReason + "Rejected by THE SYSTEM!!";
-                    updateData.expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000); // ⚡️ Sets TTL for 12 hours from now
+                    updateData.expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000); 
                 }
 
-                // Build the final mongo update query safely
                 let mongoUpdateQuery = { $set: updateData };
                 if (Object.keys(unsetData).length > 0) {
                     mongoUpdateQuery.$unset = unsetData;
@@ -128,7 +146,6 @@ export async function POST(req) {
                     { new: true }
                 );
 
-                // ⚡️ Notify the Author of the status change
                 if (updatedPost.authorUserId) {
                     const author = await MobileUser.findById(updatedPost.authorUserId);
                     if (author && author.pushToken) {
@@ -150,15 +167,14 @@ export async function POST(req) {
                 const deletedPost = await Post.findByIdAndDelete(payload.postId);
                 if (!deletedPost) return NextResponse.json({ success: false, message: 'Post not found' }, { status: 404 });
                 
-                // Note: Usually we don't notify on hard-delete as the data is gone, but you can add it here if needed.
-                // ⚡️ Notify the Author of the status change
                 if (deletedPost) {
                     const author = await MobileUser.findById(deletedPost.authorUserId);
                     if (author && author.pushToken) {
                         const title = "Scroll Deleted ❌";
                         const body = `Your log "${deletedPost.title}" was deleted due to not following platform rules.`;
                         
-                        await sendPushNotification(author.pushToken, title, body, { type: 'POST_STATUS', postId: updatedPost._id });
+                        // Fix: Replaced updatedPost with deletedPost
+                        await sendPushNotification(author.pushToken, title, body, { type: 'POST_STATUS', postId: deletedPost._id });
                     }
                 }
                 return NextResponse.json({ success: true, message: 'Post permanently deleted' });
@@ -178,7 +194,6 @@ export async function POST(req) {
                 );
                 if (!editedPost) return NextResponse.json({ success: false, message: 'Post not found' }, { status: 404 });
 
-                // ⚡️ Notify the Author of the edit
                 if (editedPost.authorUserId) {
                     const author = await MobileUser.findById(editedPost.authorUserId);
                     if (author && author.pushToken) {

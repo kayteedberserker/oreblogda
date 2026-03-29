@@ -1,8 +1,8 @@
-import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { NextResponse } from 'next/server';
 
 const APP_SECRET = process.env.APP_INTERNAL_SECRET;
-const MY_DOMAIN = "oreblogda" ;
+const MY_DOMAIN = "oreblogda"; // Change to your actual domain in production;
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const userAgent = req.headers.get('user-agent') || '';

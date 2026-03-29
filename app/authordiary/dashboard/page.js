@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import Link from "next/link";
-import { toast } from "react-toastify";
 import Image from "next/image";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { toast } from "react-toastify";
 
 // --- HELPERS ---
 
@@ -25,18 +25,30 @@ const getFlagEmoji = (countryCode, size = "w40") => {
     );
 };
 
-const MetricCard = ({ title, value, color, loading, trend }) => (
+const getOptimizedCloudinaryUrl = (url) => {
+    if (!url || !url.includes("cloudinary.com")) return url || "/default-avatar.png";
+    return url.replace("/upload/", "/upload/w_300,c_fill,g_face,f_auto,q_auto/");
+};
+
+// ⚡️ UPDATED METRIC CARD: Fully supports trend and prevValue
+const MetricCard = ({ title, value, color, loading, trend, prevValue }) => (
     <div className="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-200 dark:border-gray-700 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
         <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{title}</p>
         {loading ? (
             <div className="h-8 w-20 bg-gray-100 dark:bg-gray-700 animate-pulse rounded-lg"></div>
         ) : (
-            <div className="flex items-baseline gap-2">
-                <h2 className={`text-3xl font-black italic tracking-tighter ${color}`}>{value?.toLocaleString() || 0}</h2>
-                {trend !== undefined && (
-                    <span className={`text-[10px] font-black ${trend >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                        {trend >= 0 ? '↑' : '↓'}{Math.abs(trend)}%
-                    </span>
+            <div>
+                <div className="flex items-baseline gap-2">
+                    <h2 className={`text-3xl font-black italic tracking-tighter ${color}`}>{value?.toLocaleString() || 0}</h2>
+                    {trend !== undefined && (
+                        <span className={`text-[10px] font-black ${trend >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {trend >= 0 ? '↑' : '↓'}{Math.abs(trend)}%
+                        </span>
+                    )}
+                </div>
+                {/* Render previous value if it exists */}
+                {prevValue !== undefined && (
+                    <p className="text-[9px] font-bold text-gray-400 mt-1 uppercase tracking-widest">Prev: {prevValue.toLocaleString()}</p>
                 )}
             </div>
         )}
@@ -45,10 +57,6 @@ const MetricCard = ({ title, value, color, loading, trend }) => (
 );
 
 // --- MAIN COMPONENT ---
-const getOptimizedCloudinaryUrl = (url) => {
-    if (!url || !url.includes("cloudinary.com")) return url || "/default-avatar.png";
-    return url.replace("/upload/", "/upload/w_300,c_fill,g_face,f_auto,q_auto/");
-};
 
 export default function FullAdminDashboard() {
     const [user, setUser] = useState(null)
@@ -56,14 +64,19 @@ export default function FullAdminDashboard() {
     const [userList, setUserList] = useState([]);
     const [dormantCount, setDormantCount] = useState(0);
 
-    // New State for Posts Tab
-    const [activeTab, setActiveTab] = useState("users"); 
+    // State for Posts Tab
+    const [activeTab, setActiveTab] = useState("users");
     const [postList, setPostList] = useState([]);
     const [postsPage, setPostsPage] = useState(1);
     const [postsTotalPages, setPostsTotalPages] = useState(1);
-    
-    // New State for Edit Modal
+
     const [editingPost, setEditingPost] = useState(null);
+
+    // ⚡️ PILL MODAL STATE
+    const [showPillModal, setShowPillModal] = useState(false);
+    const [pillForm, setPillForm] = useState({
+        text: "", type: "system", targetAudience: "global", targetId: "", expiresInHours: 24, priority: 0
+    });
 
     // Loading States
     const [initialLoading, setInitialLoading] = useState(true);
@@ -77,13 +90,13 @@ export default function FullAdminDashboard() {
     const [selectedUser, setSelectedUser] = useState(null);
     const [pushMessage, setPushMessage] = useState({ title: "", body: "" });
 
-    // Updated Filters
+    // Filters
     const [range, setRange] = useState("7days");
     const [selectedCountry, setSelectedCountry] = useState("All");
     const [showOnlyActive, setShowOnlyActive] = useState(false);
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
-    const router = useRouter() 
+    const router = useRouter()
 
     // --- DATA FETCHING ---
     useEffect(() => {
@@ -96,7 +109,7 @@ export default function FullAdminDashboard() {
                 }
                 const data = await res.json();
                 if (data.user.role !== "Admin") {
-                    alert(" You are not an admin") 
+                    alert(" You are not an admin")
                     router.push("/");
                     return;
                 }
@@ -106,7 +119,6 @@ export default function FullAdminDashboard() {
             }
         };
         fetchUser();
-        
     }, [router]);
 
     useEffect(() => {
@@ -176,8 +188,7 @@ export default function FullAdminDashboard() {
     const fetchPosts = async () => {
         setTableLoading(true);
         try {
-            // ⚡️ UPDATED: Now fetches from the unified task route
-            const res = await fetch(`/api/admin/tasks?page=${postsPage}`); 
+            const res = await fetch(`/api/admin/tasks?page=${postsPage}`);
             const data = await res.json();
             setPostList(data.posts || []);
             setPostsTotalPages(data.pages || 1);
@@ -198,7 +209,7 @@ export default function FullAdminDashboard() {
                 body: JSON.stringify({ task: taskType, payload })
             });
             const data = await res.json();
-            
+
             if (res.ok) {
                 toast.success(`Task ${taskType} executed successfully`);
                 return data;
@@ -282,29 +293,28 @@ export default function FullAdminDashboard() {
         if (!selectedUser) return;
         const amount = prompt(`Grant OC to ${selectedUser.username}. Enter amount:`);
         if (!amount || isNaN(amount)) return toast.warning("Invalid amount");
-        
+
         await executeAdminTask('GIVE_OC', { userId: selectedUser._id, amount: parseInt(amount) });
-        // Refresh users list to reflect new coin balance
-        fetchUsers(); 
+        fetchUsers();
     };
 
     const handleUpdatePostStatus = async (postId, newStatus) => {
         const result = await executeAdminTask('UPDATE_POST_STATUS', { postId, status: newStatus });
-        if (result) fetchPosts(); 
+        if (result) fetchPosts();
     };
 
     const handleDeletePost = async (postId) => {
         const confirm = window.confirm("Are you sure you want to permanently delete this post?");
         if (!confirm) return;
         const result = await executeAdminTask('DELETE_POST', { postId });
-        if (result) fetchPosts(); 
+        if (result) fetchPosts();
     };
 
     const handleSaveEditedPost = async (e) => {
         e.preventDefault();
-        const result = await executeAdminTask('EDIT_POST', { 
-            postId: editingPost._id, 
-            title: editingPost.title, 
+        const result = await executeAdminTask('EDIT_POST', {
+            postId: editingPost._id,
+            title: editingPost.title,
             message: editingPost.message,
             category: editingPost.category
         });
@@ -314,18 +324,34 @@ export default function FullAdminDashboard() {
         }
     };
 
+    // ⚡️ NEW: Submit handler for deploying Marquee Pills
+    const handleDeployPill = async (e) => {
+        e.preventDefault();
+        if (!pillForm.text) return toast.warning("Pill message text is required.");
+        if (pillForm.targetAudience !== 'global' && !pillForm.targetId) {
+            return toast.warning(`Target ID is required when targeting a ${pillForm.targetAudience}.`);
+        }
+
+        const result = await executeAdminTask('SEND_PILL', {
+            ...pillForm,
+            expiresInHours: Number(pillForm.expiresInHours),
+            priority: Number(pillForm.priority)
+        });
+
+        if (result) {
+            setShowPillModal(false);
+            setPillForm({ text: "", type: "system", targetAudience: "global", targetId: "", expiresInHours: 24, priority: 0 });
+        }
+    };
+
     // --- RENDER ---
 
     if (initialLoading) return (
         <div className="flex h-screen items-center justify-center bg-white dark:bg-gray-900 overflow-hidden relative">
-
-            {/* BACKGROUND GLOW EFFECTS */}
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-blue-600/10 blur-[120px] rounded-full"></div>
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-32 bg-blue-500/20 blur-[60px] rounded-full animate-pulse"></div>
 
             <div className="flex flex-col items-center z-10">
-
-                {/* TOP STATUS LINKS (HUD Style) */}
                 <div className="flex items-center gap-4 mb-8">
                     <div className="flex items-center gap-1.5">
                         <span className="h-1.5 w-1.5 rounded-full bg-blue-600 animate-pulse"></span>
@@ -338,38 +364,25 @@ export default function FullAdminDashboard() {
                     </div>
                 </div>
 
-                {/* CENTER SPINNER / LOGO */}
                 <div className="relative mb-6">
-                    {/* Outer Rotating Ring */}
                     <div className="h-20 w-20 rounded-full border-[3px] border-blue-600/10 border-t-blue-600 animate-spin"></div>
-                    {/* Inner Counter-Rotating Ring */}
                     <div className="absolute top-2 left-2 h-16 w-16 rounded-full border-[3px] border-transparent border-t-orange-500 animate-[spin_1.5s_linear_infinite_reverse]"></div>
-                    {/* Static Center Point */}
                     <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-2 w-2 bg-white dark:bg-gray-900 rounded-full shadow-[0_0_10px_#2563eb]"></div>
                 </div>
 
-                {/* TEXT CONTENT */}
                 <div className="text-center">
                     <h2 className="text-xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white mb-1">
                         Verifying Admin Access
                     </h2>
-
-                    {/* DYNAMIC PROGRESS BAR */}
                     <div className="w-48 h-1 bg-gray-100 dark:bg-gray-800 rounded-full mt-4 overflow-hidden relative">
                         <div className="absolute inset-y-0 left-0 bg-blue-600 w-1/2 animate-[loading_2s_ease-in-out_infinite] rounded-full shadow-[0_0_10px_#2563eb]"></div>
                     </div>
-
                     <div className="mt-4 flex flex-col gap-1">
-                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-[0.3em] animate-pulse">
-                            Establishing Encrypted Session...
-                        </p>
-                        <p className="text-[7px] font-mono text-gray-500/50 uppercase">
-                            Protocol: TLS_AES_256_GCM_SHA384
-                        </p>
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-[0.3em] animate-pulse">Establishing Encrypted Session...</p>
+                        <p className="text-[7px] font-mono text-gray-500/50 uppercase">Protocol: TLS_AES_256_GCM_SHA384</p>
                     </div>
                 </div>
             </div>
-
             <style jsx>{`
           @keyframes loading {
             0% { transform: translateX(-100%); }
@@ -384,9 +397,7 @@ export default function FullAdminDashboard() {
         <div className="min-h-screen bg-gray-50 p-4 md:p-8 dark:bg-gray-900 text-gray-900 dark:text-gray-100 transition-colors duration-500">
             <div className="mx-auto max-w-7xl">
 
-                {/* --- HEADER HUD --- */}
                 <header className="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-10 gap-6">
-                    {/* TITLE SECTION */}
                     <div className="w-full xl:w-auto flex justify-between items-center">
                         <div>
                             <h1 className="text-3xl md:text-4xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white">
@@ -398,7 +409,6 @@ export default function FullAdminDashboard() {
                             </div>
                         </div>
 
-                        {/* Mobile-only Push Button */}
                         <div className="md:hidden flex gap-2">
                             <button
                                 onClick={sendBulkPush}
@@ -417,11 +427,22 @@ export default function FullAdminDashboard() {
                         </div>
                     </div>
 
-                    {/* ACTIONS SECTION */}
                     <div className="flex flex-col md:flex-row items-start md:items-center gap-4 w-full xl:w-auto">
-
-                        {/* DESKTOP PUSH BUTTONS */}
                         <div className="hidden md:flex gap-2">
+                            {/* ⚡️ ADDED: Deploy Pill Button */}
+                            <button
+                                onClick={() => setShowPillModal(true)}
+                                className="flex bg-purple-600/10 border border-purple-600/20 px-4 py-2 rounded-2xl items-center gap-4 group hover:bg-purple-600 transition-all active:scale-95"
+                            >
+                                <div className="text-left">
+                                    <p className="text-[8px] font-black text-purple-600 group-hover:text-white uppercase tracking-widest">Deploy Pill</p>
+                                    <p className="text-sm font-black text-gray-900 dark:text-white group-hover:text-white">Marquee</p>
+                                </div>
+                                <span className="bg-purple-600 text-white p-2 rounded-xl group-hover:bg-white group-hover:text-purple-600 transition-colors">
+                                    💊
+                                </span>
+                            </button>
+
                             <button
                                 onClick={sendBulkPush}
                                 disabled={sendingPush || taskLoading}
@@ -451,7 +472,6 @@ export default function FullAdminDashboard() {
                             </button>
                         </div>
 
-                        {/* RANGE SELECTOR GRID */}
                         <div className="grid grid-cols-3 sm:grid-cols-4 md:flex w-full md:w-auto bg-white dark:bg-gray-800 p-1.5 rounded-2xl border border-gray-200 dark:border-gray-700 shadow-sm gap-1">
                             {[
                                 { id: 'today', label: 'Today' },
@@ -481,23 +501,35 @@ export default function FullAdminDashboard() {
 
                 {/* --- METRICS GRID --- */}
                 <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
-                    <MetricCard title="Total Users" value={stats?.totalUsers} color="text-blue-600" loading={statsLoading} />
-                    <MetricCard title="App Opens (Total)" value={stats?.totalAppOpens} color="text-purple-500" loading={statsLoading} trend={stats?.activityTrend} />
-                    <MetricCard title="Unique Active (24h)" value={stats?.uniqueDailyActive || 0} color="text-indigo-500" loading={statsLoading} />
-                    <MetricCard title="Pending" value={stats?.postStats?.pending} color="text-orange-500" loading={statsLoading} />
-                    <MetricCard title="Approved" value={stats?.postStats?.approved} color="text-green-500" loading={statsLoading} />
-                    <MetricCard title="Rejected" value={stats?.postStats?.rejected} color="text-red-500" loading={statsLoading} />
+                    {/* ⚡️ ALL METRIC CARDS NOW RECEIVE PREV VALUE AND TREND */}
+                    <MetricCard title="Total Users" value={stats?.totalUsers} prevValue={stats?.prevTotalUsers} trend={stats?.usersTrend} color="text-blue-600" loading={statsLoading} />
+                    <MetricCard title="App Opens (Total)" value={stats?.totalAppOpens} prevValue={stats?.prevTotalAppOpens} trend={stats?.activityTrend} color="text-purple-500" loading={statsLoading} />
+                    <MetricCard title="Unique Active (24h)" value={stats?.uniqueDailyActive || 0} prevValue={stats?.prevUniqueDailyActive} trend={stats?.activeTrend} color="text-indigo-500" loading={statsLoading} />
+                    <MetricCard title="Pending" value={stats?.postStats?.pending} prevValue={stats?.postStats?.prevPending} trend={stats?.postStats?.pendingTrend} color="text-orange-500" loading={statsLoading} />
+                    <MetricCard title="Approved" value={stats?.postStats?.approved} prevValue={stats?.postStats?.prevApproved} trend={stats?.postStats?.approvedTrend} color="text-green-500" loading={statsLoading} />
+                    <MetricCard title="Rejected" value={stats?.postStats?.rejected} prevValue={stats?.postStats?.prevRejected} trend={stats?.postStats?.rejectedTrend} color="text-red-500" loading={statsLoading} />
                 </div>
 
-                {/* --- ANALYTICS ROW --- */}
+                {/* --- METRICS GRID -- */}
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-                    {/* Activity Chart Container */}
                     <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-4 md:p-6 rounded-[2rem] md:rounded-[2.5rem] border border-gray-200 dark:border-gray-700 relative overflow-hidden">
                         <div className="flex justify-between items-center mb-8">
                             <h3 className="font-black text-[10px] uppercase tracking-widest text-gray-400 flex items-center gap-2">
                                 <span className="h-2 w-2 rounded-full bg-blue-600 animate-ping"></span>
                                 Activity Flow
                             </h3>
+
+                            {/* ⚡️ ADDED: A small legend so admins know what the colors mean */}
+                            <div className="hidden md:flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600"></div>
+                                    <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Previous</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.4)]"></div>
+                                    <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Current</span>
+                                </div>
+                            </div>
                             <span className="md:hidden text-[8px] font-bold text-gray-400 uppercase tracking-widest italic">Swipe to view →</span>
                         </div>
 
@@ -511,10 +543,18 @@ export default function FullAdminDashboard() {
                         )}
 
                         <div className="overflow-x-auto pb-4 scrollbar-hide">
-                            <div className="flex items-end justify-between h-64 gap-1 md:gap-2 min-w-[600px] md:min-w-full px-2">
+                            <div className="flex items-end justify-between h-64 gap-1 md:gap-3 min-w-[600px] md:min-w-full px-2">
                                 {stats?.dailyActivity?.map((data, idx) => {
-                                    const maxVal = Math.max(...stats.dailyActivity.map(d => d.count), 1);
-                                    const barHeight = (data.count / maxVal) * 140; 
+                                    // ⚡️ Find the max value between BOTH current and previous arrays to scale the graph correctly
+                                    const maxVal = Math.max(
+                                        ...stats.dailyActivity.map(d => d.count),
+                                        ...stats.dailyActivity.map(d => d.prevCount || 0),
+                                        1
+                                    );
+
+                                    // Calculate heights for both bars
+                                    const currentHeight = (data.count / maxVal) * 140;
+                                    const prevHeight = ((data.prevCount || 0) / maxVal) * 140;
 
                                     let displayDate = data._id;
                                     if (!['24h', 'today', 'yesterday'].includes(range)) {
@@ -526,25 +566,35 @@ export default function FullAdminDashboard() {
 
                                     return (
                                         <div key={idx} className="flex-1 flex flex-col items-center group relative">
-                                            <div className="mb-2 transition-all">
-                                                <span className={`text-[9px] font-black ${data.count > 0 ? 'text-blue-600' : 'text-gray-300 dark:text-gray-600'}`}>
-                                                    {data.count}
-                                                </span>
+                                            {/* ⚡️ Tooltip for hovering over the bars to see exact numbers */}
+                                            <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 text-white text-[8px] font-black uppercase p-2 rounded-lg z-50 pointer-events-none whitespace-nowrap">
+                                                <span className="text-gray-400">Prev: {data.prevCount || 0}</span> | <span className="text-blue-400">Curr: {data.count}</span>
                                             </div>
 
-                                            <div
-                                                className={`w-full max-w-[24px] rounded-t-md md:rounded-t-lg transition-all duration-1000 ease-out group-hover:brightness-110 
-                                                ${data.count > 0 ? 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.1)]' : 'bg-gray-100 dark:bg-gray-700'}`}
-                                                style={{ height: `${Math.max(barHeight, 4)}px` }}
-                                            ></div>
+                                            {/* ⚡️ The Bar Container (Holds both bars side-by-side) */}
+                                            <div className="flex-1 flex items-end justify-center gap-0.5 md:gap-1 w-full">
+                                                {/* Previous Bar */}
+                                                <div
+                                                    className={`w-full max-w-[12px] md:max-w-[16px] rounded-t-md transition-all duration-1000 ease-out 
+                                        ${(data.prevCount || 0) > 0 ? 'bg-gray-300 dark:bg-gray-600' : 'bg-transparent'}`}
+                                                    style={{ height: `${Math.max(prevHeight, 4)}px` }}
+                                                ></div>
 
-                                            <div className="h-6 flex items-center justify-center">
+                                                {/* Current Bar */}
+                                                <div
+                                                    className={`w-full max-w-[12px] md:max-w-[16px] rounded-t-md transition-all duration-1000 ease-out group-hover:brightness-110 
+                                        ${data.count > 0 ? 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.15)]' : 'bg-gray-100 dark:bg-gray-700'}`}
+                                                    style={{ height: `${Math.max(currentHeight, 4)}px` }}
+                                                ></div>
+                                            </div>
+
+                                            <div className="h-6 flex items-center justify-center mt-2">
                                                 {shouldShowLabel ? (
-                                                    <p className="text-[8px] mt-3 text-gray-400 font-black uppercase text-center tracking-tighter group-hover:text-blue-600 transition-colors whitespace-nowrap">
+                                                    <p className="text-[8px] text-gray-400 font-black uppercase text-center tracking-tighter group-hover:text-blue-600 transition-colors whitespace-nowrap">
                                                         {displayDate}
                                                     </p>
                                                 ) : (
-                                                    <div className="mt-3 w-1 h-1 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
+                                                    <div className="w-1 h-1 bg-gray-200 dark:bg-gray-700 rounded-full"></div>
                                                 )}
                                             </div>
                                         </div>
@@ -554,7 +604,7 @@ export default function FullAdminDashboard() {
                         </div>
                     </div>
 
-                    {/* Country Distribution */}
+                    {/* ... Origin Pulse ... */}
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-200 dark:border-gray-700">
                         <h3 className="font-black text-[10px] uppercase tracking-widest mb-6 text-gray-400 italic underline decoration-blue-600 decoration-2 underline-offset-4">Origin Pulse</h3>
                         <div className="space-y-2 overflow-y-auto max-h-[250px] pr-2 custom-scrollbar">
@@ -571,15 +621,14 @@ export default function FullAdminDashboard() {
                     </div>
                 </div>
 
-                {/* --- MAIN DATA TABS --- */}
                 <div className="flex items-center gap-4 mb-6 px-2">
-                    <button 
+                    <button
                         onClick={() => setActiveTab('users')}
                         className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${activeTab === 'users' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-white dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                     >
                         User Registry
                     </button>
-                    <button 
+                    <button
                         onClick={() => setActiveTab('posts')}
                         className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${activeTab === 'posts' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-white dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                     >
@@ -587,7 +636,6 @@ export default function FullAdminDashboard() {
                     </button>
                 </div>
 
-                {/* --- USER TABLE SECTION --- */}
                 {activeTab === 'users' && (
                     <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-200 dark:border-gray-700 overflow-hidden shadow-xl mb-20 animate-in fade-in duration-300">
                         <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex flex-col md:flex-row justify-between items-center gap-4">
@@ -618,7 +666,6 @@ export default function FullAdminDashboard() {
                                         <th className="px-8 py-5">Operator Info</th>
                                         <th className="px-8 py-5">Location</th>
                                         <th className="px-8 py-5">Activity</th>
-                                        {/* ⚡️ ADDED: COINS COLUMN */}
                                         <th className="px-8 py-5">OC Balance</th>
                                         <th className="px-8 py-5">Last Comms</th>
                                         <th className="px-8 py-5 text-center">Status</th>
@@ -664,7 +711,6 @@ export default function FullAdminDashboard() {
                                             <td className="px-8 py-4">
                                                 <span className="font-black text-[11px] text-purple-500 bg-purple-500/10 px-2 py-1 rounded-lg">{u.appOpens || 0}</span>
                                             </td>
-                                            {/* ⚡️ ADDED: COINS DATA CELL */}
                                             <td className="px-8 py-4">
                                                 <span className="font-black text-[11px] text-yellow-600 bg-yellow-500/10 px-2 py-1 rounded-lg border border-yellow-500/20">{u.coins || 0} OC</span>
                                             </td>
@@ -704,7 +750,6 @@ export default function FullAdminDashboard() {
                     </div>
                 )}
 
-                {/* --- POSTS TABLE SECTION --- */}
                 {activeTab === 'posts' && (
                     <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-200 dark:border-gray-700 overflow-hidden shadow-xl mb-20 animate-in fade-in duration-300">
                         <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center gap-4">
@@ -746,11 +791,10 @@ export default function FullAdminDashboard() {
                                                 <span className="font-black text-[9px] uppercase bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-md">{post.category || "News"}</span>
                                             </td>
                                             <td className="px-8 py-4 text-center">
-                                                <span className={`font-black text-[9px] uppercase px-3 py-1 rounded-xl ${
-                                                    post.status === 'approved' ? 'bg-green-500/10 text-green-500' :
+                                                <span className={`font-black text-[9px] uppercase px-3 py-1 rounded-xl ${post.status === 'approved' ? 'bg-green-500/10 text-green-500' :
                                                     post.status === 'rejected' ? 'bg-red-500/10 text-red-500' :
-                                                    'bg-orange-500/10 text-orange-500'
-                                                }`}>
+                                                        'bg-orange-500/10 text-orange-500'
+                                                    }`}>
                                                     {post.status}
                                                 </span>
                                             </td>
@@ -788,7 +832,6 @@ export default function FullAdminDashboard() {
                     </div>
                 )}
 
-                {/* --- USER INTELLIGENCE & SIGNAL PANEL --- */}
                 {selectedUser && activeTab === 'users' && (
                     <div className="bg-white dark:bg-gray-800 rounded-[3rem] border-2 border-blue-600/30 p-8 shadow-2xl animate-in fade-in slide-in-from-bottom-8 duration-500 mb-20 relative overflow-hidden">
                         <div className="absolute top-0 right-0 p-6">
@@ -801,7 +844,6 @@ export default function FullAdminDashboard() {
                         </div>
 
                         <div className="flex flex-col lg:flex-row gap-10">
-                            {/* Profile Part */}
                             <div className="flex flex-col items-center lg:items-start shrink-0">
                                 <Image
                                     width={176}
@@ -818,7 +860,6 @@ export default function FullAdminDashboard() {
                                 </Link>
                             </div>
 
-                            {/* Info Part */}
                             <div className="flex-1">
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                                     <div className="lg:col-span-2">
@@ -827,7 +868,6 @@ export default function FullAdminDashboard() {
                                         <p className="text-[10px] font-mono text-blue-500 break-all bg-blue-500/5 p-2 rounded-lg inline-block border border-blue-500/10">{selectedUser._id}</p>
                                     </div>
 
-                                    {/* Updated Transmissions + Grant OC Actions */}
                                     <div className="bg-blue-600/5 p-4 rounded-3xl border border-blue-600/10 text-center flex flex-col justify-center gap-2">
                                         <label className="text-[9px] font-black text-gray-400 uppercase block">Transmissions</label>
                                         {userMetaLoading ? (
@@ -835,7 +875,7 @@ export default function FullAdminDashboard() {
                                         ) : (
                                             <p className="text-4xl font-black text-blue-600">{selectedUser.postCount} <span className="text-[10px] tracking-widest italic opacity-50 uppercase">Posts</span></p>
                                         )}
-                                        <button 
+                                        <button
                                             onClick={handleGiveOC}
                                             disabled={taskLoading}
                                             className="mt-2 text-[9px] font-black bg-yellow-500 text-white uppercase tracking-widest py-2 rounded-xl shadow-lg shadow-yellow-500/30 hover:bg-yellow-600 active:scale-95 transition-all"
@@ -844,7 +884,6 @@ export default function FullAdminDashboard() {
                                         </button>
                                     </div>
 
-                                    {/* SIGNAL COMPOSER */}
                                     <div className="lg:col-span-3 bg-gray-50 dark:bg-gray-900/50 p-6 rounded-[2.5rem] border border-gray-200 dark:border-gray-700 shadow-inner">
                                         <div className="flex items-center gap-3 mb-6">
                                             <span className="p-2 bg-blue-600 rounded-xl text-white text-xs shadow-lg shadow-blue-500/30">🔔</span>
@@ -884,7 +923,6 @@ export default function FullAdminDashboard() {
                                         )}
                                     </div>
 
-                                    {/* Additional Metadata */}
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:col-span-3">
                                         <div>
                                             <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Station Origin</label>
@@ -917,49 +955,155 @@ export default function FullAdminDashboard() {
             {editingPost && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
                     <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 w-full max-w-lg border border-gray-200 dark:border-gray-700 shadow-2xl relative">
-                        <button 
+                        <button
                             onClick={() => setEditingPost(null)}
                             className="absolute top-6 right-6 p-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-red-100 hover:text-red-500 transition-colors"
                         >
                             ❌
                         </button>
                         <h3 className="text-2xl font-black italic uppercase tracking-tighter mb-6">Edit Transmission</h3>
-                        
+
                         <form onSubmit={handleSaveEditedPost} className="space-y-4">
                             <div>
                                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Title</label>
-                                <input 
-                                    type="text" 
+                                <input
+                                    type="text"
                                     value={editingPost.title}
-                                    onChange={(e) => setEditingPost({...editingPost, title: e.target.value})}
+                                    onChange={(e) => setEditingPost({ ...editingPost, title: e.target.value })}
                                     className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-blue-500"
                                 />
                             </div>
                             <div>
                                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Category</label>
-                                <input 
-                                    type="text" 
+                                <input
+                                    type="text"
                                     value={editingPost.category || "News"}
-                                    onChange={(e) => setEditingPost({...editingPost, category: e.target.value})}
+                                    onChange={(e) => setEditingPost({ ...editingPost, category: e.target.value })}
                                     className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-blue-500"
                                 />
                             </div>
                             <div>
                                 <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Message</label>
-                                <textarea 
+                                <textarea
                                     rows="5"
                                     value={editingPost.message}
-                                    onChange={(e) => setEditingPost({...editingPost, message: e.target.value})}
+                                    onChange={(e) => setEditingPost({ ...editingPost, message: e.target.value })}
                                     className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-medium outline-none focus:ring-2 ring-blue-500 resize-none"
                                 />
                             </div>
-                            
-                            <button 
+
+                            <button
                                 type="submit"
                                 disabled={taskLoading}
                                 className="w-full bg-blue-600 text-white p-4 rounded-2xl font-black uppercase tracking-[0.2em] text-xs hover:bg-blue-700 transition-all flex justify-center items-center mt-4"
                             >
                                 {taskLoading ? <div className="h-4 w-4 border-2 border-white border-t-transparent animate-spin rounded-full"></div> : "Save Override"}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ⚡️ PILL COMPOSER MODAL */}
+            {showPillModal && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 w-full max-w-lg border border-gray-200 dark:border-gray-700 shadow-2xl relative">
+                        <button
+                            onClick={() => setShowPillModal(false)}
+                            className="absolute top-6 right-6 p-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-red-100 hover:text-red-500 transition-colors"
+                        >
+                            ❌
+                        </button>
+                        <h3 className="text-2xl font-black italic uppercase tracking-tighter text-purple-600 mb-2">Deploy Marquee Pill</h3>
+                        <p className="text-xs text-gray-500 mb-6 font-medium tracking-tight">Inject a live broadcast directly into the UI.</p>
+
+                        <form onSubmit={handleDeployPill} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Theme Type</label>
+                                    <select
+                                        value={pillForm.type}
+                                        onChange={(e) => setPillForm({ ...pillForm, type: e.target.value })}
+                                        className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-purple-500"
+                                    >
+                                        <option value="system">🔵 System (Default)</option>
+                                        <option value="warning">🔴 Warning (Urgent)</option>
+                                        <option value="event">🟣 Event (Updates)</option>
+                                        <option value="achievement">🟡 Achievement</option>
+                                        <option value="drop">🟢 Drop / Bonus</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Priority (Higher = First)</label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        max="100"
+                                        value={pillForm.priority}
+                                        onChange={(e) => setPillForm({ ...pillForm, priority: e.target.value })}
+                                        className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-purple-500"
+                                    />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Target Audience</label>
+                                    <select
+                                        value={pillForm.targetAudience}
+                                        onChange={(e) => setPillForm({ ...pillForm, targetAudience: e.target.value, targetId: "" })}
+                                        className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-purple-500"
+                                    >
+                                        <option value="global">🌍 Global (Everyone)</option>
+                                        <option value="clan">🛡️ Specific Clan</option>
+                                        <option value="user">👤 Specific User</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Expires In (Hours)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        max="168"
+                                        value={pillForm.expiresInHours}
+                                        onChange={(e) => setPillForm({ ...pillForm, expiresInHours: e.target.value })}
+                                        className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-purple-500"
+                                    />
+                                </div>
+                            </div>
+
+                            {pillForm.targetAudience !== 'global' && (
+                                <div className="animate-in fade-in slide-in-from-top-2">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">
+                                        Target ID (Enter {pillForm.targetAudience === 'clan' ? 'Clan Tag' : 'User Mongo ID'})
+                                    </label>
+                                    <input
+                                        type="text"
+                                        placeholder={`E.g. ${pillForm.targetAudience === 'clan' ? 'SQUAD13' : '65a4...9f'}`}
+                                        value={pillForm.targetId}
+                                        onChange={(e) => setPillForm({ ...pillForm, targetId: e.target.value })}
+                                        className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-mono outline-none focus:ring-2 ring-purple-500"
+                                    />
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Broadcast Message</label>
+                                <textarea
+                                    rows="3"
+                                    placeholder="Enter the transmission text..."
+                                    value={pillForm.text}
+                                    onChange={(e) => setPillForm({ ...pillForm, text: e.target.value })}
+                                    className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold uppercase outline-none focus:ring-2 ring-purple-500 resize-none"
+                                />
+                            </div>
+
+                            <button
+                                type="submit"
+                                disabled={taskLoading}
+                                className="w-full bg-purple-600 text-white p-4 rounded-2xl font-black uppercase tracking-[0.2em] text-xs hover:bg-purple-700 transition-all flex justify-center items-center mt-4 shadow-lg shadow-purple-500/20"
+                            >
+                                {taskLoading ? <div className="h-4 w-4 border-2 border-white border-t-transparent animate-spin rounded-full"></div> : "Inject Pill into System"}
                             </button>
                         </form>
                     </div>

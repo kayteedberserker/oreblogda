@@ -2,9 +2,35 @@ import { NextResponse } from 'next/server';
 import connectDB from "@/app/lib/mongodb";
 import Clan from "@/app/models/ClanModel";
 import MobileUser from "@/app/models/MobileUserModel";
+import MessagePill from "@/app/models/MessagePillModel"; // ⚡️ ADDED: Import Pill Model
 import { sendMultiplePushNotifications } from "@/app/lib/pushNotifications";
 
 // --- LOGIC FUNCTIONS ---
+
+// ⚡️ NEW: Daily New User Broadcast
+async function dailyNewUserBroadcast() {
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    yesterday.setHours(0, 0, 0, 0);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const newUsersCount = await MobileUser.countDocuments({
+        createdAt: { $gte: yesterday, $lt: today }
+    });
+
+    if (newUsersCount > 0) {
+        await MessagePill.create({
+            text: `SYSTEM UPDATE: WELCOME TO THE ${newUsersCount} NEW OPERATORS WHO AWAKENED YESTERDAY.`,
+            type: 'system',
+            targetAudience: 'global',
+            priority: 5, // Medium-high priority
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // ⚡️ Strict 24-hour expiry
+        });
+        console.log(`[CRON] Broadcasted New User Pill: ${newUsersCount} users.`);
+    }
+}
 
 async function dailyClanCheck() {
     const clans = await Clan.find({});
@@ -69,7 +95,6 @@ async function dailyClanCheck() {
             finalUpdate.$addToSet = { badges: { $each: badgesToAdd } };
         }
 
-        // ⚡️ Add to bulk operation array instead of awaiting individual updates
         if (Object.keys(finalUpdate).length > 0) {
             bulkOps.push({
                 updateOne: {
@@ -85,10 +110,6 @@ async function dailyClanCheck() {
     }
 }
 
-/**
- * ⚡️ UPDATED: Daily distribution of Spendable Points.
- * Base = 20. Top 10 = 30. Verified = 40.
- */
 async function dailyAllocation() {
     const clans = await Clan.find({});
     const bulkOps = [];
@@ -97,13 +118,11 @@ async function dailyAllocation() {
     for (const clan of clans) {
         let allowance = 20;
 
-        // 1. Check Verification Status (Highest Priority)
         const isVerified = clan.verifiedUntil && new Date(clan.verifiedUntil) > now;
 
         if (isVerified) {
             allowance = 40;
         } 
-        // 2. Check Top 10 Status (Secondary Priority)
         else if (clan.weeklyPointHistory && clan.weeklyPointHistory.length > 0) {
             const lastHistoryEntry = clan.weeklyPointHistory[clan.weeklyPointHistory.length - 1];
             if (lastHistoryEntry.rankAtTime > 0 && lastHistoryEntry.rankAtTime <= 10) {
@@ -180,9 +199,6 @@ async function auraReset() {
     }
 }
 
-/**
- * ⚡️ UPDATED: Uses bulkWrite to prevent Vercel Serverless timeouts during decay.
- */
 async function weeklyClanReset() {
     const rankThresholds = [0, 5000, 20000, 50000, 100000, 300000];
     const decayAmounts = [200, 500, 1000, 2000, 5000, 30000]; 
@@ -193,7 +209,6 @@ async function weeklyClanReset() {
     const bulkOps = [];
 
     const weeklyTitleBadges = ["The Pirate King", "The Pillars", "Hunter Association"];
-    // Clear previous weekly badges
     await Clan.updateMany({}, { $pull: { badges: { $in: weeklyTitleBadges } } });
 
     for (let i = 0; i < rankedClans.length; i++) {
@@ -206,12 +221,9 @@ async function weeklyClanReset() {
       let incFields = {};
       let badgesToAdd = [];
 
-      // --- 📉 DECAY LOGIC (ALLOWS NEGATIVE POINTS) ---
       const decayValue = decayAmounts[currentRank - 1] || 0;
-      // Removed Math.max(0, ...) so totalPoints can become negative
       let decayedPoints = (clan.totalPoints || 0) - decayValue;
 
-      // Calculate new rank based on thresholds
       let newRank = 1;
       for (let r = rankThresholds.length - 1; r >= 0; r--) {
         if (decayedPoints >= rankThresholds[r]) {
@@ -223,11 +235,9 @@ async function weeklyClanReset() {
       setFields.totalPoints = decayedPoints;
       setFields.rank = newRank;
 
-      // --- 🛡️ UNLIMITED CHAKRA ---
       const nextRankThreshold = rankThresholds[newRank];
       let hit80PercentLimit = false;
 
-      // Logic stays the same: if points are 80% of next rank, they are safe
       if (nextRankThreshold) {
         if (decayedPoints >= (nextRankThreshold * 0.8)) hit80PercentLimit = true;
       } else if (newRank === 6) {
@@ -241,11 +251,9 @@ async function weeklyClanReset() {
         }
       } else {
         setFields.consecutiveWeeksNoDerank = 0;
-        // Immediate individual pull to prevent bulkWrite conflicts with $addToSet
         await Clan.updateOne({ _id: clan._id }, { $pull: { badges: "Unlimited Chakra" } });
       }
 
-      // --- 📈 GROWTH CHECK ---
       const history = clan.weeklyPointHistory || [];
       const lastWeek = history[history.length - 1];
       if (lastWeek?.points > 0) {
@@ -254,17 +262,14 @@ async function weeklyClanReset() {
         else if (growth >= 1.5) badgesToAdd.push("Zenkai Boost");
       }
 
-      // --- 🏆 WEEKLY TITLES ---
       if (position === 1) badgesToAdd.push("The Pirate King");
       else if (position <= 5) badgesToAdd.push("The Pillars");
       else if (position <= 10) badgesToAdd.push("Hunter Association");
 
-      // --- 💬 LIFETIME BADGE CHECK ---
       if (mostDiscussedClan && clan._id.equals(mostDiscussedClan._id)) {
         badgesToAdd.push("Talk-no-jutsu");
       }
 
-      // --- 🔄 RESET WEEKLY PROGRESS ---
       pushFields.weeklyPointHistory = {
         $each: [{ 
             weekEnding, 
@@ -280,7 +285,6 @@ async function weeklyClanReset() {
       if (badgesToAdd.length > 0) finalUpdate.$addToSet = { badges: { $each: badgesToAdd } };
       if (Object.keys(incFields).length > 0) finalUpdate.$inc = incFields;
 
-      // ⚡️ Add to bulk array
       bulkOps.push({
           updateOne: {
               filter: { _id: clan._id },
@@ -321,6 +325,7 @@ export async function GET(req) {
     console.log("⏳ Processing Daily Tasks...");
     await dailyClanCheck();
     await dailyAllocation();
+    await dailyNewUserBroadcast(); // ⚡️ ADDED: Trigger the Pill Generator
 
     // 2. Weekly Tasks
     if (isMondayWAT) {

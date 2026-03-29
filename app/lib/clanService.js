@@ -1,5 +1,6 @@
 import Clan from '@/app/models/ClanModel';
 import { updateWarProgress } from './warService';
+import { createMessagePill } from '@/app/lib/messagePillService'; // ⚡️ IMPORT PILL SERVICE
 
 /**
  * Award points, increment stats, and check for real-time badges like One-Shot
@@ -50,6 +51,18 @@ export async function awardClanPoints(post, actionPoints, type = null) {
         
         // 🎖️ Grant Redemption badge for clearing the debt
         updateQuery.$addToSet = { badges: "Redemption" };
+
+        // ⚡️ SEND REDEMPTION PILL
+        await createMessagePill({
+            text: `DEBT CLEARED: YOUR CLAN HAS EARNED THE "REDEMPTION" BADGE. RISING FROM THE ASHES!`,
+            type: 'achievement',
+            targetAudience: 'clan',
+            targetId: clanTag,
+            priority: 10, // High Priority
+            expiresInHours: 24,
+            replaceExistingType: false 
+        });
+
     } else {
         // Normal behavior for positive or zero point clans
         updateQuery.$inc = { 
@@ -96,6 +109,32 @@ export async function awardClanPoints(post, actionPoints, type = null) {
                 { _id: updatedClan._id }, 
                 { $addToSet: { badges: "One-Shot" } }
             );
+
+            // ⚡️ SEND ONE-SHOT PILL
+            await createMessagePill({
+                text: `VIRAL ANOMALY: YOUR CLAN UNLOCKED THE "ONE-SHOT" BADGE (500+ LIKES IN 1 HOUR)!`,
+                type: 'achievement',
+                targetAudience: 'clan',
+                targetId: clanTag,
+                priority: 10, // Max Priority
+                expiresInHours: 24,
+                replaceExistingType: false 
+            });
         }
+    }
+
+    // ====================================================================
+    // ⚡️ SEND CLAN POINTS ACCUMULATOR PILL
+    // ====================================================================
+    if (finalPoints > 0 && !isNegative) {
+        await createMessagePill({
+            text: `+${finalPoints} Clan Points Gained.`,
+            type: 'clan_points', // ⚡️ New type
+            targetAudience: 'clan',
+            targetId: clanTag,
+            priority: 2, // Low priority so it doesn't block major Event/Achievement pills
+            expiresInHours: 24,
+            replaceExistingType: true 
+        });
     }
 }

@@ -14,7 +14,7 @@ import ClanFollower from "@/app/models/ClanFollower";
 import geoip from "geoip-lite";
 import { awardClanPoints } from "@/app/lib/clanService";
 import ClanModel from "@/app/models/ClanModel";
-
+import { awardAura } from "@/app/lib/auraManager";
 // ----------------------
 // AI MODERATOR & AUTO-TAGGER
 // ----------------------
@@ -235,8 +235,8 @@ export async function GET(req) {
                 commentWeight: 4.0,
                 freshnessBoost: 20,
                 freshnessWindow: 3,
-                gravityPower: 1.2, // ⚡️ Reduced from 1.5 to let good posts survive longer
-                prefBonus: 15,     // ⚡️ Scaled down to 15 because it now multiplies per matching tag!
+                gravityPower: 1.2, 
+                prefBonus: 15,     
                 clanBonus: 50,
                 localBonus: 25
             };
@@ -245,8 +245,6 @@ export async function GET(req) {
 
             const pipeline = [
                 { $match: query },
-                // ⚡️ PERFORMANCE FIX: Sort and limit BEFORE heavy math. 
-                // Only calculate scores for the 1000 most recent potential posts.
                 { $sort: { createdAt: -1 } },
                 { $limit: 1000 },
                 {
@@ -255,7 +253,6 @@ export async function GET(req) {
                             $max: [0.5, { $divide: [{ $subtract: [now, "$createdAt"] }, 3600000] }]
                         },
                         commentsCount: { $size: { $ifNull: ["$comments", []] } },
-                        // ⚡️ SCALED INTERESTS: Count the exact number of matching tags
                         matchCount: {
                             $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] }
                         }
@@ -271,7 +268,6 @@ export async function GET(req) {
                         },
                         relevanceBonus: {
                             $add: [
-                                // ⚡️ Multiply the base bonus by the number of matched tags
                                 { $multiply: ["$matchCount", CONFIG.prefBonus] },
                                 { $cond: [{ $in: ["$clanId", followedClanTags] }, CONFIG.clanBonus, 0] },
                                 { $cond: [{ $eq: ["$country", userCountry] }, CONFIG.localBonus, 0] }
@@ -294,8 +290,8 @@ export async function GET(req) {
                 },
                 {
                     $sort: {
-                        finalScore: -1, // Sort by our new algorithm score
-                        createdAt: -1   // Tie-breaker
+                        finalScore: -1, 
+                        createdAt: -1  
                     }
                 },
                 { $skip: skip },
@@ -305,7 +301,7 @@ export async function GET(req) {
             posts = await Post.aggregate(pipeline);
         }
 
-        // ⚡️ --- STEP 3.5: BULK FETCH AUTHOR & CLAN DATA --- ⚡️
+        // ⚡️ --- STEP 3.5: BULK FETCH AUTHOR & CLAN DATA (OPTIMIZED) --- ⚡️
         let userMap = {};
         let clanMap = {};
 
@@ -314,35 +310,12 @@ export async function GET(req) {
             const uniqueClanTags = [...new Set(posts.map(p => p.clanTag || p.clanId).filter(Boolean))];
 
             if (uniqueAuthorIds.length > 0) {
-                // 🛡️ FIXED: Safe Mongoose Object ID validation
                 const validAuthorIds = uniqueAuthorIds.filter(id => id);
                 
                 if (validAuthorIds.length > 0) {
-                    // ⚡️ SERVER-SIDE RANK CALCULATION: Bulk fetch post counts instantly
-                    const authorPostCounts = await Post.aggregate([
-                        { 
-                            $match: { 
-                                $or: [
-                                    { authorId: { $in: validAuthorIds } }, 
-                                    { authorUserId: { $in: validAuthorIds } }
-                                ] 
-                            } 
-                        },
-                        { 
-                            $group: { 
-                                _id: { $ifNull: ["$authorUserId", "$authorId"] }, 
-                                count: { $sum: 1 } 
-                            } 
-                        }
-                    ]);
-
-                    const countMap = {};
-                    authorPostCounts.forEach(c => {
-                        countMap[c._id.toString()] = c.count;
-                    });
-
-                    // Fetch user details
+                    // ⚡️ SERVER PERFORMANCE: Deleted the heavy Post.aggregate counting!
                     const users = await MobileUser.find({ _id: { $in: validAuthorIds } }).lean();
+                    
                     users.forEach(u => {
                         const inv = u.inventory || u.specialInventory || [];
                         const userIdStr = u._id.toString();
@@ -351,10 +324,17 @@ export async function GET(req) {
                             name: u.username,
                             image: u.profilePic?.url || null,
                             streak: u.lastStreak || 0,
-                            rank: u.previousRank || 0,
+                            
+                            // ⚡️ RESTORED: Weekly Leaderboard Rank
+                            rank: u.previousRank || 0, 
+                            
                             peakLevel: u.peakLevel || 0,
                             inventory: inv,
-                            postsCount: countMap[userIdStr] || 0, 
+                            
+                            // ⚡️ NEW: Lifetime RPG Progression Level (Replaces postCount)
+                            rankLevel: u.currentRankLevel || 1, 
+                            aura: u.aura || 0,
+
                             equippedGlow: inv.find(i => i.category === 'GLOW' && i.isEquipped) || null,
                             equippedBadges: inv.filter(i => i.category === 'BADGE' && i.isEquipped) || []
                         };
@@ -390,12 +370,10 @@ export async function GET(req) {
                 ...p,
                 _id: p._id.toString(),
                 interests: p.interests || [],
-                // ⚡️ Inject pre-packaged data directly into the post
                 authorData: userMap[aId] || null,
                 clanData: clanMap[cTag] || null
             };
         });
-
         const res = NextResponse.json({
             posts: serializedPosts,
             total,
@@ -417,7 +395,6 @@ function addCorsHeaders(res) {
     res.headers.set("Access-Control-Allow-Headers", "Content-Type, x-user-country, x-user-animes, x-user-genres, x-user-character");
     return res;
 }
-
 
 // ----------------------
 // POST: create a new post
@@ -542,6 +519,41 @@ export async function POST(req) {
             country: country
         });
 
+        // ⚡️ NEW AURA REWARD LOGIC: Capture stats for the frontend
+        let isFirstPost = false;
+        let auraStats = null;
+
+        if (finalStatus === "approved") {
+            try {
+                // Check how many approved posts this user currently has
+                const approvedPostCount = await Post.countDocuments({ 
+                    authorUserId: user.id, 
+                    status: "approved" 
+                });
+                
+                // If it's exactly 1 (the one we just created), it's their first!
+                if (approvedPostCount === 1) {
+                    isFirstPost = true;
+                }
+
+                const auraReward = isFirstPost ? 50 : 15;
+                
+                // Award the Aura and capture the result
+                const auraResult = await awardAura(user.id, auraReward);
+
+                if (auraResult && auraResult.newRank) {
+                    const nextReq = auraResult.newRank.nextRankReq || 12000;
+                    auraStats = {
+                        earned: auraReward,
+                        currentAura: auraResult.user.aura,
+                        pointsNeeded: Math.max(0, nextReq - auraResult.user.aura)
+                    };
+                }
+            } catch (auraErr) {
+                console.error("Aura reward error on post creation:", auraErr);
+            }
+        }
+
         if (finalStatus === "approved" && (newPost.clanId || newPost.category?.startsWith("Clan:"))) {
             try {
                 await Clan.findOneAndUpdate({ tag: newPost.clanId }, { $inc: { 'stats.totalPosts': 1 } });
@@ -630,10 +642,13 @@ export async function POST(req) {
             } catch (err) { }
         }
 
+        // ⚡️ Send back the isFirstPost flag and auraStats
         return addCorsHeaders(NextResponse.json({
             message: finalStatus === "approved" ? "Post created successfully" :
                 finalStatus === "rejected" ? "Post rejected by AI" : "Post submitted for approval",
-            post: newPost
+            post: newPost,
+            isFirstPost,
+            auraStats
         }, { status: 201 }));
 
     } catch (err) {

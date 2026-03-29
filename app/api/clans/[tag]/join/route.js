@@ -41,7 +41,7 @@ export async function POST(req, { params }) {
 
         // 3. Check if recruitment is closed or full
         if (!targetClan.isRecruiting || targetClan.members.length >= targetClan.maxSlots) {
-            return NextResponse.json({ message: "Recruitment is closed or clan is full" }, { status: 400 });
+            return NextResponse.json({ message: "Recruitment is closed or clan is full" }, { status: 401 });
         }
 
         // 4. Add to joinRequests

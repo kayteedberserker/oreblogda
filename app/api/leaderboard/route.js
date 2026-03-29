@@ -11,8 +11,8 @@ export async function GET(req) {
     
     // category: authors | clans
     const category = searchParams.get("category") || "authors";
-    // type: posts/streak/aura/peak (for authors) OR points/followers/weekly/badges (for clans)
-    const type = searchParams.get("type") || (category === "authors" ? "posts" : "points");
+    // ⚡️ UPDATED: Default to the new "level" type for Authors instead of "posts"
+    const type = searchParams.get("type") || (category === "authors" ? "level" : "points");
     const limit = Math.min(Number(searchParams.get("limit")) || 100, 200);
 
     if (category === "clans") {
@@ -46,34 +46,40 @@ export async function GET(req) {
     }
 
     // --- AUTHOR LOGIC ---
-    const posts = await Post.find({
-      authorUserId: { $ne: null },
-      status: "approved"
-    }).select("authorUserId");
+    
+    // ⚡️ PERFORMANCE OPTIMIZATION: Count posts instantly using Aggregation instead of fetching all documents
+    const postCounts = await Post.aggregate([
+      { $match: { authorUserId: { $ne: null }, status: "approved" } },
+      { $group: { _id: "$authorUserId", count: { $sum: 1 } } }
+    ]);
 
     const postCountMap = {};
-    for (const post of posts) {
-      const id = post.authorUserId.toString();
-      postCountMap[id] = (postCountMap[id] || 0) + 1;
+    for (const p of postCounts) {
+      postCountMap[p._id.toString()] = p.count;
     }
 
-    const mobileUsers = await MobileUser.find({});
+    const mobileUsers = await MobileUser.find({}).lean(); // .lean() for performance
     const combinedUsers = mobileUsers
       .map((user) => ({
-          ...user._doc,
+          ...user,
           postCount: postCountMap[user._id.toString()] || 0,
           streak: user.lastStreak || 0,
           peakLevel: user.peakLevel || 0,
-          totalPurchasedCoins: user.totalPurchasedCoins || 0
+          totalPurchasedCoins: user.totalPurchasedCoins || 0,
+          // ⚡️ NEW: Inject Lifetime Aura stats
+          currentRankLevel: user.currentRankLevel || 1,
+          aura: user.aura || 0,
+          weeklyAura: user.weeklyAura || 0
       }))
-      // Allow users into the leaderboard if they have posts, OR if we are searching by peak and they have a peak.
-      .filter((u) => u.postCount > 0 || (type === "peak" && u.peakLevel > 0));
+      // Allow users into the leaderboard if they have posts, aura, OR if we are searching by peak
+      .filter((u) => u.postCount > 0 || u.aura > 0 || (type === "peak" && u.peakLevel > 0));
 
     combinedUsers.sort((a, b) => {
       if (type === "streak") return (b.streak || 0) - (a.streak || 0);
-      if (type === "aura") return (b.weeklyAura || 0) - (a.weeklyAura || 0);
+      if (type === "aura") return (b.weeklyAura || 0) - (a.weeklyAura || 0); // Weekly Competitive
+      if (type === "posts") return (b.postCount || 0) - (a.postCount || 0); // Raw Post Count
       
-      // ⚡️ NEW: Peak Sorting Logic
+      // Peak Sorting Logic
       if (type === "peak") {
           // Primary sort: Peak Level
           if (b.peakLevel !== a.peakLevel) return (b.peakLevel || 0) - (a.peakLevel || 0);
@@ -81,9 +87,15 @@ export async function GET(req) {
           return (b.totalPurchasedCoins || 0) - (a.totalPurchasedCoins || 0);
       }
       
-      return b.postCount - a.postCount; // Default: posts
+      // ⚡️ NEW DEFAULT: "level" (Lifetime RPG Rank & Aura)
+      // Primary sort: Rank Level (1 through 8)
+      if (b.currentRankLevel !== a.currentRankLevel) {
+          return (b.currentRankLevel || 1) - (a.currentRankLevel || 1);
+      }
+      // Tie-breaker: Exact Lifetime Aura Points
+      return (b.aura || 0) - (a.aura || 0); 
     });
-    console.log(combinedUsers[0])
+
     return NextResponse.json({
       category,
       type,
@@ -94,9 +106,11 @@ export async function GET(req) {
         streak: u.streak,
         weeklyAura: u.weeklyAura || 0,
         previousRank: u.previousRank || null,
-        // ⚡️ Expose Peak Data to the frontend
         peakLevel: u.peakLevel,
-        totalPurchasedCoins: u.totalPurchasedCoins
+        totalPurchasedCoins: u.totalPurchasedCoins,
+        // ⚡️ Expose new fields to frontend
+        currentRankLevel: u.currentRankLevel,
+        aura: u.aura
       })),
     });
 

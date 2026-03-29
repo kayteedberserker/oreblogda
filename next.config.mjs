@@ -1,7 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   images: {
-    domains: ["res.cloudinary.com", "flagcdn.com"], // allow Cloudinary images
+    domains: ["res.cloudinary.com", "flagcdn.com", "cdn-icons-png.flaticon.com"], // allow Cloudinary images
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: 'cdn-icons-png.flaticon.com'
+      }
+    ]
+
   },
   experimental: {
     /* * Added 'mongoose' here. 
