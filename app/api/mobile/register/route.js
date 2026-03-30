@@ -50,7 +50,7 @@ export async function POST(req) {
     // 1. Limit Check: Max 3 accounts per hardwareId
     if (existingAccounts.length >= 3) {
       return NextResponse.json({
-        message: "SECURITY_PROTOCOL: Device limit reached. Maximum 3 operatives allowed per hardware unit."
+        message: "SECURITY_PROTOCOL: Device limit reached. Maximum 3 operatives allowed per device."
       }, { status: 403 });
     }
 

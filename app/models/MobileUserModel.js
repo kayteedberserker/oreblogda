@@ -153,9 +153,6 @@ const mobileUserSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Pre-save index for Hardware ID to ensure efficient account-limit lookups
-mobileUserSchema.index({ hardwareId: 1 });
-
 const MobileUser = mongoose.models.MobileUsers || mongoose.model("MobileUsers", mobileUserSchema);
 
 export default MobileUser;
