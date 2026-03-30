@@ -22,6 +22,7 @@ export async function POST(req) {
     await connectDB();
 
     const { deviceId, hardwareId, recoverId, pushToken } = await req.json();
+    console.log("Recovery Attempt:", { deviceId, hardwareId, recoverId });
 
     if (!recoverId) {
       return NextResponse.json({ message: "Operative identity is required for recovery" }, { status: 400 });
@@ -61,8 +62,8 @@ export async function POST(req) {
       }, { status: 403 });
     }
 
-    // 4. 🔗 UPDATE NEURAL LINK: Map current app install to the account
-    user.deviceId = deviceId;
+    // 4. 🔗 UPDATE NEURAL LINK: Keep original deviceId, update physical DNA
+    // ⚡️ We intentionally DO NOT update user.deviceId here anymore. We keep their original identity intact.
     user.hardwareId = hardwareId;
 
     if (pushToken) user.pushToken = pushToken;
@@ -79,14 +80,15 @@ export async function POST(req) {
 
     user.lastActive = new Date();
     await user.save();
+    console.log("Recovery Success:", { uid: user.uid, deviceId: user.deviceId, hardwareId: user.hardwareId, country: user.country });
 
     // 5. 🚀 RETURN FULL PROFILE
     return NextResponse.json({
       message: "Neural link re-established. Welcome back, Operative.",
       user: {
-        uid: user.uid, // Returns the newly generated or existing UID
+        uid: user.uid,
         username: user.username,
-        deviceId: user.deviceId,
+        deviceId: user.deviceId, // ⚡️ This returns their ORIGINAL deviceId to the frontend
         country: user.country,
         pushToken: user.pushToken,
         preferences: user.preferences,
