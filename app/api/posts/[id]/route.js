@@ -1,13 +1,13 @@
-import { NextResponse } from "next/server";
-import connectDB from "@/app/lib/mongodb";
-import Post from "@/app/models/PostModel";
-import Notification from "@/app/models/NotificationModel";
-import { sendPushNotification } from "@/app/lib/pushNotifications";
-import MobileUser from "@/app/models/MobileUserModel";
-import crypto from "crypto";
-import { awardClanPoints } from "@/app/lib/clanService";
-import Clan from "@/app/models/ClanModel";
 import { awardAura } from "@/app/lib/auraManager";
+import { awardClanPoints } from "@/app/lib/clanService";
+import connectDB from "@/app/lib/mongodb";
+import { sendPushNotification } from "@/app/lib/pushNotifications";
+import Clan from "@/app/models/ClanModel";
+import MobileUser from "@/app/models/MobileUserModel";
+import Notification from "@/app/models/NotificationModel";
+import Post from "@/app/models/PostModel";
+import crypto from "crypto";
+import { NextResponse } from "next/server";
 
 // ----------------------
 // 🛡️ SECURITY: Request Signature Verification
@@ -119,7 +119,7 @@ export async function PATCH(req, { params }) {
             // ✨ AURA LOGIC: +5 for Voting
             if (post.authorId !== fingerprint) {
                 const author = await MobileUser.findOne({ deviceId: post.authorId });
-                
+
                 if (author) {
                     // ⚡️ Replaced manual $inc with centralized Aura Manager
                     await awardAura(author._id, 5);
@@ -128,7 +128,7 @@ export async function PATCH(req, { params }) {
                     await awardClanPoints(post, 10);
                     const msg = `Someone voted on your post: "${post.title.substring(0, 15)}..."`;
                     await Notification.create({ recipientId: post.authorId, senderName: "Someone", type: "like", postId: post._id, message: msg });
-                    
+
                     if (author.pushToken) {
                         // 🔔 GROUPING ADDED: Uses "vote_<PostID>" so votes stack
                         await sendPushNotification(
@@ -171,7 +171,7 @@ export async function PATCH(req, { params }) {
             // ✨ AURA & CLAN LOGIC
             if (updatedPost.authorId !== fingerprint) {
                 const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
-                
+
                 if (author) {
                     // ⚡️ Centralized Aura Manager
                     await awardAura(author._id, 5);
@@ -350,6 +350,9 @@ export async function GET(req, { params }) {
                                 streak: u.lastStreak || 0,
                                 rank: u.previousRank || 0,
                                 peakLevel: u.peakLevel || 0,
+                                aura: u.aura || 0,
+                                inventory: u.inventory || [],
+                                rankLevel: u.currentRankLevel || 0,
                                 equippedGlow: u.inventory?.find(i => i.category === 'GLOW' && i.isEquipped) || null,
                                 equippedBadges: u.inventory?.filter(i => i.category === 'BADGE' && i.isEquipped) || []
                             };
@@ -360,7 +363,7 @@ export async function GET(req, { params }) {
 
         if (clanTag) {
             promises.push(
-                Clan.findOne({ $or: [{ tag: clanTag }]}).lean()
+                Clan.findOne({ $or: [{ tag: clanTag }] }).lean()
                     .then(c => {
                         if (c) clanData = c;
                     })

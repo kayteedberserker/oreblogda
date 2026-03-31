@@ -66,6 +66,7 @@ export async function POST(req) {
     // ⚡️ We intentionally DO NOT update user.deviceId here anymore. We keep their original identity intact.
     user.hardwareId = hardwareId;
 
+    // ⚡️ Re-bind the push token to wake up notifications for this session
     if (pushToken) user.pushToken = pushToken;
 
     // Geo-Intel Update
@@ -77,7 +78,7 @@ export async function POST(req) {
     if (!user.country || user.country === "Unknown") {
       user.country = detectedCountry;
     }
-
+    user.hasLoggedOut = false; // Reset logout status on recovery
     user.lastActive = new Date();
     await user.save();
     console.log("Recovery Success:", { uid: user.uid, deviceId: user.deviceId, hardwareId: user.hardwareId, country: user.country });

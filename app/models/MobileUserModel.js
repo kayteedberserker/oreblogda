@@ -126,7 +126,7 @@ const mobileUserSchema = new mongoose.Schema(
     },
     // ⚡️ Store their current calculated level so you can easily query/sort by it
     currentRankLevel: { type: Number, default: 1 },
-
+    hasLoggedOut: { type: Boolean, default: false },
     // --- ✨ AURA SYSTEM ---
     weeklyAura: { type: Number, default: 0 },
     aura: { type: Number, default: 0 },
