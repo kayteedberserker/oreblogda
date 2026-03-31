@@ -1,8 +1,8 @@
-import MobileUser from "@/app/models/MobileUserModel";
-import Notification from "@/app/models/NotificationModel";
 import { calculateAuraRank } from "@/app/lib/auraRankEngine";
 import { createMessagePill } from "@/app/lib/messagePillService";
 import { sendPushNotification } from "@/app/lib/pushNotifications";
+import MobileUser from "@/app/models/MobileUserModel";
+import Notification from "@/app/models/NotificationModel";
 
 /**
  * Centralized engine to award Aura, check for Rank Ups, and trigger the correct UI/Push feedback.
@@ -39,10 +39,11 @@ export async function awardAura(userId, amount) {
                 text: `LIMIT BREAK! YOU HAVE AWAKENED AS A ${newRank.title} ${newRank.icon}`,
                 type: 'achievement',
                 targetAudience: 'user',
+                link: "/profile",
                 targetId: user._id.toString(),
                 priority: 10,
                 expiresInHours: 24,
-                replaceExistingType: false 
+                replaceExistingType: false
             });
 
             // B. Send Push Notification for Retention
@@ -80,12 +81,13 @@ export async function awardAura(userId, amount) {
             // ⚡️ Send the accumulating pill with the dynamic flavor text
             await createMessagePill({
                 text: `+${amount} Aura Gained. ${flavorText}`,
-                type: 'aura_gain', 
+                type: 'aura_gain',
                 targetAudience: 'user',
                 targetId: user._id.toString(),
+                link: "/profile",
                 priority: 2,
-                expiresInHours: 24, 
-                replaceExistingType: true 
+                expiresInHours: 24,
+                replaceExistingType: true
             });
         }
 

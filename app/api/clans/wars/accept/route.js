@@ -1,29 +1,25 @@
-import { NextResponse } from 'next/server';
+import { createMessagePill } from '@/app/lib/messagePillService'; // ⚡️ Import the service
 import connectDB from "@/app/lib/mongodb";
-import ClanWar from '@/app/models/ClanWar';
-import Clan from '@/app/models/ClanModel';
-import MobileUser from '@/app/models/MobileUserModel';
 import { sendMultiplePushNotifications } from '@/app/lib/pushNotifications';
+import Clan from '@/app/models/ClanModel';
+import ClanWar from '@/app/models/ClanWar';
+import MobileUser from '@/app/models/MobileUserModel';
+import { NextResponse } from 'next/server';
 
 export async function POST(req) {
     try {
         await connectDB();
-        // userClanTag is the tag of the clan the current user belongs to
         const { warId, userClanTag } = await req.json();
 
-        // 1. Find the war - allow both PENDING and NEGOTIATING
-        const war = await ClanWar.findOne({ 
-            warId, 
-            status: { $in: ["PENDING", "NEGOTIATING"] } 
+        const war = await ClanWar.findOne({
+            warId,
+            status: { $in: ["PENDING", "NEGOTIATING"] }
         });
 
         if (!war) {
             return NextResponse.json({ message: "War request not found or already active" }, { status: 404 });
         }
 
-        // 2. SECURITY CHECK: Ensure the person accepting isn't the one who sent the last offer
-        // If status is PENDING, only the defender can accept.
-        // If status is NEGOTIATING, only the clan that DIDN'T send the last counter can accept.
         if (war.status === "PENDING" && userClanTag === war.challengerTag) {
             return NextResponse.json({ message: "You cannot accept your own initial challenge" }, { status: 403 });
         }
@@ -39,27 +35,23 @@ export async function POST(req) {
             return NextResponse.json({ message: "One of the clans no longer exists" }, { status: 404 });
         }
 
-        // 🛡️ UPDATE CLAN FIELDS & POINTS
         const stake = war.prizePool;
 
-        // Check if both clans actually have the points before proceeding
         if (challenger.spendablePoints < stake || defender.spendablePoints < stake) {
             return NextResponse.json({ message: "One clan lacks sufficient points to cover the stake" }, { status: 400 });
         }
 
-        // Move points to locked for Challenger
+        // 🛡️ LOCK POINTS & ACTIVATE WAR
         challenger.spendablePoints -= stake;
         challenger.lockedPoints += stake;
         challenger.isInWar = true;
         challenger.activeWarId = war.warId;
 
-        // Move points to locked for Defender
         defender.spendablePoints -= stake;
         defender.lockedPoints += stake;
         defender.isInWar = true;
         defender.activeWarId = war.warId;
 
-        // SNAPSHOT INITIAL STATS
         war.initialStats = {
             challenger: {
                 points: challenger.totalPoints || 0,
@@ -77,14 +69,40 @@ export async function POST(req) {
         war.startTime = new Date();
         war.endTime = new Date(Date.now() + (war.durationDays * 24 * 60 * 60 * 1000));
 
-        // Save everything
         await Promise.all([
             war.save(),
             challenger.save(),
             defender.save()
         ]);
 
-        // 🔔 Notify the OTHER clan (the one that didn't just click 'Accept')
+        // ⚡️ INTEGRATE MESSAGE PILLS
+        // Create pills for both clans so all members see the status in their header
+        const warMessage = `WAR ACTIVE: ${challenger.name} vs ${defender.name}. Stake: ${stake} pts.`;
+
+        await Promise.all([
+            createMessagePill({
+                text: warMessage,
+                type: 'war_update',
+                targetAudience: 'clan',
+                targetId: challenger.tag,
+                link: '/clans/wars',
+                priority: 2,
+                expiresInHours: war.durationDays * 24,
+                replaceExistingType: true
+            }),
+            createMessagePill({
+                text: warMessage,
+                type: 'war_update',
+                targetAudience: 'clan',
+                targetId: defender.tag,
+                link: '/clans/wars',
+                priority: 2,
+                expiresInHours: war.durationDays * 24,
+                replaceExistingType: true
+            })
+        ]);
+
+        // 🔔 Push Notifications
         const recipientTag = (userClanTag === war.challengerTag) ? war.defenderTag : war.challengerTag;
         const recipientClan = (recipientTag === challenger.tag) ? challenger : defender;
         const senderClanName = (userClanTag === challenger.tag) ? challenger.name : defender.name;

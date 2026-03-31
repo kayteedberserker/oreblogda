@@ -1,16 +1,16 @@
-import { NextResponse } from 'next/server';
+import { createMessagePill } from '@/app/lib/messagePillService'; // ⚡️ Added
 import connectDB from "@/app/lib/mongodb";
-import ClanWar from '@/app/models/ClanWar';
-import Clan from '@/app/models/ClanModel';
-import MobileUser from '@/app/models/MobileUserModel';
 import { sendMultiplePushNotifications } from '@/app/lib/pushNotifications';
+import Clan from '@/app/models/ClanModel';
+import ClanWar from '@/app/models/ClanWar';
+import MobileUser from '@/app/models/MobileUserModel';
+import { NextResponse } from 'next/server';
 
 export async function POST(req) {
     try {
         await connectDB();
         const { warId, senderTag, stake, duration, winCondition, metrics } = await req.json();
-        
-        // Find by warId (your custom string ID)
+
         const war = await ClanWar.findOne({ warId });
         if (!war) return NextResponse.json({ message: "War record not found" }, { status: 404 });
 
@@ -20,23 +20,48 @@ export async function POST(req) {
         war.winCondition = winCondition;
         war.warType = metrics;
         war.status = "NEGOTIATING";
-        
+
         // 🔥 Update who is making this offer
         war.lastUpdatedByCustomTag = senderTag;
 
         // Determine opponent
         const opponentTag = (senderTag === war.challengerTag) ? war.defenderTag : war.challengerTag;
-        console.log(war);
-        
+
         await war.save();
 
-        // 🔔 Notify the Opponent Clan
         const [senderClan, opponentClan] = await Promise.all([
             Clan.findOne({ tag: senderTag }),
             Clan.findOne({ tag: opponentTag })
         ]);
 
         if (opponentClan && senderClan) {
+            // ⚡️ INTEGRATE MESSAGE PILLS
+            await Promise.all([
+                // Pill for the Opponent: "Someone sent a counter-offer!"
+                createMessagePill({
+                    text: `🤝 COUNTER-OFFER: ${senderClan.name} proposed new terms for the war.`,
+                    type: 'war_update',
+                    targetAudience: 'clan',
+                    targetId: opponentTag,
+                    link: '/clans/wars',
+                    priority: 2,
+                    expiresInHours: 48,
+                    replaceExistingType: true
+                }),
+                // Pill for the Sender: "Awaiting their response"
+                createMessagePill({
+                    text: `⌛ Sent counter-offer to ${opponentClan.name}. Awaiting response...`,
+                    type: 'war_update',
+                    targetAudience: 'clan',
+                    targetId: senderTag,
+                    link: '/clans/wars',
+                    priority: 1,
+                    expiresInHours: 48,
+                    replaceExistingType: true
+                })
+            ]);
+
+            // 🔔 Push Notifications
             const opponentIds = [
                 opponentClan.leader,
                 opponentClan.viceLeader,

@@ -1,6 +1,6 @@
+import { createMessagePill } from '@/app/lib/messagePillService'; // ⚡️ IMPORT PILL SERVICE
 import Clan from '@/app/models/ClanModel';
 import { updateWarProgress } from './warService';
-import { createMessagePill } from '@/app/lib/messagePillService'; // ⚡️ IMPORT PILL SERVICE
 
 /**
  * Award points, increment stats, and check for real-time badges like One-Shot
@@ -9,13 +9,13 @@ import { createMessagePill } from '@/app/lib/messagePillService'; // ⚡️ IMPO
 export async function awardClanPoints(post, actionPoints, type = null) {
     if (!post || (!post.clanId && !post.category?.startsWith("Clan:"))) return;
 
-    const clanTag = post.clanId || (post.category.split(":")[2]); 
+    const clanTag = post.clanId || (post.category.split(":")[2]);
     if (!clanTag) return;
 
     // --- 💎 MULTIPLIER LOGIC (VERIFIED + ITEM) ---
     const clanDoc = await Clan.findOne({ tag: clanTag })
         .select('totalPoints verifiedUntil activeMultiplier multiplierExpiresAt badges consecutiveWeeksNoDerank');
-    
+
     if (!clanDoc) return;
 
     let totalMultiplier = 1;
@@ -28,8 +28,8 @@ export async function awardClanPoints(post, actionPoints, type = null) {
 
     // 2. Check for an active item multiplier (e.g., 2x, 3x)
     if (
-        clanDoc.activeMultiplier > 1 && 
-        clanDoc.multiplierExpiresAt && 
+        clanDoc.activeMultiplier > 1 &&
+        clanDoc.multiplierExpiresAt &&
         clanDoc.multiplierExpiresAt > now
     ) {
         totalMultiplier += (clanDoc.activeMultiplier - 1);
@@ -40,7 +40,7 @@ export async function awardClanPoints(post, actionPoints, type = null) {
     // --- 🛡️ DEBT FORGIVENESS & REDEMPTION LOGIC ---
     const isNegative = (clanDoc.totalPoints || 0) < 0;
 
-    let updateQuery = { 
+    let updateQuery = {
         $set: { lastActive: new Date() }
     };
 
@@ -48,7 +48,7 @@ export async function awardClanPoints(post, actionPoints, type = null) {
         // 🔥 Instant recovery: Reset debt to 0 and add new points
         updateQuery.$set.totalPoints = finalPoints;
         updateQuery.$set.currentWeeklyPoints = finalPoints;
-        
+
         // 🎖️ Grant Redemption badge for clearing the debt
         updateQuery.$addToSet = { badges: "Redemption" };
 
@@ -57,17 +57,18 @@ export async function awardClanPoints(post, actionPoints, type = null) {
             text: `DEBT CLEARED: YOUR CLAN HAS EARNED THE "REDEMPTION" BADGE. RISING FROM THE ASHES!`,
             type: 'achievement',
             targetAudience: 'clan',
+            link: "/clanprofile",
             targetId: clanTag,
             priority: 10, // High Priority
             expiresInHours: 24,
-            replaceExistingType: false 
+            replaceExistingType: false
         });
 
     } else {
         // Normal behavior for positive or zero point clans
-        updateQuery.$inc = { 
+        updateQuery.$inc = {
             totalPoints: finalPoints,
-            currentWeeklyPoints: finalPoints 
+            currentWeeklyPoints: finalPoints
         };
     }
 
@@ -85,7 +86,7 @@ export async function awardClanPoints(post, actionPoints, type = null) {
 
     // 2. Update the clan in the database
     const updatedClan = await Clan.findOneAndUpdate(
-        { tag: clanTag }, 
+        { tag: clanTag },
         updateQuery,
         { new: true }
     );
@@ -98,15 +99,15 @@ export async function awardClanPoints(post, actionPoints, type = null) {
     // --- 🏅 ONE-SHOT BADGE CHECK (Only on likes) ---
     if (type === 'like' && !updatedClan.badges.includes("One-Shot") && post.likes) {
         const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
-        
+
         const recentLikes = post.likes.filter(l => {
             const likeDate = l.date ? new Date(l.date) : new Date();
             return likeDate > oneHourAgo;
         });
-        
+
         if (recentLikes.length >= 500) {
             await Clan.updateOne(
-                { _id: updatedClan._id }, 
+                { _id: updatedClan._id },
                 { $addToSet: { badges: "One-Shot" } }
             );
 
@@ -115,10 +116,11 @@ export async function awardClanPoints(post, actionPoints, type = null) {
                 text: `VIRAL ANOMALY: YOUR CLAN UNLOCKED THE "ONE-SHOT" BADGE (500+ LIKES IN 1 HOUR)!`,
                 type: 'achievement',
                 targetAudience: 'clan',
+                link: "/clanprofile",
                 targetId: clanTag,
                 priority: 10, // Max Priority
                 expiresInHours: 24,
-                replaceExistingType: false 
+                replaceExistingType: false
             });
         }
     }
@@ -132,9 +134,10 @@ export async function awardClanPoints(post, actionPoints, type = null) {
             type: 'clan_points', // ⚡️ New type
             targetAudience: 'clan',
             targetId: clanTag,
+            link: "/clanprofile",
             priority: 2, // Low priority so it doesn't block major Event/Achievement pills
             expiresInHours: 24,
-            replaceExistingType: true 
+            replaceExistingType: true
         });
     }
 }

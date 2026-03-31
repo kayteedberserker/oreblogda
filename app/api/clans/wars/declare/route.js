@@ -1,9 +1,10 @@
-import { NextResponse } from 'next/server';
+import { createMessagePill } from '@/app/lib/messagePillService'; // ⚡️ Added
 import connectDB from "@/app/lib/mongodb";
-import ClanWar from '@/app/models/ClanWar';
-import Clan from '@/app/models/ClanModel';
-import MobileUser from '@/app/models/MobileUserModel'; // Ensure this import exists
 import { sendMultiplePushNotifications } from '@/app/lib/pushNotifications';
+import Clan from '@/app/models/ClanModel';
+import ClanWar from '@/app/models/ClanWar';
+import MobileUser from '@/app/models/MobileUserModel';
+import { NextResponse } from 'next/server';
 
 export async function POST(req) {
     try {
@@ -15,7 +16,6 @@ export async function POST(req) {
         const challengerClan = await Clan.findOne({ tag: challengerTag });
         if (!challengerClan) return NextResponse.json({ message: "Challenger clan not found" }, { status: 404 });
 
-        // Check if challenger has enough points to stake
         if (challengerClan.spendablePoints < stake) {
             return NextResponse.json({ message: "Insufficient spendable points to challenge" }, { status: 400 });
         }
@@ -23,7 +23,7 @@ export async function POST(req) {
         // 2. Verify Defender
         const defenderClan = await Clan.findOne({ tag: targetTag });
         if (!defenderClan) return NextResponse.json({ message: "Target clan does not exist" }, { status: 404 });
-        
+
         if (defenderClan.spendablePoints < stake) {
             return NextResponse.json({ message: "Target clan cannot afford this stake" }, { status: 400 });
         }
@@ -32,7 +32,7 @@ export async function POST(req) {
         const tags = [challengerTag, targetTag].sort();
         const warId = `${tags[0]}VS${tags[1]}`;
 
-        const existingWar = await ClanWar.findOne({ warId, status: { $in: ["PENDING", "ACTIVE"] } });
+        const existingWar = await ClanWar.findOne({ warId, status: { $in: ["PENDING", "ACTIVE", "NEGOTIATING"] } });
         if (existingWar) return NextResponse.json({ message: "Conflict already exists" }, { status: 400 });
 
         // 4. Create War
@@ -48,8 +48,33 @@ export async function POST(req) {
             status: "PENDING"
         });
 
-        // 5. Notify ALL Defender Clan Members
-        // Collect IDs of Leader, Vice Leader, and Members
+        // ⚡️ INTEGRATE MESSAGE PILLS
+        await Promise.all([
+            // Pill for the Defenders: "You are being challenged!"
+            createMessagePill({
+                text: `⚠️ WAR CHALLENGE: ${challengerClan.name} has declared war for ${stake} pts!`,
+                type: 'war_update',
+                targetAudience: 'clan',
+                targetId: targetTag,
+                link: '/clans/wars',
+                priority: 3, // High priority
+                expiresInHours: 48, // Challenges usually expire/auto-cancel after 48h if not accepted
+                replaceExistingType: true
+            }),
+            // Pill for the Challengers: "Challenge sent"
+            createMessagePill({
+                text: `⚔️ War challenge sent to ${defenderClan.name}. Awaiting response...`,
+                type: 'war_update',
+                targetAudience: 'clan',
+                targetId: challengerTag,
+                link: '/clans/wars',
+                priority: 1,
+                expiresInHours: 48,
+                replaceExistingType: true
+            })
+        ]);
+
+        // 5. Notify ALL Defender Clan Members via Push
         const defenderIds = [
             defenderClan.leader,
             defenderClan.viceLeader,
