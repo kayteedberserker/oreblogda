@@ -426,9 +426,13 @@ export default function WebCommentSection({ postId, slug, discussionIdfromPage }
           <p className="text-[11px] font-bold text-gray-500">
             🔔 Want to be notified when someone replies to your signal?
           </p>
-          <button className="bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg text-[10px] font-black uppercase whitespace-nowrap hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors">
-            Download App
-          </button>
+          <a
+            href="https://play.google.com/store/apps/details?id=com.kaytee.oreblogda"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-gray-200 dark:bg-gray-800 text-gray-700 dark:text-gray-300 px-4 py-2 rounded-lg text-[10px] font-black uppercase whitespace-nowrap hover:bg-gray-300 dark:hover:bg-gray-700 transition-colors"
+          >Download App
+          </a>
         </div>
       </div>
 
