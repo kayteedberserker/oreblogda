@@ -244,9 +244,14 @@ const DiscussionDrawer = ({ visible, comment, onClose, slug, highlightId, onRepl
             <p className="text-[11px] font-bold text-blue-700 dark:text-blue-300">
               🔔 Track this discussion & get notified of replies.
             </p>
-            <button className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase whitespace-nowrap hover:bg-blue-700">
+            <a
+              href="https://play.google.com/store/apps/details?id=com.kaytee.oreblogda"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="bg-blue-600 text-white px-4 py-1.5 rounded-lg text-[10px] font-black uppercase whitespace-nowrap hover:bg-blue-700 transition-colors"
+            >
               Get App
-            </button>
+            </a>
           </div>
         </div>
       </div>
