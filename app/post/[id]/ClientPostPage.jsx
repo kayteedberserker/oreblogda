@@ -155,7 +155,7 @@ export default function ClientPostPage({
         </div>
       </div>
 
-      <ToastContainer autoClose={1500} theme="dark" />
+      <ToastContainer position="bottom-right" autoClose={1500} theme="dark" />
 
       <style jsx>{`
         @keyframes data-stream {

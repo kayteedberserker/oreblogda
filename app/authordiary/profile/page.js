@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useState, useRef } from "react";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
 import { toast, ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
-import Image from "next/image";
 
 const ProfilePage = () => {
   const [user, setUser] = useState(null);
@@ -355,7 +355,7 @@ const ProfilePage = () => {
         </div>
       </div>
 
-      <ToastContainer autoClose={2500} theme="dark" />
+      <ToastContainer position="bottom-right" autoClose={2500} theme="dark" />
     </div>
   );
 };

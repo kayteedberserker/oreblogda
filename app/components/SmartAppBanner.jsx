@@ -1,131 +1,103 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function SmartAppBanner() {
-    // Status can be: 'idle', 'navigating' (trying app), or 'stayed' (app failed, show promo)
-    const [status, setStatus] = useState('idle');
-    const [currentPath, setCurrentPath] = useState('');
+    const [isVisible, setIsVisible] = useState(false);
+    const [isAppInstalled, setIsAppInstalled] = useState(false);
 
     const PLAY_STORE_URL = "https://play.google.com/store/apps/details?id=com.kaytee.oreblogda";
     const APP_SCHEME = "oreblogda";
     const PACKAGE_ID = "com.kaytee.oreblogda";
 
     useEffect(() => {
-        // 1. Only run on mobile devices
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        // 1. Only run on mobile
+        const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
         if (!isMobile) return;
 
-        // 2. Don't show if they've already dismissed it in this session
-        const hasOptedOut = sessionStorage.getItem('appPromoDismissed') === 'true';
-        if (hasOptedOut) return;
+        // 2. Check dismissal
+        const isDismissed = sessionStorage.getItem('appBannerDismissed') === 'true';
+        if (isDismissed) return;
 
-        // Set the path for deep linking
-        setCurrentPath(window.location.pathname + window.location.search);
-        
-        // Auto-trigger the app attempt
-        handleAutoOpen();
+        // 3. Optional: Try to detect if app is already installed (Android Chrome only)
+        if ('getInstalledRelatedApps' in navigator) {
+            navigator.getInstalledRelatedApps().then(apps => {
+                const isInstalled = apps.some(app => app.id === PACKAGE_ID);
+                setIsAppInstalled(isInstalled);
+            });
+        }
+
+        setIsVisible(true);
     }, []);
 
-    const handleAutoOpen = () => {
-        setStatus('navigating');
-
+    const handleOpenApp = () => {
         const path = window.location.pathname + window.location.search;
         const isAndroid = /Android/i.test(navigator.userAgent);
 
-        // 🟢 Android Intent Syntax: Much more reliable for Chrome on Android
-        // It tries to open the scheme, and handles the fallback internally via the OS
-        const androidIntent = `intent://${path.replace(/^\//, '')}#Intent;scheme=${APP_SCHEME};package=${PACKAGE_ID};end;`;
-        
-        // 🍏 iOS/Basic Scheme Syntax
-        const basicScheme = `${APP_SCHEME}:/${path}`;
+        // Android Intent handles fallback to Play Store automatically if not installed
+        const androidIntent = `intent://${path.replace(/^\//, '')}#Intent;scheme=${APP_SCHEME};package=${PACKAGE_ID};S.browser_fallback_url=${encodeURIComponent(PLAY_STORE_URL)};end;`;
 
-        // Execute the redirect
+        const basicScheme = `${APP_SCHEME}://${path}`;
+
         if (isAndroid) {
             window.location.href = androidIntent;
         } else {
+            // iOS Fallback logic
             window.location.href = basicScheme;
+            setTimeout(() => {
+                if (!document.hidden) window.location.href = PLAY_STORE_URL;
+            }, 2000);
         }
-
-        // Detection logic: If the page is still visible after 2.5s, the app didn't take over
-        const checkSelection = setTimeout(() => {
-            if (!document.hidden) {
-                setStatus('stayed');
-            }
-        }, 2500);
-
-        return () => clearTimeout(checkSelection);
     };
 
     const handleDismiss = () => {
-        setStatus('idle');
-        sessionStorage.setItem('appPromoDismissed', 'true');
+        setIsVisible(false);
+        sessionStorage.setItem('appBannerDismissed', 'true');
     };
 
-    // UI Logic: Don't render anything if status is idle
-    if (status === 'idle') return null;
+    if (!isVisible) return null;
 
     return (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-white/95 dark:bg-[#050505]/95 backdrop-blur-md p-6 text-center">
-            <div className="max-w-xs w-full space-y-8 animate-in fade-in zoom-in duration-300">
-                
-                {/* Visual Header */}
-                <div className="flex flex-col items-center space-y-4">
-                    <div className="relative w-24 h-24">
-                        {/* Rotating ring only shows during 'navigating' status */}
-                        {status === 'navigating' && (
-                            <div className="absolute inset-0 border-4 border-blue-600 rounded-3xl border-t-transparent animate-spin"></div>
-                        )}
-                        <div className="absolute inset-0 flex items-center justify-center bg-blue-500 rounded-3xl shadow-xl overflow-hidden">
-                            <img src="/iconblue.png" alt="App Icon" className="w-full h-full object-cover p-2" />
-                        </div>
-                    </div>
-                    
-                    <div>
-                        <h2 className="text-2xl font-black text-gray-900 dark:text-white tracking-tight">
-                            {status === 'navigating' ? "Opening App..." : "Get the Full Experience"}
-                        </h2>
-                        <p className="text-sm text-gray-500 dark:text-gray-400 mt-2 px-4">
-                            {status === 'navigating' 
-                                ? "Checking if you have Oreblogda installed..." 
-                                : "Read your favorite anime blogs faster with our official Android app."}
-                        </p>
-                    </div>
-                </div>
+        <div className="fixed top-0 left-0 right-0 z-[9999] animate-in slide-in-from-top duration-500">
+            {/* Banner Container */}
+            <div className="bg-white dark:bg-[#111] border-b border-gray-200 dark:border-zinc-800 shadow-xl px-4 py-3 flex items-center justify-between">
 
-                {/* Actions */}
-                <div className="space-y-3">
-                    {status === 'stayed' && (
-                        <a 
-                            href={PLAY_STORE_URL}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center justify-center w-full py-4 px-6 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl shadow-lg transition-transform active:scale-95"
-                        >
-                            <svg className="w-5 h-5 mr-2" viewBox="0 0 24 24" fill="currentColor">
-                                <path d="M3,20.5V3.5C3,2.91 3.34,2.39 3.84,2.15L13.69,12L3.84,21.85C3.34,21.61 3,21.09 3,20.5M16.81,15.12L18.81,16.27C19.46,16.65 20,16.33 20,15.58V8.42C20,7.67 19.46,7.35 18.81,7.73L16.81,8.88L14.4,11.29L16.81,15.12Z" />
-                            </svg>
-                            Download on Play Store
-                        </a>
-                    )}
-
-                    <button 
+                {/* Left: App Info */}
+                <div className="flex items-center space-x-3">
+                    <button
                         onClick={handleDismiss}
-                        className="w-full py-3 text-sm font-semibold text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                        className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
                     >
-                        Continue to Website
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
                     </button>
-                </div>
-                
-                {/* Trust Badge */}
-                {status === 'stayed' && (
-                    <div className="pt-4 border-t border-gray-100 dark:border-gray-800">
-                        <p className="text-[10px] uppercase tracking-widest text-gray-400 font-bold">
-                            Free • Offline Browsing • AURA farming • Ranking • CLAN & CLANWARS
-                        </p>
+
+                    <div className="w-10 h-10 bg-blue-500 rounded-xl shadow-inner overflow-hidden flex-shrink-0">
+                        <img src="/iconblue.png" alt="Icon" className="w-full h-full object-cover p-1.5" />
                     </div>
-                )}
+
+                    <div className="flex flex-col">
+                        <span className="text-sm font-black text-gray-900 dark:text-white leading-tight">
+                            Oreblogda App
+                        </span>
+                        <span className="text-[10px] text-gray-500 dark:text-zinc-500 font-bold uppercase tracking-tighter">
+                            {isAppInstalled ? "Installed" : "Free on Play Store"}
+                        </span>
+                    </div>
+                </div>
+
+                {/* Right: Action Button */}
+                <button
+                    onClick={handleOpenApp}
+                    className="bg-blue-600 active:bg-blue-700 text-white px-5 py-2 rounded-full text-xs font-black uppercase tracking-widest shadow-md transition-transform active:scale-95"
+                >
+                    {isAppInstalled ? "Open" : "Get"}
+                </button>
             </div>
+
+            {/* Subtle Gradient Spacer (prevents content jump) */}
+            <div className="h-2 bg-gradient-to-b from-black/5 to-transparent dark:from-black/20 pointer-events-none" />
         </div>
     );
 }

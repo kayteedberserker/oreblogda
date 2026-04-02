@@ -102,9 +102,9 @@ const postSchema = new mongoose.Schema(
     message: { type: String, required: true },
     mediaUrl: { type: String },
     mediaType: { type: String },
-    media: { 
-      type: [mediaItemSchema], 
-      default: [] 
+    media: {
+      type: [mediaItemSchema],
+      default: []
     },
 
     /* ---------- INTERACTIONS ---------- */
@@ -127,10 +127,10 @@ const postSchema = new mongoose.Schema(
     /* ---------- META ---------- */
     slug: { type: String, unique: true, trim: true },
 
-    interests: { 
-      type: [String], 
-      default: [], 
-      index: true 
+    interests: {
+      type: [String],
+      default: [],
+      index: true
     },
 
     category: {
@@ -139,9 +139,9 @@ const postSchema = new mongoose.Schema(
     },
 
     clanId: {
-      type: String, 
+      type: String,
       default: null,
-      index: true 
+      index: true
     },
     country: {
       type: String,
@@ -181,7 +181,7 @@ postSchema.pre('save', function (next) {
   if (this.media && this.media.length > 0) {
     this.mediaUrl = this.media[0].url;
     this.mediaType = this.media[0].type;
-  } 
+  }
   else if (this.mediaUrl && (!this.media || this.media.length === 0)) {
     this.media = [{ url: this.mediaUrl, type: this.mediaType || "image" }];
   }
