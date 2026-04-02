@@ -8,6 +8,7 @@ import useSWR from "swr";
 // import apiFetch from "../utils/apiFetch"; 
 
 const API_URL = "https://oreblogda.com";
+
 export const useScrollAnimation = () => {
   const controls = useAnimation();
   const [ref, inView] = useInView({ triggerOnce: true, threshold: 0.1 });
@@ -296,26 +297,22 @@ export default function WebCommentSection({ postId, slug, discussionIdfromPage }
 
     setIsPosting(true);
     try {
-      // Replace with your actual API endpoint/fetch logic
       const res = await fetch(`${API_URL}/api/posts/${postId}/comment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: "Anonymous User", // Or handle actual web auth if you ever add it
+          name: "Anonymous User",
           text: content,
           parentCommentId: parentId,
         }),
       });
 
       if (res.ok) {
-        const responseData = await res.json();
-        if (parentId) {
-          // Refresh data to show new reply inside the drawer
-          mutate();
-        } else {
-          setPagedComments(prev => [responseData.comment, ...prev]);
-          setText("");
-        }
+        // Clear input immediately upon success
+        if (!parentId) setText("");
+
+        // FIXED: Force SWR to fetch the latest DB data immediately
+        await mutate();
       }
     } catch (err) {
       console.error("Link Failure", err);
@@ -329,7 +326,7 @@ export default function WebCommentSection({ postId, slug, discussionIdfromPage }
     setIsLoadingMore(true);
     try {
       const nextPage = page + 1;
-      const result = await mockFetcher(`/posts/${postId}/comment?page=${nextPage}&limit=40`);
+      const result = await mockFetcher(`/api/posts/${postId}/comment?page=${nextPage}&limit=40`);
       setPagedComments(prev => [...prev, ...result.comments]);
       setPage(nextPage);
     } finally {
@@ -365,8 +362,30 @@ export default function WebCommentSection({ postId, slug, discussionIdfromPage }
       initial="hidden"
       animate={controls}
       variants={variants}
-      className="bg-white/80 dark:bg-black/40 rounded-[32px] p-5 md:p-8 border border-gray-100 dark:border-blue-900/30 shadow-2xl mt-4"
+      className="bg-white/80 dark:bg-black/40 rounded-[32px] p-5 md:p-8 border border-gray-100 dark:border-blue-900/30 shadow-2xl mt-4 relative"
     >
+      {/* Custom Scrollbar Styles Injected Here */}
+      <style dangerouslySetInnerHTML={{
+        __html: `
+                .custom-scrollbar::-webkit-scrollbar {
+                    width: 4px;
+                }
+                .custom-scrollbar::-webkit-scrollbar-track {
+                    background: transparent;
+                }
+                .custom-scrollbar::-webkit-scrollbar-thumb {
+                    background-color: rgba(37, 99, 235, 0.2);
+                    border-radius: 20px;
+                }
+                .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+                    background-color: rgba(37, 99, 235, 0.5);
+                }
+                @keyframes loading {
+                    0% { transform: translateX(-100%); }
+                    100% { transform: translateX(100%); }
+                }
+            `}} />
+
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-2">
           <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" />
@@ -382,7 +401,7 @@ export default function WebCommentSection({ postId, slug, discussionIdfromPage }
         <div className="gap-3 mb-3 flex flex-col">
           <textarea
             placeholder="ENTER ENCRYPTED MESSAGE..."
-            className="w-full p-4 rounded-xl border-2 border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 text-[13px] font-black tracking-widest text-gray-900 dark:text-white min-h-[100px] outline-none focus:border-blue-500 transition-colors"
+            className="w-full p-4 rounded-xl border-2 border-gray-100 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 text-[13px] font-black tracking-widest text-gray-900 dark:text-white min-h-[100px] outline-none focus:border-blue-500 transition-colors custom-scrollbar"
             value={text}
             onChange={(e) => setText(e.target.value)}
           />

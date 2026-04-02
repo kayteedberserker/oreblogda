@@ -44,7 +44,7 @@ export default function ClientPostPage({
       Cookies.set(`viewed-${postData._id}`, "true", { expires: 1 });
     }
   }, [postData, mutate]);
-  
+
   return (
     <div className="min-h-screen relative">
       <Head>
@@ -101,7 +101,7 @@ export default function ClientPostPage({
 
       <div className="p-2 md:p-6 lg:pt-10">
         <div className="max-w-7xl mx-auto">
-          
+
           {/* --- BREADCRUMB HUD --- */}
           <div className="flex items-center gap-2 mb-6 px-2">
             <span className="text-[10px] font-mono text-blue-600 font-bold tracking-widest uppercase">Intel_Stream</span>
@@ -112,9 +112,9 @@ export default function ClientPostPage({
           </div>
 
           <div className="flex flex-col lg:grid lg:grid-cols-[1fr_380px] gap-6">
-            
+
             {/* --- MAIN CONTENT SECTOR --- */}
-            <div 
+            <div
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               className="flex-1"
@@ -122,7 +122,7 @@ export default function ClientPostPage({
               <div className="relative group bg-white dark:bg-black/40 border border-gray-100 dark:border-blue-900/20 rounded-3xl overflow-hidden shadow-2xl">
                 {/* Corner Decoration */}
                 <div className="absolute top-0 right-0 w-12 h-12 border-t-2 border-r-2 border-blue-600/20 rounded-tr-3xl pointer-events-none" />
-                
+
                 <PostCard
                   post={postData}
                   isFeed={false}
@@ -134,7 +134,7 @@ export default function ClientPostPage({
             </div>
 
             {/* --- SIDEBAR: COMMS CHANNEL --- */}
-            <div 
+            <div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
               className="flex-col"
@@ -147,7 +147,7 @@ export default function ClientPostPage({
                       Comms_Channel
                     </h3>
                   </div>
-                  <WebCommentSection postId={postData._id} />
+                  <WebCommentSection slug={postData.slug} postId={postData._id} />
                 </div>
               </div>
             </div>
