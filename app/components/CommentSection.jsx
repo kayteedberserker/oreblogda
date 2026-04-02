@@ -278,7 +278,7 @@ export default function WebCommentSection({ postId, slug, discussionIdfromPage }
   };
 
   const { data, isLoading, mutate } = useSWR(
-    `/posts/${postId}/comment?page=1&limit=40`,
+    `/api/posts/${postId}/comment?page=1&limit=40`,
     mockFetcher,
     { refreshInterval: 30000 }
   );
@@ -297,7 +297,7 @@ export default function WebCommentSection({ postId, slug, discussionIdfromPage }
     setIsPosting(true);
     try {
       // Replace with your actual API endpoint/fetch logic
-      const res = await fetch(`${API_URL}/posts/${postId}/comment`, {
+      const res = await fetch(`${API_URL}/api/posts/${postId}/comment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

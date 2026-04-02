@@ -6,10 +6,10 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 
-const API_URL = "https://oreblogda.com";
+const API_URL = "https://oreblogda.com/api";
 
 // Assuming you have a standard fetcher setup, or fallback to native fetch
-const fetcher = (url) => fetch(API_URL + url).then((res) => res.json());
+const fetcher = (url) => fetch(url).then((res) => res.json());
 
 // --- Constants & Helpers (Unchanged) ---
 const CLAN_TIERS = {
@@ -143,7 +143,7 @@ export default function WebLeaderboard() {
     }, [type, category, CACHE_KEY]);
 
     const { data: swrData, isLoading } = useSWR(
-        `/leaderboard?category=${category}&type=${type}&limit=200`,
+        `${API_URL}/leaderboard?category=${category}&type=${type}&limit=200`,
         fetcher,
         {
             dedupingInterval: 1000 * 60,
@@ -213,8 +213,8 @@ export default function WebLeaderboard() {
                 <div
                     key={item.userId || index}
                     className={`flex flex-row items-center p-3 mb-2 transition-all ${isTop3
-                            ? 'bg-blue-50/50 dark:bg-slate-800/40 rounded-2xl border-l-4'
-                            : 'border-b border-gray-200 dark:border-slate-800'
+                        ? 'bg-blue-50/50 dark:bg-slate-800/40 rounded-2xl border-l-4'
+                        : 'border-b border-gray-200 dark:border-slate-800'
                         }`}
                     style={{
                         borderLeftColor: isTop3 ? highlightColor : (weeklyAuraRank ? weeklyAuraRank.color : 'transparent'),
@@ -302,8 +302,8 @@ export default function WebLeaderboard() {
                 <div
                     key={item.clanId || item.tag || index}
                     className={`flex flex-row items-center p-3 mb-2 transition-all ${isTop3
-                            ? 'bg-blue-50/50 dark:bg-slate-800/40 rounded-2xl border-l-4'
-                            : 'border-b border-gray-200 dark:border-slate-800 border-l-2'
+                        ? 'bg-blue-50/50 dark:bg-slate-800/40 rounded-2xl border-l-4'
+                        : 'border-b border-gray-200 dark:border-slate-800 border-l-2'
                         }`}
                     style={{ borderLeftColor: isTop3 ? highlightColor : clanTier.color }}
                 >
@@ -382,8 +382,8 @@ export default function WebLeaderboard() {
                         key={cat}
                         onClick={() => setCategory(cat)}
                         className={`flex-1 h-10 rounded-xl flex items-center justify-center border transition-all ${category === cat
-                                ? 'bg-blue-500 border-blue-400 dark:bg-slate-800 dark:border-blue-400'
-                                : 'bg-slate-100 border-slate-200 dark:bg-[#0a0a0a] dark:border-slate-800'
+                            ? 'bg-blue-500 border-blue-400 dark:bg-slate-800 dark:border-blue-400'
+                            : 'bg-slate-100 border-slate-200 dark:bg-[#0a0a0a] dark:border-slate-800'
                             }`}
                     >
                         <span className={`text-[10px] font-black uppercase tracking-wider ${category === cat ? 'text-white' : 'text-slate-500'}`}>
