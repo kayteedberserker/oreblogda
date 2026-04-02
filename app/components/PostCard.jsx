@@ -485,8 +485,8 @@ export default function PostCardComponent({ post, authorData, clanData, isFeed, 
 											{author.name}
 										</span>
 										<span className="text-gray-500 text-xs"> • </span>
-										<Icons.Flame className={author.streak < 0 ? "text-red-500" : "text-orange-500"} />
-										<span className="text-gray-500 text-[10px] font-bold">{author.streak || "0"}</span>
+										<Icons.Flame className={author.lastStreak <= 0 ? "text-red-500" : "text-orange-500"} />
+										<span className="text-gray-500 text-[10px] font-bold">{author.lastStreak || "0"}</span>
 									</div>
 
 									{isTop10 && (

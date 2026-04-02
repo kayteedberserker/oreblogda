@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
+import PeakBadge from "../components/PeakBadge";
 
 const API_URL = "https://oreblogda.com/api";
 
@@ -231,7 +232,7 @@ export default function WebLeaderboard() {
                     {/* Peak Badge / Lock */}
                     <div className="w-8 flex justify-center items-center mr-2 shrink-0">
                         {peakLvl > 0 ? (
-                            <span className="text-xl">🏔️</span> /* Fallback if PeakBadge is missing on web */
+                            <PeakBadge level={peakLvl} size={20} />
                         ) : (
                             <LockIcon />
                         )}

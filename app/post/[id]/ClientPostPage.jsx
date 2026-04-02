@@ -125,6 +125,8 @@ export default function ClientPostPage({
 
                 <PostCard
                   post={postData}
+                  authorData={postData.authorData}
+                  clanData={postData.clanData}
                   isFeed={false}
                   posts={[postData]}
                   setPosts={mutate}

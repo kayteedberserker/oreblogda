@@ -193,7 +193,7 @@ export default function AuthorPageClient({ author: initialAuthor, initialPosts =
                 </h1>
                 <div className="flex items-center bg-app-streak/10 px-2 py-1 rounded-lg border border-app-streak/20">
                   <Flame size={16} className="text-app-streak" />
-                  <span className="text-app-streak font-black ml-1 text-xs">{author.streak || "0"}</span>
+                  <span className="text-app-streak font-black ml-1 text-xs">{author.lastStreak || "0"}</span>
                 </div>
               </div>
 
@@ -254,7 +254,7 @@ export default function AuthorPageClient({ author: initialAuthor, initialPosts =
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {posts.map((post, index) => (
             <div key={post._id || index}>
-              <PostCard post={post} isFeed />
+              <PostCard authorData={post.authorData} clanData={post.clanData} post={post} isFeed />
               {(index + 1) % 4 === 0 && (
                 <div className="my-10 w-full p-8 border border-dashed border-app-border dark:border-app-dark-border rounded-[32px] bg-gray-50/50 dark:bg-white/5 flex flex-col items-center justify-center transition-colors">
                   <span className="text-[10px] font-bold text-app-textSecondary dark:text-app-dark-textSecondary uppercase tracking-[0.2em] italic mb-4">Sponsored Transmission</span>
