@@ -119,21 +119,6 @@ export default async function PostPage({ params }) {
   
   const post = await res.json();
 
-  // 2. Fetch similar posts with internal secret
-  const simRes = await fetch(
-    `${process.env.NEXT_PUBLIC_SITE_URL}/api/posts?category=${post.category}&limit=6`,
-    { 
-      headers: INTERNAL_HEADERS,
-      next: { revalidate: 120 } 
-    }
-  );
-
-  let similarPosts = [];
-  if (simRes.ok) {
-    const simData = await simRes.json();
-    similarPosts = (simData.posts || []).filter((p) => p._id !== id);
-  }
-
   // Prepare metadata for the client component
   const description = post.message?.slice(0, 150) || "Read this post on Oreblogda";
   const postUrl = `https://oreblogda.com/post/${post._id}`;
@@ -142,7 +127,6 @@ export default async function PostPage({ params }) {
   return (
     <ClientPostPage
       post={post}
-      similarPosts={similarPosts}
       description={description}
       postUrl={postUrl}
       postImage={postImage}

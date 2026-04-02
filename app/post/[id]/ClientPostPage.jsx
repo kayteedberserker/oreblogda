@@ -1,22 +1,18 @@
 "use client";
 import Head from "next/head";
 
-import { useEffect, useState } from "react";
-import Cookies from "js-cookie";
-import useSWR from "swr";
+import WebCommentSection from "@/app/components/CommentSection";
 import PostCard from "@/app/components/PostCard";
-import CommentSection from "@/app/components/CommentSection";
-import SimilarPosts from "@/app/components/SimilarPosts";
-import { NextSeo, ArticleJsonLd } from "next-seo";
-import { ToastContainer } from "react-toastify";
-import {motion} from "framer-motion";
 import { useScrollAnimation } from "@/app/components/useScrollAnimation";
+import Cookies from "js-cookie";
+import { useEffect } from "react";
+import { ToastContainer } from "react-toastify";
+import useSWR from "swr";
 
 const fetcher = (url) => fetch(url).then((res) => res.json());
 
 export default function ClientPostPage({
   post: initialPost,
-  similarPosts,
   description,
   postUrl,
   postImage,
@@ -151,26 +147,10 @@ export default function ClientPostPage({
                       Comms_Channel
                     </h3>
                   </div>
-                  <CommentSection postId={postData._id} mutatePost={mutate} />
+                  <WebCommentSection postId={postData._id} />
                 </div>
               </div>
             </div>
-          </div>
-
-          {/* --- SIMILAR INTEL SECTOR --- */}
-          <div className="mt-6">
-            <div className="flex items-center gap-4 mb-8">
-              <h2 className="text-2xl font-black italic uppercase tracking-tighter text-gray-900 dark:text-white">
-                Related <span className="text-blue-600">Intel</span>
-              </h2>
-              <div className="h-[2px] flex-1 bg-gradient-to-r from-blue-600/30 via-transparent to-transparent" />
-            </div>
-            
-            <SimilarPosts
-              posts={similarPosts}
-              category={postData?.category}
-              currentPostId={postData?._id}
-            />
           </div>
         </div>
       </div>
