@@ -1,12 +1,11 @@
 "use client";
-import { useState, useEffect } from "react";
-import useSWRInfinite from "swr/infinite";
+import FeedAd from "@/app/components/FeedAd";
 import PostCard from "@/app/components/PostCard";
 import RecentPollsCard from "@/app/components/RecentPollsCard";
-import { FaPoll } from "react-icons/fa";
 import { useScrollAnimation } from "@/app/components/useScrollAnimation";
-import { motion } from "framer-motion";
-import FeedAd from "@/app/components/FeedAd";
+import { useEffect, useState } from "react";
+import { FaPoll } from "react-icons/fa";
+import useSWRInfinite from "swr/infinite";
 
 const limit = 5;
 const fetcher = (url) => fetch(url, { cache: "no-store" }).then((res) => res.json());
@@ -37,7 +36,7 @@ export default function ClientCategoryPage({ category, initialPosts }) {
   const uniquePosts = Array.from(
     new Map(posts.filter(p => p && p._id).map((p) => [p._id, p])).values()
   );
-  
+
   const hasMore = data && data[data.length - 1]?.posts?.length === limit;
 
   // Infinite scroll
@@ -57,8 +56,8 @@ export default function ClientCategoryPage({ category, initialPosts }) {
   }, [hasMore, isLoading, isValidating, setSize]);
 
   return (
-    <div 
-      ref={ref} 
+    <div
+      ref={ref}
       className="bg-transparent rounded-2xl shadow-md"
     >
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-6 relative min-h-[75vh]">
@@ -68,7 +67,7 @@ export default function ClientCategoryPage({ category, initialPosts }) {
         <div className="absolute bottom-10 right-10 w-56 h-56 bg-blue-300 dark:bg-blue-700 opacity-10 rounded-full blur-[120px] animate-pulse pointer-events-none" />
 
         <div className="md:flex md:gap-12 items-start overflow-visible">
-          
+
           {/* --- MAIN CONTENT AREA --- */}
           <div
             id="postsContainer"
@@ -90,18 +89,20 @@ export default function ClientCategoryPage({ category, initialPosts }) {
               {uniquePosts.length > 0 ? (
                 uniquePosts.map((post, index) => (
                   <div key={post._id || index} className="break-inside-avoid">
-                    <PostCard 
-                      post={post} 
-                      posts={uniquePosts} 
-                      setPosts={() => { }} 
-                      isFeed 
-                      isPriority={index < 2} 
+                    <PostCard
+                      post={post}
+                      authorData={post.authorData}
+                      clanData={post.clanData}
+                      posts={uniquePosts}
+                      setPosts={() => { }}
+                      isFeed
+                      isPriority={index < 2}
                     />
-                    
+
                     {(index + 1) % 2 === 0 && (
-                       <div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex flex-col items-center gap-1 justify-center bg-gray-50/50 dark:bg-white/5">
+                      <div className="my-10 w-full p-4 border border-dashed border-gray-200 dark:border-gray-800 rounded-3xl flex flex-col items-center gap-1 justify-center bg-gray-50/50 dark:bg-white/5">
                         <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest italic">Sponsored Transmission</span>
-                         <FeedAd /> 
+                        <FeedAd />
                       </div>
                     )}
                   </div>
@@ -119,12 +120,12 @@ export default function ClientCategoryPage({ category, initialPosts }) {
             <div className="py-12 min-h-[140px] flex flex-col items-center justify-center">
               {(isLoading || (isValidating && size > (data?.length || 0))) ? (
                 <div className="flex flex-col items-center gap-3">
-                   <div className="w-16 h-1 bg-gray-100 dark:bg-gray-800 overflow-hidden rounded-full relative">
-                      <div className="absolute inset-0 bg-blue-600 animate-[loading_1.5s_infinite]" />
-                   </div>
-                   <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 animate-pulse">
-                      Retrieving Data...
-                   </p>
+                  <div className="w-16 h-1 bg-gray-100 dark:bg-gray-800 overflow-hidden rounded-full relative">
+                    <div className="absolute inset-0 bg-blue-600 animate-[loading_1.5s_infinite]" />
+                  </div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 animate-pulse">
+                    Retrieving Data...
+                  </p>
                 </div>
               ) : hasMore ? (
                 <div className="text-center mt-6">
@@ -161,9 +162,8 @@ export default function ClientCategoryPage({ category, initialPosts }) {
             <button
               aria-label="Open drawer"
               onClick={() => setDrawerOpen((prev) => !prev)}
-              className={`fixed top-1/2 -right-2 transform -translate-y-1/2 z-50 w-14 h-14 rounded-l-2xl flex items-center justify-center shadow-2xl transition-all ${
-                drawerOpen ? "bg-red-600" : "bg-blue-600"
-              }`}
+              className={`fixed top-1/2 -right-2 transform -translate-y-1/2 z-50 w-14 h-14 rounded-l-2xl flex items-center justify-center shadow-2xl transition-all ${drawerOpen ? "bg-red-600" : "bg-blue-600"
+                }`}
             >
               <div className="relative">
                 {drawerOpen ? <span className="text-xl text-white">✕</span> : <FaPoll className="text-xl text-white" />}
@@ -173,9 +173,8 @@ export default function ClientCategoryPage({ category, initialPosts }) {
 
             {/* Drawer Sliding Panel */}
             <div
-              className={`fixed top-0 right-0 z-40 h-full w-[85%] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-xl border-l border-blue-600/20 p-6 shadow-[-20px_0_50px_rgba(0,0,0,0.3)] transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${
-                drawerOpen ? "translate-x-0" : "translate-x-full"
-              }`}
+              className={`fixed top-0 right-0 z-40 h-full w-[85%] bg-white/95 dark:bg-[#0a0a0a]/95 backdrop-blur-xl border-l border-blue-600/20 p-6 shadow-[-20px_0_50px_rgba(0,0,0,0.3)] transition-all duration-500 ease-[cubic-bezier(0.23,1,0.32,1)] ${drawerOpen ? "translate-x-0" : "translate-x-full"
+                }`}
             >
               <div className="mt-20">
                 <div className="flex items-center justify-between mb-8">
@@ -188,9 +187,9 @@ export default function ClientCategoryPage({ category, initialPosts }) {
 
             {/* FIXED: Conditional rendering using && instead of if */}
             {drawerOpen && (
-              <div 
+              <div
                 onClick={() => setDrawerOpen(false)}
-                className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30" 
+                className="fixed inset-0 bg-black/40 backdrop-blur-sm z-30"
               />
             )}
           </div>
@@ -208,4 +207,4 @@ export default function ClientCategoryPage({ category, initialPosts }) {
       </div>
     </div>
   );
-        }
+}

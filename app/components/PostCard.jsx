@@ -285,12 +285,12 @@ export default function PostCardComponent({ post, authorData, clanData, isFeed, 
 		let count = 0;
 		commentsArray.forEach(c => {
 			const replies = c.replies || [];
-			if (replies.length >= 3) { count++; return; }
+			if (replies.length >= 5) { count++; return; }
 			const authors = new Set();
 			const getId = (item) => item.authorUserId || item.authorFingerprint || item.name;
 			authors.add(getId(c));
 			replies.forEach(r => authors.add(getId(r)));
-			if (authors.size >= 2) count++;
+			if (authors.size >= 3) count++;
 		});
 		return count;
 	}, [activeData?.comments]);
@@ -553,7 +553,7 @@ export default function PostCardComponent({ post, authorData, clanData, isFeed, 
 							<Icons.Comment className="text-gray-600 dark:text-gray-400" />
 							<span className="text-xs font-black text-gray-500 group-hover:text-blue-500 transition-colors">{formatViews(totalComments)}</span>
 						</Link>
-						<Link href={`/post/${post.slug || post?._id}?comment=open`} className="hidden sm:flex flex-row items-center gap-2 hover:opacity-80 transition-opacity group">
+						<Link href={`/post/${post.slug || post?._id}?comment=open`} className="flex flex-row items-center gap-2 hover:opacity-80 transition-opacity group">
 							<Icons.Forum className="text-gray-600 dark:text-gray-400" />
 							<span className="text-xs font-black text-gray-500 group-hover:text-blue-500 transition-colors">{formatViews(totalDiscussions)}</span>
 						</Link>
