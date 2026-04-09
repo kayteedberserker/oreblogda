@@ -256,8 +256,8 @@ async function weeklyClanReset() {
   const bulkOps = [];
   const pillPromises = []; // ⚡️ Array to hold all our pill creations
 
-  // ⚡️ LOGIC FIX: Added "Talk-no-jutsu" so it is properly stripped from everyone before being reassigned
-  const weeklyTitleBadges = ["The Pirate King", "The Pillars", "Hunter Association", "Talk-no-jutsu"];
+  // ⚡️ Pull all weekly badges (Talk-no-jutsu reset included)
+  const weeklyTitleBadges = ["The Pirate King", "The Pillars", "Hunter Association", "Talk-no-jutsu", "Talk no jutsu"];
   await Clan.updateMany({}, { $pull: { badges: { $in: weeklyTitleBadges } } });
 
   for (let i = 0; i < rankedClans.length; i++) {
@@ -270,16 +270,19 @@ async function weeklyClanReset() {
     let incFields = {};
     let badgesToAdd = [];
 
-    // --- Decay & Rank Logic ---
+    // --- Decay Logic (Allows Negative Points) ---
     const decayValue = decayAmounts[currentRank - 1] || 0;
     let decayedPoints = (clan.totalPoints || 0) - decayValue;
-    if (decayedPoints < 0) decayedPoints = 0; // Prevent negative points
 
-    let newRank = 1;
-    for (let r = rankThresholds.length - 1; r >= 0; r--) {
-      if (decayedPoints >= rankThresholds[r]) {
-        newRank = r + 1;
-        break;
+    // ⚡️ New Rank Logic: Default to 0 (Debt/Exiled status)
+    let newRank = 0;
+    if (decayedPoints > 0) {
+      newRank = 1;
+      for (let r = rankThresholds.length - 1; r >= 0; r--) {
+        if (decayedPoints >= rankThresholds[r]) {
+          newRank = r + 1;
+          break;
+        }
       }
     }
 
@@ -298,8 +301,12 @@ async function weeklyClanReset() {
         replaceExistingType: false
       }));
     } else if (newRank < currentRank) {
+      const demotionMsg = newRank === 0 
+        ? `⚠️ EXILED: Your clan is in DEBT (${decayedPoints} pts). Earn points to restore rank!`
+        : `⚠️ DEMOTION: Weekly decay dropped your clan to Tier ${newRank}.`;
+        
       pillPromises.push(createMessagePill({
-        text: `⚠️ DEMOTION: Weekly decay dropped your clan to Tier ${newRank}.`,
+        text: demotionMsg,
         type: 'warning',
         targetAudience: 'clan',
         targetId: clan.tag,
@@ -309,11 +316,11 @@ async function weeklyClanReset() {
       }));
     }
 
-    // --- Streak Logic ---
+    // --- Streak Logic (Only for Rank > 0) ---
     const nextRankThreshold = rankThresholds[newRank];
     let hit80PercentLimit = false;
 
-    if (nextRankThreshold) {
+    if (nextRankThreshold && newRank > 0) {
       if (decayedPoints >= (nextRankThreshold * 0.8)) hit80PercentLimit = true;
     } else if (newRank === 6) {
       hit80PercentLimit = true;
@@ -326,6 +333,7 @@ async function weeklyClanReset() {
       }
     } else {
       setFields.consecutiveWeeksNoDerank = 0;
+      // Immediate individual pull to prevent bulkWrite conflicts with $addToSet
       await Clan.updateOne({ _id: clan._id }, { $pull: { badges: "Unlimited Chakra" } });
     }
 
@@ -338,36 +346,35 @@ async function weeklyClanReset() {
       else if (growth >= 1.5) badgesToAdd.push("Zenkai Boost");
     }
 
-    // --- Weekly Titles ---
-    if (position === 1) {
-      badgesToAdd.push("The Pirate King");
-      // ⚡️ PILL TRIGGER: Global announcement for the #1 Clan
-      pillPromises.push(createMessagePill({
-        text: `👑 ALL HAIL: [${clan.tag}] ${clan.name} is the #1 Clan of the Week!`,
-        type: 'event', // Use event theme for global broadcasts (Purple/Gold)
-        targetAudience: 'global',
-        link: `/clans/${clan.tag}`, // Deep link straight to their clan page
-        priority: 3,
-        expiresInHours: 72,
-        replaceExistingType: true
-      }));
-    }
-    else if (position <= 5) badgesToAdd.push("The Pillars");
-    else if (position <= 10) badgesToAdd.push("Hunter Association");
+    // --- Weekly Titles (Only for Rank > 0) ---
+    if (newRank > 0) {
+      if (position === 1) {
+        badgesToAdd.push("The Pirate King");
+        pillPromises.push(createMessagePill({
+          text: `👑 ALL HAIL: [${clan.tag}] ${clan.name} is the #1 Clan of the Week!`,
+          type: 'event',
+          targetAudience: 'global',
+          link: `/clans/${clan.tag}`,
+          priority: 3,
+          expiresInHours: 72,
+          replaceExistingType: true
+        }));
+      }
+      else if (position <= 5) badgesToAdd.push("The Pillars");
+      else if (position <= 10) badgesToAdd.push("Hunter Association");
 
-    // Assign the Most Discussed badge safely
-    if (mostDiscussedClan && clan._id.equals(mostDiscussedClan._id)) {
-      badgesToAdd.push("Talk-no-jutsu");
-      // ⚡️ PILL TRIGGER: Let the clan know they are famous
-      pillPromises.push(createMessagePill({
-        text: `💬 TALK-NO-JUTSU: Your clan was the most discussed in the village this week!`,
-        type: 'achievement',
-        targetAudience: 'clan',
-        targetId: clan.tag,
-        priority: 2,
-        expiresInHours: 72,
-        replaceExistingType: false
-      }));
+      if (mostDiscussedClan && clan._id.equals(mostDiscussedClan._id)) {
+        badgesToAdd.push("Talk-no-jutsu");
+        pillPromises.push(createMessagePill({
+          text: `💬 TALK-NO-JUTSU: Your clan was the most discussed this week!`,
+          type: 'achievement',
+          targetAudience: 'clan',
+          targetId: clan.tag,
+          priority: 2,
+          expiresInHours: 72,
+          replaceExistingType: false
+        }));
+      }
     }
 
     pushFields.weeklyPointHistory = {
