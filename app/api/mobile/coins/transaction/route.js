@@ -1,7 +1,7 @@
-import MobileUser from '@/app/models/MobileUserModel';
 import connectDB from '@/app/lib/mongodb';
-import { NextResponse } from 'next/server';
 import { sendPushNotification } from '@/app/lib/pushNotifications';
+import MobileUser from '@/app/models/MobileUserModel';
+import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer'; // Assuming you have this imported for your emails
 
 const OC_VALUES = {
@@ -9,7 +9,7 @@ const OC_VALUES = {
     'daily_login_7': 50,
     "1kpostevent": 1000,
     'streak_restore': 50,
-    'create_clan': 500,
+    'create_clan': 250,
     'extra_slot': 20,
     'clan_war': 20,
 };
@@ -36,7 +36,7 @@ const calculatePeakLevel = (totalPurchased) => {
 export async function GET(req) {
     try {
         await connectDB();
-        
+
         // Extract deviceId from URL query parameters
         const { searchParams } = new URL(req.url);
         const deviceId = searchParams.get('deviceId');
@@ -74,7 +74,7 @@ export async function POST(req) {
     try {
         await connectDB();
         const body = await req.json();
-        
+
         // ⚡️ Added expiresInDays to the destructured body
         const { deviceId, action, type, packId, coinType, itemId, price, name, category, rarity, visualConfig, rewards, payload, expiresInDays } = body;
 
@@ -118,8 +118,8 @@ export async function POST(req) {
                 console.error("🔔 Push failed but transfer succeeded:", pushErr);
             }
 
-            return NextResponse.json({ 
-                success: true, 
+            return NextResponse.json({
+                success: true,
                 newBalance: user.coins,
                 message: `Transferred ${transferAmount} OC to ${recipient.username}`
             });
@@ -158,11 +158,11 @@ export async function POST(req) {
 
                     // Add the new days
                     newExpiryDate.setDate(newExpiryDate.getDate() + parseInt(expiresInDays));
-                    
+
                     // Update the item and deduct coins
                     existingItem.expiresAt = newExpiryDate;
                     user[balanceKey] -= price;
-                    
+
                     // Tell Mongoose the inventory array was modified so it saves correctly
                     user.markModified('inventory');
 
@@ -180,7 +180,7 @@ export async function POST(req) {
                 expiryDate = new Date();
                 expiryDate.setDate(expiryDate.getDate() + parseInt(expiresInDays));
             }
-            
+
             user.inventory.push({
                 itemId,
                 name: name || 'Unnamed Item',
@@ -210,7 +210,7 @@ export async function POST(req) {
 
         // --- ACTION: PURCHASE PACK (UNPACKING REWARDS) ---
         if (action === 'purchase_pack') {
-            const packData = rewards; 
+            const packData = rewards;
             if (!packData) return NextResponse.json({ error: 'Pack data missing' }, { status: 400 });
 
             if (user.purchasedPacks?.includes(packId)) {
@@ -222,13 +222,13 @@ export async function POST(req) {
                     user.coins = (user.coins || 0) + reward.amount;
                 }
                 if (reward.type === 'MULTIPLIER') {
-                    const now = user.doubleStreakUntil && user.doubleStreakUntil > new Date() 
-                        ? new Date(user.doubleStreakUntil) 
+                    const now = user.doubleStreakUntil && user.doubleStreakUntil > new Date()
+                        ? new Date(user.doubleStreakUntil)
                         : new Date();
                     now.setDate(now.getDate() + (reward.duration || 7));
                     user.doubleStreakUntil = now;
                 }
-                
+
                 const inventoryCategories = ['WATERMARK', 'BADGE', 'BORDER', 'GLOW', 'BACKGROUND'];
                 if (inventoryCategories.includes(reward.type)) {
                     const alreadyHasItem = user.inventory.some(inv => inv.itemId === reward.id);
@@ -265,11 +265,11 @@ export async function POST(req) {
             user.purchasedPacks.push(packId);
 
             await user.save();
-            return NextResponse.json({ 
-                success: true, 
-                balance: user.coins, 
+            return NextResponse.json({
+                success: true,
+                balance: user.coins,
                 inventory: user.inventory,
-                doubleStreakUntil: user.doubleStreakUntil 
+                doubleStreakUntil: user.doubleStreakUntil
             });
         }
 
@@ -288,7 +288,7 @@ export async function POST(req) {
 
             // ⚡️ Add to total purchased REGARDLESS of OC or CC (since both use real money)
             user.totalPurchasedCoins = (user.totalPurchasedCoins || 0) + amount;
-            
+
             // ⚡️ Automatically calculate and upgrade Peak Level
             user.peakLevel = calculatePeakLevel(user.totalPurchasedCoins);
 
@@ -300,10 +300,10 @@ export async function POST(req) {
                     service: "gmail",
                     auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
                 });
-                
+
                 const mailOptions = {
                     from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
-                    to: "Admins", 
+                    to: "Admins",
                     bcc: ["kayteedberserker@gmail.com"],
                     subject: `💰 New Coin Purchase Alert!`,
                     html: `
@@ -314,16 +314,16 @@ export async function POST(req) {
                         <p><strong>New Peak Level:</strong> ${user.peakLevel}</p>
                     `
                 };
-                
+
                 await transporter.sendMail(mailOptions);
             } catch (emailErr) {
                 console.error("Coin purchase email notification failed:", emailErr);
             }
 
             // ⚡️ Return the new total and peak back to the app context
-            return NextResponse.json({ 
-                success: true, 
-                newBalance: user.coins, 
+            return NextResponse.json({
+                success: true,
+                newBalance: user.coins,
                 newClanBalance: user.clanCoins,
                 totalPurchasedCoins: user.totalPurchasedCoins,
                 peakLevel: user.peakLevel
@@ -344,23 +344,23 @@ export async function POST(req) {
                 user.lastClaimedDate = new Date();
                 if (user.consecutiveStreak == 7) {
                     user.consecutiveStreak = 1
-                }else {
+                } else {
                     user.consecutiveStreak += 1
                 }
-            } 
+            }
             // 🔹 Validation 2: Special One-Time Events (e.g., '1kpostevent')
             else {
                 // Ensure the array exists
                 if (!user.claimedEvents) user.claimedEvents = [];
-                
+
                 // Check if they already claimed this specific event
                 const hasClaimed = user.claimedEvents.some(event => event.eventId === type);
-                
+
                 if (hasClaimed) {
                     // ⚡️ Note: The frontend explicitly looks for the word "Already claimed" to lock the button!
                     return NextResponse.json({ error: 'Reward already claimed.' }, { status: 400 });
                 }
-                
+
                 // Record the claim so they can never get it again
                 user.claimedEvents.push({ eventId: type });
             }
@@ -369,7 +369,7 @@ export async function POST(req) {
             await user.save();
             return NextResponse.json({ success: true, newBalance: user.coins });
         }
-        
+
         if (action === 'spend') {
             const amount = OC_VALUES[type];
             if (user.coins < amount) return NextResponse.json({ error: 'Insufficient OC' }, { status: 400 });
@@ -377,14 +377,14 @@ export async function POST(req) {
             await user.save();
             return NextResponse.json({ success: true, newBalance: user.coins });
         }
-        
+
         if (action === 'refund') {
             const amount = OC_VALUES[type];
             user.coins += amount;
             await user.save();
             return NextResponse.json({ success: true, newBalance: user.coins });
         }
-        
+
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
 
     } catch (error) {
