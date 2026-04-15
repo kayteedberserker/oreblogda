@@ -1,7 +1,7 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 
 // --- 1. THE WEB PREVIEWER LOGIC ---
@@ -106,26 +106,26 @@ export default function AdminPendingPosts() {
     const [user, setUser] = useState(null);
     const [posts, setPosts] = useState([]);
     const [loading, setLoading] = useState(true);
-    
+
     // UI Loading states
-    const [btnLoading, setbtnLoading] = useState(null); 
+    const [btnLoading, setbtnLoading] = useState(null);
     const [versionLoading, setVersionLoading] = useState(false);
-    
+
     // Rejection Logic State
     const [rejectingPost, setRejectingPost] = useState(null); // Holds the full post object being rejected
     const [selectedReason, setSelectedReason] = useState("");
     const [customReason, setCustomReason] = useState("");
 
     const generalReasons = [
-        "Spam", 
-        "Too short", 
-        "Improper language", 
-        "Abuse", 
-        "Racist", 
-        "Inaccurate news", 
+        "Spam",
+        "Too short",
+        "Improper language",
+        "Abuse",
+        "Racist",
+        "Inaccurate news",
         "Wrong category"
     ];
-    
+
     // Version Control states
     const [currentVer, setCurrentVer] = useState("Checking...");
     const [newVer, setNewVer] = useState("");
@@ -164,7 +164,8 @@ export default function AdminPendingPosts() {
         try {
             const res = await fetch("/api/version");
             const data = await res.json();
-            if (data.version) setCurrentVer(data.version);
+
+            if (data.appVersion) setCurrentVer(`${data.appVersion}, ${data.runtimeVersion}`);
         } catch (err) {
             console.error("Version fetch failed");
         }
@@ -212,14 +213,14 @@ export default function AdminPendingPosts() {
             return;
         }
 
-        setbtnLoading(`${status}-${postId}`); 
+        setbtnLoading(`${status}-${postId}`);
         try {
             const res = await fetch(`/api/admin/posts/${postId}`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ 
-                    status, 
-                    rejectionReason: status === "rejected" ? reasonToSubmit : null 
+                body: JSON.stringify({
+                    status,
+                    rejectionReason: status === "rejected" ? reasonToSubmit : null
                 }),
             });
 
@@ -305,11 +306,10 @@ export default function AdminPendingPosts() {
                                             setSelectedReason(reason);
                                             setCustomReason("");
                                         }}
-                                        className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border-2 transition-all ${
-                                            selectedReason === reason 
-                                            ? "bg-red-600 border-red-600 text-white" 
+                                        className={`px-4 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border-2 transition-all ${selectedReason === reason
+                                            ? "bg-red-600 border-red-600 text-white"
                                             : "border-gray-100 dark:border-gray-800 text-gray-400 hover:border-red-600/50"
-                                        }`}
+                                            }`}
                                     >
                                         {reason}
                                     </button>
@@ -318,7 +318,7 @@ export default function AdminPendingPosts() {
 
                             <div className="relative mb-8">
                                 <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 ml-1">Manual Entry (Optional)</div>
-                                <textarea 
+                                <textarea
                                     value={customReason}
                                     onChange={(e) => {
                                         setCustomReason(e.target.value);
@@ -330,13 +330,13 @@ export default function AdminPendingPosts() {
                             </div>
 
                             <div className="flex gap-4">
-                                <button 
+                                <button
                                     onClick={() => setRejectingPost(null)}
                                     className="flex-1 py-4 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-gray-600 dark:hover:text-white transition-colors"
                                 >
                                     Abort
                                 </button>
-                                <button 
+                                <button
                                     onClick={() => handleAction(rejectingPost._id, "rejected")}
                                     disabled={!selectedReason && !customReason}
                                     className="flex-[2] bg-red-600 hover:bg-red-700 disabled:opacity-30 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-red-600/20"
@@ -366,17 +366,17 @@ export default function AdminPendingPosts() {
                         </div>
 
                         <form onSubmit={handleUpdateVersion} className="flex flex-wrap items-center gap-4 w-full md:w-auto">
-                            <input 
+                            <input
                                 type="text"
                                 placeholder="New Version"
                                 value={newVer}
                                 onChange={(e) => setNewVer(e.target.value)}
                                 className="bg-white dark:bg-black border-2 border-gray-200 dark:border-gray-800 rounded-xl px-4 py-2 text-sm font-bold text-gray-900 dark:text-white focus:border-blue-600 outline-none w-full md:w-48"
                             />
-                            
+
                             <label className="flex items-center gap-2 cursor-pointer">
-                                <input 
-                                    type="checkbox" 
+                                <input
+                                    type="checkbox"
                                     checked={isCritical}
                                     onChange={(e) => setIsCritical(e.target.checked)}
                                     className="accent-blue-600 h-4 w-4"
@@ -384,7 +384,7 @@ export default function AdminPendingPosts() {
                                 <span className="text-[10px] font-black uppercase text-gray-500">Critical</span>
                             </label>
 
-                            <button 
+                            <button
                                 type="submit"
                                 disabled={versionLoading}
                                 className="bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white px-6 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-lg shadow-blue-600/20"
@@ -438,8 +438,8 @@ export default function AdminPendingPosts() {
                                         <button
                                             onClick={() => setPreviewingId(previewingId === post._id ? null : post._id)}
                                             className={`text-[10px] font-black tracking-[0.2em] px-5 py-2.5 rounded-xl border-2 transition-all ${previewingId === post._id
-                                                    ? "bg-red-600 border-red-600 text-white"
-                                                    : "bg-transparent border-gray-200 dark:border-gray-700 text-gray-500 hover:border-blue-600 hover:text-blue-600"
+                                                ? "bg-red-600 border-red-600 text-white"
+                                                : "bg-transparent border-gray-200 dark:border-gray-700 text-gray-500 hover:border-blue-600 hover:text-blue-600"
                                                 }`}
                                         >
                                             {previewingId === post._id ? "CLOSE DOSSIER" : "VIEW INTEL"}
@@ -519,4 +519,4 @@ export default function AdminPendingPosts() {
             </div>
         </div>
     );
-    }
+}
