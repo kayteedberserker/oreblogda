@@ -1,14 +1,15 @@
-import { NextResponse } from 'next/server';
-import mongoose from 'mongoose';
 import connectDB from '@/app/lib/mongodb';
-import MobileUser from '@/app/models/MobileUserModel';
 import { sendPushNotification } from '@/app/lib/pushNotifications';
+import MobileUser from '@/app/models/MobileUserModel';
+import mongoose from 'mongoose';
+import { NextResponse } from 'next/server';
 
-// Define the Schema
+// Define the Schema - keeping it flexible with separate fields for the app to consume easily
 const VersionSchema = new mongoose.Schema({
-  key: { type: String, default: 'latest_app_version' },
-  version: { type: String, required: true },
-  critical: { type: Boolean, default: false },
+    key: { type: String, default: 'latest_app_version' },
+    appVersion: { type: String, required: true },
+    runtimeVersion: { type: String, required: true },
+    critical: { type: Boolean, default: false },
 }, { timestamps: true });
 
 const VersionModel = mongoose.models.Version || mongoose.model('Version', VersionSchema);
@@ -30,63 +31,78 @@ export async function GET() {
     await connectDB();
     try {
         const config = await VersionModel.findOne({ key: 'latest_app_version' });
-        const res = NextResponse.json(config || { version: "1.0.0", critical: false });
+        // Return separated fields so the RN app can easily compare
+        const res = NextResponse.json(config || { appVersion: "1.0.0", runtimeVersion: "v1", critical: false });
         return addCorsHeaders(res);
     } catch (error) {
         return addCorsHeaders(NextResponse.json({ error: "Failed to fetch version" }, { status: 500 }));
     }
 }
 
-// POST: Update version and notify all users
+// POST: Receives "appVersion,runtimeVersion" and splits them
 export async function POST(req) {
     await connectDB();
     try {
         const body = await req.json();
-        const { version, critical } = body;
+        const { version, critical } = body; // "version" expected as "2.1.2,v5"
 
-        // 1. Update/Create the version record
+        // --- SPLITTING LOGIC ---
+        let appV = "1.0.0";
+        let runV = "v1";
+
+        if (version && version.includes(',')) {
+            const parts = version.split(',');
+            appV = parts[0].trim();
+            runV = parts[1].trim();
+        } else {
+            // Fallback if someone forgets the comma
+            appV = version || "1.0.0";
+        }
+
+        // 1. Update/Create the version record with split values
         const updated = await VersionModel.findOneAndUpdate(
             { key: 'latest_app_version' },
-            { version, critical },
+            {
+                appVersion: appV,
+                runtimeVersion: runV,
+                critical: critical
+            },
             { upsert: true, new: true }
         );
 
-        
-        // 2. Fetch all mobile users with a push token
+        let mobileUsers = [];
 
-          if(critical) {
-         const mobileUsers = await MobileUser.find(
-            { pushToken: { $exists: true, $ne: null } },
-            "pushToken"
-        );
+        // 2. Fetch users for notification if critical
+        if (critical) {
+            mobileUsers = await MobileUser.find(
+                { pushToken: { $exists: true, $ne: null } },
+                "pushToken"
+            );
 
+            // 3. Notify them
+            if (mobileUsers.length > 0) {
+                const title = "🚀 Critical System Update";
+                const message = `New System Patch ${appV} is ready. Please update to avoid connection loss.`;
 
-      
-        // 3. Notify them using your established loop pattern
-        if (mobileUsers.length > 0) {
-            const title = critical ? "🚀 Critical System Update" : "✨ New Update Available";
-            const message = `Version ${version} is now available. Please update to ensure system stability.`;
-
-            for (const user of mobileUsers) {
-                try {
-                    await sendPushNotification(
-                        user.pushToken,
-                        title,
-                        message,
-                        { type: "version_update", version: version }
-                    );
-                } catch (err) {
-                    console.error("Push notify user failed during version update:", err);
+                for (const user of mobileUsers) {
+                    try {
+                        await sendPushNotification(
+                            user.pushToken,
+                            title,
+                            message,
+                            { type: "version_update", appVersion: appV, runtimeVersion: runV }
+                        );
+                    } catch (err) {
+                        console.error("Push notify user failed:", err);
+                    }
                 }
             }
         }
 
-          }
-      
-        const res = NextResponse.json({ 
-            success: true, 
-            data: updated, 
-            notifiedCount: mobileUsers.length 
+        const res = NextResponse.json({
+            success: true,
+            data: updated,
+            notifiedCount: mobileUsers.length
         });
         return addCorsHeaders(res);
 
