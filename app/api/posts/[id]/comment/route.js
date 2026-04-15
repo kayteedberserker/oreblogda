@@ -1,13 +1,14 @@
-import { NextResponse } from "next/server";
-import connectDB from "@/app/lib/mongodb";
-import Post from "@/app/models/PostModel";
-import Notification from "@/app/models/NotificationModel";
-import MobileUser from "@/app/models/MobileUserModel";
-import { sendPushNotification } from "@/app/lib/pushNotifications";
-import mongoose from "mongoose";
 import { awardClanPoints } from "@/app/lib/clanService";
+import connectDB from "@/app/lib/mongodb";
+import { sendPushNotification } from "@/app/lib/pushNotifications";
+import MobileUser from "@/app/models/MobileUserModel";
+import Notification from "@/app/models/NotificationModel";
+import Post from "@/app/models/PostModel";
+import mongoose from "mongoose";
+import { NextResponse } from "next/server";
 // ⚡️ Add this import at the top of your file
 import { awardAura } from "@/app/lib/auraManager";
+import { sendPillParallel } from "@/app/lib/messagePillService";
 // --- Helper: Milestone Check Logic ---
 const shouldNotifyMilestone = (count) => {
   if (count <= 5) return true;
@@ -33,16 +34,16 @@ const getBranchData = (comment) => {
 // --- Helper: Populate and Derive Author Data for UI Components ---
 const populateAuthors = async (comments) => {
   if (!comments || comments.length === 0) return [];
-  
+
   const userIds = new Set();
-  
+
   const extractIds = (nodes) => {
     nodes.forEach(node => {
       if (node.authorUserId) userIds.add(node.authorUserId.toString());
       if (node.replies) extractIds(node.replies);
     });
   };
-  
+
   extractIds(comments);
 
   // Fetch only the necessary fields to derive our UI requirements
@@ -52,7 +53,7 @@ const populateAuthors = async (comments) => {
   const userMap = users.reduce((acc, user) => {
     // 1. Get all equipped inventory items
     const equippedItems = user.inventory ? user.inventory.filter(i => i.isEquipped) : [];
-    
+
     // 2. Derive specific items
     // Checking a few common categories for glows, adjust if your specific category name is different
     const equippedGlow = equippedItems.find(i => ['GLOW'].includes(i.category?.toUpperCase())) || null;
@@ -104,7 +105,7 @@ export async function GET(req, { params }) {
         comments: { $slice: [skip, limit] },
         commentCount: { $size: "$comments" }
       })
-      .lean(); 
+      .lean();
 
     if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
 
@@ -170,14 +171,14 @@ export async function POST(req, { params }) {
     if (!parentCommentId) {
       post.comments.unshift(newComment);
       immediateRecipientId = post.authorUserId;
-      
+
       // The Author of the Post gets +10 Aura when someone comments on their thread
       if (post.authorUserId && post.authorUserId.toString() !== mobileUserId?.toString()) {
         // ⚡️ Using Centralized Aura Manager
         await awardAura(post.authorUserId, 10);
         await awardClanPoints(post, 20, 'comment');
       }
-    } 
+    }
     // ⚡️ RULE 2: REPLY AURA
     else {
       immediateRecipientId = findAndReply(post.comments);
@@ -188,7 +189,7 @@ export async function POST(req, { params }) {
       if (immediateRecipientId.toString() !== mobileUserId?.toString()) {
         // ⚡️ Using Centralized Aura Manager
         await awardAura(immediateRecipientId, 5);
-        await awardClanPoints(post, 10, 'comment'); 
+        await awardClanPoints(post, 10, 'comment');
       }
     }
 
@@ -202,7 +203,7 @@ export async function POST(req, { params }) {
         title: "New Reply 💬",
         message: `${name} replied: "${text.substring(0, 20)}..."`,
         type: "reply",
-        commentId: targetRootComment?._id || parentCommentId, 
+        commentId: targetRootComment?._id || parentCommentId,
         isMongoId: true
       });
     }
@@ -213,7 +214,7 @@ export async function POST(req, { params }) {
         title: "New Signal 📝",
         message: `${name} started a new signal (#${post.comments.length})`,
         type: "comment",
-        commentId: newComment._id, 
+        commentId: newComment._id,
         isMongoId: true
       });
     }
@@ -223,20 +224,20 @@ export async function POST(req, { params }) {
       const { participants, totalMessages } = getBranchData(targetRootComment);
 
       if (totalMessages > 0 && totalMessages % 5 === 0) {
-        
+
         // Gather everyone who deserves the +1 Discussion Aura
         const rewardIds = new Set(participants); // This includes all repliers and the main commenter
         if (post.authorUserId) rewardIds.add(post.authorUserId.toString()); // Add the original post author
-        
+
         // Remove the person who just commented so they can't farm Aura by replying to themselves
         if (mobileUserId) rewardIds.delete(mobileUserId.toString());
 
         const idsToReward = Array.from(rewardIds);
 
         if (idsToReward.length > 0) {
-            // ⚡️ Using Promise.all to run the Aura Manager for every participant concurrently
-            await Promise.all(idsToReward.map(id => awardAura(id, 1)));
-            await awardClanPoints(post, 5, 'comment'); 
+          // ⚡️ Using Promise.all to run the Aura Manager for every participant concurrently
+          await Promise.all(idsToReward.map(id => awardAura(id, 1)));
+          await awardClanPoints(post, 5, 'comment');
         }
       }
 
@@ -249,7 +250,7 @@ export async function POST(req, { params }) {
               title: "Discussion Active 🔥",
               message: discussionMsg,
               type: "discussion",
-              commentId: targetRootComment._id, 
+              commentId: targetRootComment._id,
               isMongoId: true
             });
           }
@@ -271,17 +272,25 @@ export async function POST(req, { params }) {
         });
 
         if (user.pushToken && typeof sendPushNotification === 'function') {
+          const tokens = [user.pushToken];
           const groupId = `${n.type}_${post._id}`;
-          await sendPushNotification(
-            user.pushToken,
+          await sendPillParallel(
+            tokens,
             n.title,
             n.message,
-            { 
-              postId: post._id.toString(), 
-              type: n.type, 
-              commentId: n.commentId?.toString() 
+            {
+              postId: post._id.toString(),
+              type: n.type,
+              commentId: n.commentId?.toString()
             },
-            groupId
+            {
+              type: `post_${n.type}`,
+              targetAudience: 'user',
+              targetId: user._id.toString(),
+              singleUser: true,
+              link: `/post/${post.slug}`,
+              priority: 2
+            }
           );
         }
       }

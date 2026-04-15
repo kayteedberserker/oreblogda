@@ -1,5 +1,6 @@
 import { awardAura } from "@/app/lib/auraManager";
 import { awardClanPoints } from "@/app/lib/clanService";
+import { sendPillParallel } from "@/app/lib/messagePillService";
 import connectDB from "@/app/lib/mongodb";
 import { sendPushNotification } from "@/app/lib/pushNotifications";
 import Clan from "@/app/models/ClanModel";
@@ -253,12 +254,20 @@ export async function PATCH(req, { params }) {
                     });
 
                     if (author.pushToken) {
-                        await sendPushNotification(
-                            author.pushToken,
-                            "New Like! ❤️",
+                        const tokens = [author.pushToken];
+                        await sendPillParallel(
+                            tokens,
+                            `New Like on post: "${updatedPost.title.substring(0, 10)}..."`,
                             msg,
                             { postId: updatedPost._id.toString(), type: "post_detail" },
-                            `like_${updatedPost._id}`
+                            {
+                                type: 'post_like',
+                                targetAudience: 'user',
+                                targetId: author._id.toString(),
+                                singleUser: true,
+                                link: `/post/${updatedPost.slug}`,
+                                priority: 2
+                            }
                         );
                     }
 

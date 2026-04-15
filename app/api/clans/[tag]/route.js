@@ -1,5 +1,5 @@
+import { sendPillParallel } from "@/app/lib/messagePillService";
 import connectDB from "@/app/lib/mongodb";
-import { sendMultiplePushNotifications } from "@/app/lib/pushNotifications";
 import Clan from "@/app/models/ClanModel";
 import MobileUser from "@/app/models/MobileUserModel";
 import Post from "@/app/models/PostModel"; // 🔹 Added Post model import
@@ -16,7 +16,7 @@ const getRankDetails = (points) => {
 
 export async function GET(req, { params }) {
     await connectDB();
-    const _registerUser = MobileUser.modelName; 
+    const _registerUser = MobileUser.modelName;
     const { tag } = await params;
     const { searchParams } = new URL(req.url);
     const deviceId = searchParams.get("deviceId");
@@ -34,8 +34,8 @@ export async function GET(req, { params }) {
         const rank = getRankDetails(clan.totalPoints || 0);
 
         const responseData = clan.toObject();
-        const isAdmin = clan.leader?._id.toString() === user?._id.toString() || 
-                        clan.viceLeader?._id.toString() === user?._id.toString();
+        const isAdmin = clan.leader?._id.toString() === user?._id.toString() ||
+            clan.viceLeader?._id.toString() === user?._id.toString();
 
         return NextResponse.json({
             ...responseData,
@@ -43,8 +43,8 @@ export async function GET(req, { params }) {
             nextThreshold: rank.next,
             rankColor: rank.color,
             isAdmin,
-            role: clan.leader?._id.toString() === user?._id.toString() ? "leader" : 
-                  (clan.viceLeader?._id.toString() === user?._id.toString() ? "viceLeader" : "member")
+            role: clan.leader?._id.toString() === user?._id.toString() ? "leader" :
+                (clan.viceLeader?._id.toString() === user?._id.toString() ? "viceLeader" : "member")
         });
     } catch (err) {
         return NextResponse.json({ message: "Error", error: err.message }, { status: 500 });
@@ -55,7 +55,7 @@ export async function PATCH(req, { params }) {
     await connectDB();
     const { tag } = await params;
     const { deviceId, action, payload } = await req.json();
-    
+
     try {
         const user = await MobileUser.findOne({ deviceId });
         const clan = await Clan.findOne({ tag: tag.toUpperCase() });
@@ -69,7 +69,7 @@ export async function PATCH(req, { params }) {
         // 🔹 1. APPOINT VICE LEADER (Leader Only)
         if (action === "APPOINT_VICE") {
             if (!isLeader) return NextResponse.json({ message: "Forbidden: Leader access required" }, { status: 403 });
-            
+
             // If userId is provided, appoint them. If null, demote current vice.
             clan.viceLeader = payload.userId || null;
         }
@@ -80,7 +80,7 @@ export async function PATCH(req, { params }) {
 
             // We find the post globally but verify it belongs to this clan
             const postToDelete = await Post.findById(payload.postId);
-            
+
             if (!postToDelete) {
                 return NextResponse.json({ message: "Post already deleted or not found" }, { status: 404 });
             }
@@ -92,37 +92,37 @@ export async function PATCH(req, { params }) {
             }
 
             await Post.findByIdAndDelete(payload.postId);
-            
+
             return NextResponse.json({ success: true, message: "Post deleted successfully" });
         }
-        
+
         // 🔹 Handle Purchases
         if (action === "BUY_STORE_ITEM") {
             const { itemId, itemName } = payload;
-            
+
             if (itemId === "increase_slot") {
                 if (!isAdmin) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
                 if (clan.maxSlots >= 13) {
                     return NextResponse.json({ message: "Barracks already at maximum capacity (13)" }, { status: 400 });
                 }
                 clan.maxSlots += 1;
-            } 
-            
+            }
+
             else if (itemId.startsWith('badge_')) {
                 const daysStr = itemId.split('_')[1];
                 const days = parseInt(daysStr);
-                
+
                 const now = new Date();
-                const currentExpiry = (clan.verifiedUntil && clan.verifiedUntil > now) 
-                    ? new Date(clan.verifiedUntil) 
+                const currentExpiry = (clan.verifiedUntil && clan.verifiedUntil > now)
+                    ? new Date(clan.verifiedUntil)
                     : now;
-                
+
                 currentExpiry.setDate(currentExpiry.getDate() + days);
                 clan.verifiedUntil = currentExpiry;
 
                 if (!clan.specialInventory) clan.specialInventory = [];
                 let badgeItem = clan.specialInventory.find(i => i.category === 'BADGE' && i.itemId.includes('badge'));
-                
+
                 if (badgeItem) {
                     badgeItem.expiresAt = clan.verifiedUntil;
                     badgeItem.name = "Verified Badge";
@@ -137,16 +137,16 @@ export async function PATCH(req, { params }) {
                     });
                 }
             }
-            
+
             else if (itemId.startsWith('bounty_card_')) {
                 if (!clan.specialInventory) clan.specialInventory = [];
                 clan.specialInventory.push({
                     itemId: itemId,
-                    name: itemName || "Bounty Card", 
+                    name: itemName || "Bounty Card",
                     category: "FUNCTIONAL",
                     isEquipped: false,
                     acquiredAt: new Date(),
-                    expiresAt: null 
+                    expiresAt: null
                 });
             }
         }
@@ -154,12 +154,12 @@ export async function PATCH(req, { params }) {
         // 🔹 Equip Items from Inventory
         if (action === "EQUIP_ITEM") {
             if (!isAdmin) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
-            
+
             const item = clan.specialInventory.find(i => i.itemId === payload.itemId);
             if (!item) return NextResponse.json({ message: "Item not found" }, { status: 404 });
 
             const isEquipping = !item.isEquipped;
-            
+
             if (isEquipping && item.category !== 'BADGE') {
                 clan.specialInventory.forEach(i => {
                     if (i.category === item.category) i.isEquipped = false;
@@ -198,7 +198,7 @@ export async function PATCH(req, { params }) {
         if (action === "KICK_MEMBER") {
             if (!isAdmin) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
             if (payload.userId === clan.leader.toString()) return NextResponse.json({ message: "Cannot kick leader" }, { status: 400 });
-            
+
             if (payload.userId === clan.viceLeader?.toString()) clan.viceLeader = null;
 
             clan.members = clan.members.filter(m => m.toString() !== payload.userId);
@@ -207,14 +207,14 @@ export async function PATCH(req, { params }) {
         if (action === "LEAVE_CLAN") {
             if (clan.leader.toString() === user._id.toString()) return NextResponse.json({ message: "Transfer leadership first" }, { status: 403 });
             if (user._id.toString() === clan.viceLeader?.toString()) clan.viceLeader = null;
-            
+
             clan.members = clan.members.filter(m => m.toString() !== user._id.toString());
         }
 
         // 💬 🔹 NEW: HANDLE CLAN CHAT MESSAGES
         if (action === "SEND_MESSAGE") {
             const isMember = clan.members.some(m => m.toString() === user._id.toString()) || isLeader || isVice;
-            
+
             if (!isMember) {
                 return NextResponse.json({ message: "Forbidden: Not a clan member" }, { status: 403 });
             }
@@ -250,16 +250,22 @@ export async function PATCH(req, { params }) {
 
                 if (tokens.length > 0) {
                     // 3. Send the broadcast
-                    await sendMultiplePushNotifications(
+                    await sendPillParallel(
                         tokens,
                         `${clan.name} Hall`,
-                        `${user.username}: ${payload.text}`,
-                        { 
+                        `${user.username}: ${payload.text.slice(0, 100)}`,
+                        {
                             screen: "/clanprofile", // Ensure this matches your Expo Router path
                             clanTag: clan.tag,
                             type: "CLAN_CHAT"
                         },
-                        `clan_chat_${clan.tag}` // Group messages by clan hall
+                        {
+                            type: 'clan_message',
+                            targetAudience: 'clan',
+                            targetId: clan.tag,
+                            link: `/clan/${clan.tag}`,
+                            priority: 4
+                        }
                     );
                 }
             } catch (pushErr) {
@@ -271,12 +277,12 @@ export async function PATCH(req, { params }) {
         // 🔹 FINAL SAVE
         clan.markModified('specialInventory');
         clan.markModified('activeCustomizations');
-        
+
         const savedClan = await clan.save();
-        
-        return NextResponse.json({ 
-            success: true, 
-            clan: savedClan 
+
+        return NextResponse.json({
+            success: true,
+            clan: savedClan
         });
 
     } catch (err) {
