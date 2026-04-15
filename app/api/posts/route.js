@@ -1,20 +1,17 @@
-import { NextResponse } from "next/server";
-import connectDB from "@/app/lib/mongodb";
-import Post from "@/app/models/PostModel";
-import { verifyToken } from "@/app/lib/auth";
-import Newsletter from "@/app/models/Newsletter";
-import nodemailer from "nodemailer";
-import MobileUser from "@/app/models/MobileUserModel";
-import Notification from "@/app/models/NotificationModel";
-import { sendPushNotification, sendMultiplePushNotifications } from "@/app/lib/pushNotifications";
-import crypto from "crypto"; // 🛡️ Needed for Security Signature
-import { GoogleGenAI } from "@google/genai";
-import Clan from "@/app/models/ClanModel";
-import ClanFollower from "@/app/models/ClanFollower";
-import geoip from "geoip-lite";
-import { awardClanPoints } from "@/app/lib/clanService";
-import ClanModel from "@/app/models/ClanModel";
 import { awardAura } from "@/app/lib/auraManager";
+import { verifyToken } from "@/app/lib/auth";
+import { awardClanPoints } from "@/app/lib/clanService";
+import connectDB from "@/app/lib/mongodb";
+import { sendMultiplePushNotifications, sendPushNotification } from "@/app/lib/pushNotifications";
+import ClanFollower from "@/app/models/ClanFollower";
+import Clan from "@/app/models/ClanModel";
+import MobileUser from "@/app/models/MobileUserModel";
+import Newsletter from "@/app/models/Newsletter";
+import Post from "@/app/models/PostModel";
+import { GoogleGenAI } from "@google/genai";
+import geoip from "geoip-lite";
+import { NextResponse } from "next/server";
+import nodemailer from "nodemailer";
 // ----------------------
 // AI MODERATOR & AUTO-TAGGER
 // ----------------------
@@ -49,6 +46,7 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
             - 'Review' is a general category for anime/gaming related content.
             - CRITICAL: A meme post MUST be in 'Memes' category. If a meme is found in 'News' or 'Review', REJECT it for "incorrect category".
             - CRITICAL: If a meme is in 'Gaming', it MUST be a gaming-related meme, else REJECT it.
+            - CRITICAL: Reject any post that doesnt have enough context or relevant information, like if a post has title and message that doesnt have meaning, even if not related to the post a post must have a clear title and message.
 
             TAGGING & INFERENCE TASK (CRITICAL):
             1. Identify the Anime/Game mentioned or shown. 
@@ -139,6 +137,74 @@ async function notifyAllMobileUsersAboutPost(newPost, authorName) {
     }
 }
 
+function formatViewsServer(views) {
+    if (!views || views < 0) return "0";
+    if (views < 100) return views.toString();
+    if (views < 1000) return `${Math.floor(views / 100) * 100}+`;
+    if (views < 1000000) {
+        const kValue = views / 1000;
+        return `${kValue % 1 === 0 ? kValue.toFixed(0) : kValue.toFixed(1)}k+`;
+    }
+    const mValue = views / 1000000;
+    return `${mValue % 1 === 0 ? mValue.toFixed(0) : mValue.toFixed(1)}m+`;
+}
+
+function getAuraVisualsServer(rank) {
+    if (!rank || rank > 10 || rank <= 0) return { color: '#1e293b', label: 'OPERATIVE', icon: 'target' };
+    switch (rank) {
+        case 1: return { color: '#fbbf24', label: 'MONARCH', icon: 'crown' };
+        case 2: return { color: '#ef4444', label: 'YONKO', icon: 'flare' };
+        case 3: return { color: '#a855f7', label: 'KAGE', icon: 'moon-waxing-crescent' };
+        case 4: return { color: '#3b82f6', label: 'SHOGUN', icon: 'shield-star' };
+        case 5: return { color: '#e0f2fe', label: 'ESPADA 0', icon: 'skull' };
+        case 6: return { color: '#cbd5e1', label: 'ESPADA 1', icon: 'sword-cross' };
+        case 7: return { color: '#94a3b8', label: 'ESPADA 2', icon: 'sword-cross' };
+        case 8: return { color: '#64748b', label: 'ESPADA 3', icon: 'sword-cross' };
+        case 9: return { color: '#475569', label: 'ESPADA 4', icon: 'sword-cross' };
+        case 10: return { color: '#334155', label: 'ESPADA 5', icon: 'sword-cross' };
+        default: return { color: '#1e293b', label: 'OPERATIVE', icon: 'target' };
+    }
+}
+
+const AURA_TIERS = [
+    { level: 1, title: "E-Rank Novice", icon: "🌱" },
+    { level: 2, title: "D-Rank Operative", icon: "⚔️" },
+    { level: 3, title: "C-Rank Awakened", icon: "🔥" },
+    { level: 4, title: "B-Rank Elite", icon: "⚡" },
+    { level: 5, title: "A-Rank Champion", icon: "🛡️" },
+    { level: 6, title: "S-Rank Legend", icon: "🌟" },
+    { level: 7, title: "SS-Rank Mythic", icon: "🌀" },
+    { level: 8, title: "Monarch", icon: "👑" },
+];
+
+function resolveUserRankServer(level) {
+    const safeLevel = Math.max(1, Math.min(8, level || 1));
+    const tier = AURA_TIERS[safeLevel - 1];
+    return {
+        level: tier.level,
+        rankName: `${tier.icon} ${tier.title}`
+    };
+}
+
+function calculateDiscussionCount(comments) {
+    if (!Array.isArray(comments)) return 0;
+    let count = 0;
+    comments.forEach(c => {
+        const replies = c.replies || [];
+        if (replies.length >= 5) {
+            count++;
+            return;
+        }
+        const authors = new Set();
+        const getId = (item) => item.authorUserId || item.authorFingerprint || item.name;
+        authors.add(getId(c));
+        replies.forEach(r => authors.add(getId(r)));
+        if (authors.size >= 3) count++;
+    });
+    return count;
+}
+
+// Your existing normalization functions
 function normalizePostContent(content) {
     if (!content || typeof content !== "string") return content;
     let cleaned = content;
@@ -155,7 +221,7 @@ function normalizePostContent(content) {
 
 function removeEmptyLines(text) {
     return text.split('\n').filter(line => line.trim() !== '').join('\n');
-};
+}
 
 export async function GET(req) {
     await connectDB();
@@ -168,16 +234,13 @@ export async function GET(req) {
         const category = searchParams.get("category");
         const viewerId = searchParams.get("viewerId");
 
-        // 🔹 Extract Preferences from Headers
         const userCountry = req.headers.get("x-user-country") || "Global";
         const favAnimes = req.headers.get("x-user-animes")?.split(",").map(s => s.trim()).filter(Boolean) || [];
         const favGenres = req.headers.get("x-user-genres")?.split(",").map(s => s.trim()).filter(Boolean) || [];
         const favCharacter = req.headers.get("x-user-character") || "";
 
         const userInterests = [...favAnimes, ...favGenres];
-        if (favCharacter) {
-            userInterests.push(favCharacter);
-        }
+        if (favCharacter) userInterests.push(favCharacter);
 
         const clanIdParam = searchParams.get("clanId");
         const last24Hours = searchParams.get("last24Hours") === "true";
@@ -185,7 +248,6 @@ export async function GET(req) {
 
         const targetAuthor = author || authorId;
 
-        // --- STEP 1: BUILD QUERY ---
         let query = {};
         if (targetAuthor) {
             const available = await Post.find({ authorId: targetAuthor });
@@ -212,7 +274,6 @@ export async function GET(req) {
             query.createdAt = { $gte: cutoffDate };
         }
 
-        // --- STEP 2: CLAN DETECTION ---
         let followedClanTags = [];
         if (viewerId && !targetAuthor) {
             const follows = await ClanFollower.find({ userId: viewerId }).select("clanTag").lean();
@@ -222,9 +283,12 @@ export async function GET(req) {
         let posts;
         const total = await Post.countDocuments(query);
 
-        // --- STEP 3: EXECUTION BRANCH ---
         if (targetAuthor) {
             posts = await Post.find(query)
+                .select({
+                    comments: 0, // ⚡️ Optimization: Don't send full arrays in feed
+                    likes: 0
+                })
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
@@ -235,8 +299,8 @@ export async function GET(req) {
                 commentWeight: 4.0,
                 freshnessBoost: 20,
                 freshnessWindow: 3,
-                gravityPower: 1.2, 
-                prefBonus: 15,     
+                gravityPower: 1.2,
+                prefBonus: 15,
                 clanBonus: 50,
                 localBonus: 25
             };
@@ -253,6 +317,7 @@ export async function GET(req) {
                             $max: [0.5, { $divide: [{ $subtract: [now, "$createdAt"] }, 3600000] }]
                         },
                         commentsCount: { $size: { $ifNull: ["$comments", []] } },
+                        likesCount: { $size: { $ifNull: ["$likes", []] } },
                         matchCount: {
                             $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] }
                         }
@@ -262,7 +327,7 @@ export async function GET(req) {
                     $addFields: {
                         engagementScore: {
                             $add: [
-                                { $multiply: [{ $ifNull: ["$likeCount", 0] }, CONFIG.likeWeight] },
+                                { $multiply: [{ $ifNull: ["$likesCount", 0] }, CONFIG.likeWeight] },
                                 { $multiply: ["$commentsCount", CONFIG.commentWeight] }
                             ]
                         },
@@ -290,8 +355,8 @@ export async function GET(req) {
                 },
                 {
                     $sort: {
-                        finalScore: -1, 
-                        createdAt: -1  
+                        finalScore: -1,
+                        createdAt: -1
                     }
                 },
                 { $skip: skip },
@@ -301,7 +366,6 @@ export async function GET(req) {
             posts = await Post.aggregate(pipeline);
         }
 
-        // ⚡️ --- STEP 3.5: BULK FETCH AUTHOR & CLAN DATA (OPTIMIZED) --- ⚡️
         let userMap = {};
         let clanMap = {};
 
@@ -310,82 +374,78 @@ export async function GET(req) {
             const uniqueClanTags = [...new Set(posts.map(p => p.clanTag || p.clanId).filter(Boolean))];
 
             if (uniqueAuthorIds.length > 0) {
-                const validAuthorIds = uniqueAuthorIds.filter(id => id);
-                
-                if (validAuthorIds.length > 0) {
-                    // ⚡️ SERVER PERFORMANCE: Deleted the heavy Post.aggregate counting!
-                    const users = await MobileUser.find({ _id: { $in: validAuthorIds } }).lean();
-                    
-                    users.forEach(u => {
-                        const inv = u.inventory || u.specialInventory || [];
-                        const userIdStr = u._id.toString();
-                        
-                        userMap[userIdStr] = {
-                            name: u.username,
-                            image: u.profilePic?.url || null,
-                            streak: u.lastStreak || 0,
-                            
-                            // ⚡️ RESTORED: Weekly Leaderboard Rank
-                            rank: u.previousRank || 0, 
-                            
-                            peakLevel: u.peakLevel || 0,
-                            inventory: inv,
-                            
-                            // ⚡️ NEW: Lifetime RPG Progression Level (Replaces postCount)
-                            rankLevel: u.currentRankLevel || 1, 
-                            aura: u.aura || 0,
+                const users = await MobileUser.find({ _id: { $in: uniqueAuthorIds } }).lean();
+                users.forEach(u => {
+                    const inv = Array.isArray(u.inventory) ? u.inventory : (Array.isArray(u.specialInventory) ? u.specialInventory : []);
+                    const userIdStr = u._id.toString();
 
-                            equippedGlow: inv.find(i => i.category === 'GLOW' && i.isEquipped) || null,
-                            equippedBadges: inv.filter(i => i.category === 'BADGE' && i.isEquipped) || []
-                        };
-                    });
-                }
+                    // Pre-calculate user ranks and visuals on server
+                    const rankInfo = resolveUserRankServer(u.currentRankLevel || 1);
+                    const auraInfo = getAuraVisualsServer(u.previousRank || 0);
+
+                    userMap[userIdStr] = {
+                        name: u.username,
+                        image: u.profilePic?.url || null,
+                        streak: u.lastStreak || 0,
+                        rank: u.previousRank || 0,
+                        peakLevel: u.peakLevel || 0,
+                        inventory: inv,
+                        rankLevel: u.currentRankLevel || 1,
+                        aura: u.aura || 0,
+                        // BAKE THESE IN:
+                        displayRank: rankInfo.rankName,
+                        auraVisuals: auraInfo,
+                        equippedGlow: inv.find(i => (i.category === 'GLOW' || i.category === 'NAME_GLOW') && i.isEquipped) || null,
+                        equippedBadges: inv.filter(i => i.category === 'BADGE' && i.isEquipped).slice(0, 3) || []
+                    };
+                });
             }
 
             if (uniqueClanTags.length > 0) {
-                const objectIds = uniqueClanTags.filter(id => id);
-                
-                const clanQuery = [];
-                if (objectIds.length > 0) clanQuery.push({ tag: { $in: objectIds } });
-                
-                if (clanQuery.length > 0) {
-                    const clans = await Clan.find({ $or: clanQuery }).lean();
-                    
-                    clans.forEach(c => {
-                        if (c.tag) clanMap[c.tag] = c;
-                        if (c._id) clanMap[c._id.toString()] = c;
-                    });
-                }
+                const clans = await Clan.find({ tag: { $in: uniqueClanTags } }).lean();
+                clans.forEach(c => {
+                    if (c.tag) clanMap[c.tag] = c;
+                    if (c._id) clanMap[c._id.toString()] = c;
+                });
             }
         } catch (popErr) {
-            console.error("Bulk Population Error (Non-Fatal):", popErr);
+            console.error("Bulk Population Error:", popErr);
         }
 
-        // --- STEP 4: SERIALIZE & ATTACH DATA ---
         const serializedPosts = posts.map((p) => {
             const aId = (p.authorUserId || p.authorId)?.toString();
             const cTag = (p.clanTag || p.clanId)?.toString();
-            
+
+            // Clean message for the feed excerpt
+            const feedMessage = p.message
+                .replace(/s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs, "$1$2$3$4$5$6$8$10")
+                .replace(/\n+/g, ' ')
+                .trim();
+
             return {
                 ...p,
                 _id: p._id.toString(),
-                interests: p.interests || [],
+                message: normalizePostContent(p.message),
+                feedExcerpt: feedMessage.length > 150 ? feedMessage.slice(0, 150) + "..." : feedMessage,
+                formattedViews: formatViewsServer(p.viewsCount ?? p.views ?? 0),
+                likesCount: p.likesCount ?? (p.likes?.length || 0),
+                commentsCount: p.commentsCount ?? (p.comments?.length || 0),
+                discussionCount: calculateDiscussionCount(p.comments || []),
                 authorData: userMap[aId] || null,
                 clanData: clanMap[cTag] || null
             };
         });
-        const res = NextResponse.json({
+
+        return NextResponse.json({
             posts: serializedPosts,
             total,
             page,
             limit
         }, { status: 200 });
 
-        return addCorsHeaders(res);
-
     } catch (err) {
         console.error("GET Feed Error:", err);
-        return addCorsHeaders(NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 }));
+        return NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 });
     }
 }
 
@@ -526,18 +586,18 @@ export async function POST(req) {
         if (finalStatus === "approved") {
             try {
                 // Check how many approved posts this user currently has
-                const approvedPostCount = await Post.countDocuments({ 
-                    authorUserId: user.id, 
-                    status: "approved" 
+                const approvedPostCount = await Post.countDocuments({
+                    authorUserId: user.id,
+                    status: "approved"
                 });
-                
+
                 // If it's exactly 1 (the one we just created), it's their first!
                 if (approvedPostCount === 1) {
                     isFirstPost = true;
                 }
 
                 const auraReward = isFirstPost ? 50 : 15;
-                
+
                 // Award the Aura and capture the result
                 const auraResult = await awardAura(user.id, auraReward);
 
@@ -590,10 +650,10 @@ export async function POST(req) {
                         path: 'userId', select: 'pushToken'
                     });
                     const tokens = followers.map(f => f.userId?.pushToken).filter(t => t?.startsWith('ExponentPushToken'));
-                    console.log(tokens) 
+                    console.log(tokens)
 
                     if (tokens.length > 0) {
-                        console.log("trying to send notifications for clan") 
+                        console.log("trying to send notifications for clan")
                         await sendMultiplePushNotifications(
                             tokens,
                             `${clan?.name || clanId} Transmission 🚩`,

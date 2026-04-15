@@ -63,6 +63,70 @@ const isBotRequest = async (req, ip) => {
 };
 
 // ----------------------
+// 🛠️ HELPERS: Server-side UI logic
+// ----------------------
+function formatViewsServer(views) {
+    if (!views || views < 0) return "0";
+    if (views < 100) return views.toString();
+    if (views < 1000) return `${Math.floor(views / 100) * 100}+`;
+    if (views < 1000000) {
+        const kValue = views / 1000;
+        return `${kValue % 1 === 0 ? kValue.toFixed(0) : kValue.toFixed(1)}k+`;
+    }
+    const mValue = views / 1000000;
+    return `${mValue % 1 === 0 ? mValue.toFixed(0) : mValue.toFixed(1)}m+`;
+}
+
+function getAuraVisualsServer(rank) {
+    if (!rank || rank > 10 || rank <= 0) return { color: '#1e293b', label: 'OPERATIVE', icon: 'target' };
+    switch (rank) {
+        case 1: return { color: '#fbbf24', label: 'MONARCH', icon: 'crown' };
+        case 2: return { color: '#ef4444', label: 'YONKO', icon: 'flare' };
+        case 3: return { color: '#a855f7', label: 'KAGE', icon: 'moon-waxing-crescent' };
+        case 4: return { color: '#3b82f6', label: 'SHOGUN', icon: 'shield-star' };
+        case 5: return { color: '#e0f2fe', label: 'ESPADA 0', icon: 'skull' };
+        case 6: return { color: '#cbd5e1', label: 'ESPADA 1', icon: 'sword-cross' };
+        case 7: return { color: '#94a3b8', label: 'ESPADA 2', icon: 'sword-cross' };
+        case 8: return { color: '#64748b', label: 'ESPADA 3', icon: 'sword-cross' };
+        case 9: return { color: '#475569', label: 'ESPADA 4', icon: 'sword-cross' };
+        case 10: return { color: '#334155', label: 'ESPADA 5', icon: 'sword-cross' };
+        default: return { color: '#1e293b', label: 'OPERATIVE', icon: 'target' };
+    }
+}
+
+const AURA_TIERS = [
+    { level: 1, title: "E-Rank Novice", icon: "🌱" },
+    { level: 2, title: "D-Rank Operative", icon: "⚔️" },
+    { level: 3, title: "C-Rank Awakened", icon: "🔥" },
+    { level: 4, title: "B-Rank Elite", icon: "⚡" },
+    { level: 5, title: "A-Rank Champion", icon: "🛡️" },
+    { level: 6, title: "S-Rank Legend", icon: "🌟" },
+    { level: 7, title: "SS-Rank Mythic", icon: "🌀" },
+    { level: 8, title: "Monarch", icon: "👑" },
+];
+
+function resolveUserRankServer(level) {
+    const safeLevel = Math.max(1, Math.min(8, level || 1));
+    const tier = AURA_TIERS[safeLevel - 1];
+    return { level: tier.level, rankName: `${tier.icon} ${tier.title}` };
+}
+
+function calculateDiscussionCount(comments) {
+    if (!Array.isArray(comments)) return 0;
+    let count = 0;
+    comments.forEach(c => {
+        const replies = c.replies || [];
+        if (replies.length >= 5) { count++; return; }
+        const authors = new Set();
+        const getId = (item) => item.authorUserId || item.authorFingerprint || item.name;
+        authors.add(getId(c));
+        replies.forEach(r => authors.add(getId(r)));
+        if (authors.size >= 3) count++;
+    });
+    return count;
+}
+
+// ----------------------
 // Helper for CORS
 // ----------------------
 function addCorsHeaders(response) {
@@ -307,7 +371,7 @@ export async function PATCH(req, { params }) {
 }
 
 // ----------------------
-// GET: Fetch single post (Unchanged)
+// GET: Fetch single post (Enriched for PostCard)
 // ----------------------
 export async function GET(req, { params }) {
     try {
@@ -344,6 +408,10 @@ export async function GET(req, { params }) {
                 MobileUser.findById(authorId).lean()
                     .then(u => {
                         if (u) {
+                            const inv = Array.isArray(u.inventory) ? u.inventory : (Array.isArray(u.specialInventory) ? u.specialInventory : []);
+                            const rankInfo = resolveUserRankServer(u.currentRankLevel || 1);
+                            const auraInfo = getAuraVisualsServer(u.previousRank || 0);
+
                             authorData = {
                                 name: u.username,
                                 image: u.profilePic?.url || null,
@@ -351,10 +419,12 @@ export async function GET(req, { params }) {
                                 rank: u.previousRank || 0,
                                 peakLevel: u.peakLevel || 0,
                                 aura: u.aura || 0,
-                                inventory: u.inventory || [],
-                                rankLevel: u.currentRankLevel || 0,
-                                equippedGlow: u.inventory?.find(i => i.category === 'GLOW' && i.isEquipped) || null,
-                                equippedBadges: u.inventory?.filter(i => i.category === 'BADGE' && i.isEquipped) || []
+                                inventory: inv,
+                                rankLevel: u.currentRankLevel || 1,
+                                displayRank: rankInfo.rankName,
+                                auraVisuals: auraInfo,
+                                equippedGlow: inv.find(i => (i.category === 'GLOW' || i.category === 'NAME_GLOW') && i.isEquipped) || null,
+                                equippedBadges: inv.filter(i => i.category === 'BADGE' && i.isEquipped).slice(0, 3) || []
                             };
                         }
                     })
@@ -373,12 +443,23 @@ export async function GET(req, { params }) {
         // Wait for all related data to fetch
         await Promise.all(promises);
 
+        // Clean message for the feed excerpt
+        const feedMessage = post.message
+            .replace(/s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs, "$1$2$3$4$5$6$8$10")
+            .replace(/\n+/g, ' ')
+            .trim();
+
         // 3. Package and return
         const responseData = {
             ...post,
             authorPostCount,
             authorData,
-            clanData
+            clanData,
+            feedExcerpt: feedMessage.length > 150 ? feedMessage.slice(0, 150) + "..." : feedMessage,
+            formattedViews: formatViewsServer(post.viewsCount ?? post.views ?? 0),
+            likesCount: post.likeCount ?? (post.likes?.length || 0),
+            commentsCount: post.comments?.length || 0,
+            discussionCount: calculateDiscussionCount(post.comments || [])
         };
 
         return addCorsHeaders(NextResponse.json(responseData));
