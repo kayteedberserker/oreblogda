@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
 import connectDB from "@/app/lib/mongodb";
-import Post from "@/app/models/PostModel";
+import Clan from "@/app/models/ClanModel";
 import MobileUser from "@/app/models/MobileUserModel";
-import Clan from "@/app/models/ClanModel"; 
+import Post from "@/app/models/PostModel";
+import { NextResponse } from "next/server";
 
 // ⚡️ HELPER: Escapes special characters so searches like "[Awakening]" don't crash the database regex
 const escapeRegex = (string) => {
@@ -22,7 +22,7 @@ export async function GET(req) {
 
         const { searchParams } = new URL(req.url);
         const rawQuery = searchParams.get("q")?.trim();
-        const query = rawQuery?.toLowerCase(); 
+        const query = rawQuery?.toLowerCase();
         const page = parseInt(searchParams.get("page")) || 1;
         const limit = parseInt(searchParams.get("limit")) || 10;
         const skip = (page - 1) * limit;
@@ -48,40 +48,40 @@ export async function GET(req) {
                 .limit(10)
                 .select("name tag description currentWeeklyPoints members rank isInWar isRecruiting followerCount badges")
                 .lean();
-            
+
             users = [];
             posts = [];
         }
         else if (['aura', 'best author', 'top author', 'ranking', 'elite', 'leaderboard'].some(k => query.includes(k))) {
             isIntentSearch = true;
             users = await MobileUser.find({})
-                .sort({ previousRank: 1, weeklyAura: -1 }) 
-                .limit(15) 
+                .sort({ previousRank: 1, weeklyAura: -1 })
+                .limit(15)
                 .select("username profilePic weeklyAura lastStreak previousRank peakLevel description currentRankLevel aura")
                 .lean();
 
-            posts = []; 
+            posts = [];
             totalPosts = 0;
         }
         else if (['most liked', 'viral', 'best post', 'top post', 'popular'].some(k => query.includes(k))) {
             isIntentSearch = true;
             const pipeline = [
                 { $match: { status: "approved" } },
-                { $addFields: { likesCount: { $size: { "$ifNull": ["$likes", []] } } } }, 
-                { $sort: { likesCount: -1 } }, 
+                { $addFields: { likesCount: { $size: { "$ifNull": ["$likes", []] } } } },
+                { $sort: { likesCount: -1 } },
                 { $skip: skip },
                 { $limit: limit },
                 { $project: { title: 1, message: 1, category: 1, mediaUrl: 1, authorName: 1, authorId: 1, createdAt: 1, likes: 1, comments: 1, shares: 1, views: 1 } }
             ];
             posts = await Post.aggregate(pipeline);
-            totalPosts = await Post.countDocuments({ status: "approved" }); 
+            totalPosts = await Post.countDocuments({ status: "approved" });
         }
         else if (['discussion', 'comments', 'debate', 'trending', 'hot'].some(k => query.includes(k))) {
             isIntentSearch = true;
             const pipeline = [
                 { $match: { status: "approved" } },
                 { $addFields: { commentsCount: { $size: { "$ifNull": ["$comments", []] } } } },
-                { $sort: { commentsCount: -1, views: -1 } }, 
+                { $sort: { commentsCount: -1, views: -1 } },
                 { $skip: skip },
                 { $limit: limit },
                 { $project: { title: 1, message: 1, category: 1, mediaUrl: 1, authorName: 1, authorId: 1, createdAt: 1, likes: 1, comments: 1, shares: 1, views: 1 } }
@@ -93,10 +93,10 @@ export async function GET(req) {
         // ==========================================
         // 🧠 LAYER 2: STANDARD NEURAL SEARCH WITH WEIGHTS
         // ==========================================
-        
+
         if (!isIntentSearch) {
             const tokens = rawQuery.split(/\s+/).filter(t => t.length > 1);
-            
+
             // --- FUZZY NUMERIC LOGIC ---
             const extendedTokens = [...tokens];
             tokens.forEach(token => {
@@ -116,7 +116,7 @@ export async function GET(req) {
                 { $cond: [{ $gte: [{ $indexOfCP: [{ $toLower: { $ifNull: ["$title", ""] } }, query] }, 0] }, 1000, 0] },
                 { $cond: [{ $gte: [{ $indexOfCP: [{ $toLower: { $ifNull: ["$message", ""] } }, query] }, 0] }, 500, 0] }
             ];
-            
+
             // ⚡️ BUILD USER SCORING ARRAY
             const userScoring = [
                 { $cond: [{ $gte: [{ $indexOfCP: [{ $toLower: { $ifNull: ["$username", ""] } }, query] }, 0] }, 1000, 0] },
@@ -133,11 +133,11 @@ export async function GET(req) {
             // Add points for individual word hits
             tokens.forEach(token => {
                 const lowerToken = token.toLowerCase();
-                
+
                 // For Posts
                 postScoring.push({ $cond: [{ $gte: [{ $indexOfCP: [{ $toLower: { $ifNull: ["$title", ""] } }, lowerToken] }, 0] }, 20, 0] });
                 postScoring.push({ $cond: [{ $gte: [{ $indexOfCP: [{ $toLower: { $ifNull: ["$message", ""] } }, lowerToken] }, 0] }, 2, 0] });
-                
+
                 // For Users
                 userScoring.push({ $cond: [{ $gte: [{ $indexOfCP: [{ $toLower: { $ifNull: ["$username", ""] } }, lowerToken] }, 0] }, 50, 0] });
 
@@ -182,10 +182,10 @@ export async function GET(req) {
                 { $limit: limit },
                 {
                     $project: {
-                        title: 1, message: 1, category: 1, mediaUrl: 1, 
-                        authorName: 1, authorId: 1, createdAt: 1, 
+                        title: 1, message: 1, category: 1, mediaUrl: 1,
+                        authorName: 1, authorId: 1, createdAt: 1,
                         likes: 1, comments: 1, shares: 1, views: 1,
-                        relevanceScore: 1 
+                        relevanceScore: 1
                     }
                 }
             ];
@@ -209,8 +209,8 @@ export async function GET(req) {
                 { $limit: 5 },
                 {
                     $project: {
-                        username: 1, profilePic: 1, weeklyAura: 1, lastStreak: 1, 
-                        previousRank: 1, peakLevel: 1, description: 1, 
+                        username: 1, profilePic: 1, weeklyAura: 1, lastStreak: 1,
+                        previousRank: 1, peakLevel: 1, description: 1,
                         currentRankLevel: 1, aura: 1, relevanceScore: 1
                     }
                 }
@@ -235,8 +235,8 @@ export async function GET(req) {
                 { $limit: 5 },
                 {
                     $project: {
-                        name: 1, tag: 1, description: 1, currentWeeklyPoints: 1, 
-                        members: 1, rank: 1, isInWar: 1, isRecruiting: 1, 
+                        name: 1, tag: 1, description: 1, currentWeeklyPoints: 1,
+                        members: 1, rank: 1, isInWar: 1, isRecruiting: 1,
                         followerCount: 1, badges: 1, relevanceScore: 1
                     }
                 }
@@ -269,9 +269,9 @@ export async function GET(req) {
         // ==========================================
 
         const usersWithCounts = await Promise.all(users.map(async (user) => {
-            const count = await Post.countDocuments({ 
-                authorName: user.username, 
-                status: "approved" 
+            const count = await Post.countDocuments({
+                authorName: user.username,
+                status: "approved"
             });
             // Aggregation returns _id as ObjectId, map needs string representation
             return { ...user, _id: user._id.toString(), postsCount: count };
@@ -281,7 +281,7 @@ export async function GET(req) {
             ...clan,
             _id: clan._id.toString(),
             memberCount: clan.members?.length || 0,
-            members: undefined 
+            members: undefined
         }));
 
         const processedPosts = posts.map(post => ({
@@ -291,7 +291,7 @@ export async function GET(req) {
             commentsCount: post.comments?.length || 0,
             sharesCount: post.shares || 0,
             viewsCount: post.views || 0,
-            message: post.message ? post.message.substring(0, 100) + "..." : "", 
+            message: post.message ? post.message.substring(0, 100) + "..." : "",
             likes: undefined,
             comments: undefined
         }));
@@ -299,8 +299,8 @@ export async function GET(req) {
         return NextResponse.json(
             {
                 success: true,
-                users: usersWithCounts || [],
-                clans: processedClans || [], 
+                players: usersWithCounts || [],
+                clans: processedClans || [],
                 posts: processedPosts || [],
                 isIntentResult: isIntentSearch,
                 pagination: {
@@ -310,7 +310,7 @@ export async function GET(req) {
                     hasNextPage: isIntentSearch ? false : (skip + limit < totalPosts)
                 }
             },
-            { 
+            {
                 status: 200,
                 headers: {
                     "Access-Control-Allow-Origin": "*",
