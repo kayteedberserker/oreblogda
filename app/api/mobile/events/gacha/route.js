@@ -1,5 +1,5 @@
-import MobileUser from '@/app/models/MobileUserModel';
 import connectDB from '@/app/lib/mongodb';
+import MobileUser from '@/app/models/MobileUserModel';
 import { NextResponse } from 'next/server';
 
 const GACHA_POOLS = {
@@ -65,15 +65,6 @@ const GACHA_POOLS = {
                 lottieUrl: 'https://oreblogda.com/lottie/infinitevoid_bg.json',
                 primaryColor: "#a855f7",
             }
-        },
-        {
-            id: 'astral_leg_s_rank',
-            name: 'S-Rank Hunter',
-            category: 'BADGE',
-            rarity: 'Legendary',
-            baseDropRate: 2,
-            exchangePrice: 350,
-            visualConfig: { lottieUrl: 'https://oreblogda.com/lottie/srank_badge.json' }
         },
 
         // ==========================================
