@@ -17,9 +17,11 @@ const commentSchema = new mongoose.Schema({
     default: null
   },
   name: { type: String, required: true },
-  text: { type: String, required: true },
+  text: { type: String, default: "" },
+  stickerId: { type: String, default: null },
   date: { type: Date, default: Date.now },
-  replies: { type: Array, default: [] }
+  replies: { type: Array, default: [] },
+  type: { type: String, enum: ["text", "sticker"], default: "text" }
 });
 
 commentSchema.add({

@@ -155,7 +155,7 @@ const AUTHOR_CATALOG = {
 					name: 'The Burning Quill - 3 days',
 					price: 100,
 					currency: 'OC',
-					category: 'BADGE',
+					category: 'Sticker',
 					rarity: "Epic",
 					expiresInDays: 3,
 					visualData: {
@@ -170,7 +170,7 @@ const AUTHOR_CATALOG = {
 					name: 'The Pheonix - 3 days',
 					price: 200,
 					currency: 'OC',
-					category: 'BADGE',
+					category: 'Sticker',
 					rarity: "Legendary",
 					expiresInDays: 3,
 					visualData: {
@@ -254,7 +254,7 @@ const AUTHOR_CATALOG = {
 					currency: 'OC',
 					expiresInDays: 3,
 					rarity: "Common",
-					category: 'BADGE',
+					category: 'Sticker',
 					visualData: {
 						icon: 'split',
 						color: '#94a3b8',
@@ -270,7 +270,7 @@ const AUTHOR_CATALOG = {
 					price: 40,
 					rarity: "Common",
 					currency: 'OC',
-					category: 'BADGE',
+					category: 'Sticker',
 					visualData: {
 						icon: 'split',
 						color: '#94a3b8',
@@ -387,7 +387,7 @@ const AUTHOR_CATALOG = {
 					currency: 'OC',
 					rarity: "Legendary",
 					expiresInDays: 3,
-					category: 'BADGE',
+					category: 'Sticker',
 					visualData: {
 						icon: 'droplets',
 						color: '#0ea5e9',
@@ -679,7 +679,7 @@ const CLAN_CATALOG = {
 					name: 'The Burning Quill - 3 days',
 					price: 50,
 					currency: 'CC',
-					category: 'BADGE',
+					category: 'Sticker',
 					rarity: "Epic",
 					expiresInDays: 3,
 					visualData: {
@@ -694,7 +694,7 @@ const CLAN_CATALOG = {
 					name: 'The Pheonix - 3 days',
 					price: 120,
 					currency: 'CC',
-					category: 'BADGE',
+					category: 'Sticker',
 					rarity: "Legendary",
 					expiresInDays: 3,
 					visualData: {
@@ -778,7 +778,7 @@ const CLAN_CATALOG = {
 					currency: 'CC',
 					expiresInDays: 3,
 					rarity: "Common",
-					category: 'BADGE',
+					category: 'Sticker',
 					visualData: {
 						icon: 'split',
 						color: '#94a3b8',
@@ -794,7 +794,7 @@ const CLAN_CATALOG = {
 					price: 20,
 					rarity: "Common",
 					currency: 'CC',
-					category: 'BADGE',
+					category: 'Sticker',
 					visualData: {
 						icon: 'split',
 						color: '#94a3b8',
@@ -911,7 +911,7 @@ const CLAN_CATALOG = {
 					currency: 'CC',
 					rarity: "Legendary",
 					expiresInDays: 3,
-					category: 'BADGE',
+					category: 'Sticker',
 					visualData: {
 						icon: 'droplets',
 						color: '#0ea5e9',

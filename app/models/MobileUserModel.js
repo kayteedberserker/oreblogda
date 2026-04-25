@@ -27,6 +27,29 @@ const InventoryItemSchema = new mongoose.Schema({
   expiresAt: { type: Date, default: null },
 });
 
+const StickerSchema = new mongoose.Schema({
+  stickerId: { type: String, required: true, unique: true }, // e.g., 'burning_quill', 'luffy_shock'
+  name: { type: String, required: true },
+  rarity: {
+    type: String,
+    enum: ['Common', 'Rare', 'Epic', 'Legendary'],
+    default: 'Common'
+  },
+  visualType: {
+    type: String,
+    enum: ['svg', 'lottie', 'image'],
+    required: true
+  },
+  visualData: {
+    svgCode: { type: String }, // For your SVG codes
+    lottieUrl: { type: String }, // For animated stickers
+    imageUrl: { type: String }, // NEW: For PNGs/JPEGs
+    color: { type: String }
+  },
+  isRentable: { type: Boolean, default: true },
+  isActive: { type: Boolean, default: true } // If you ever want to remove a sticker from the store
+});
+
 // 👗 Wardrobe Schema for Character Clothing
 const WardrobeItemSchema = new mongoose.Schema({
   clothingId: { type: String, required: true },
@@ -96,6 +119,9 @@ const mobileUserSchema = new mongoose.Schema(
 
     // --- 🎒 USER INVENTORY (Frames/Badges Only) ---
     inventory: [InventoryItemSchema],
+    stickers: {
+      owned: [{ type: String }], // Array of stickerIds they bought permanently
+    },
     activeCustomizations: {
       frame: { type: String, default: null },
       theme: { type: String, default: null },

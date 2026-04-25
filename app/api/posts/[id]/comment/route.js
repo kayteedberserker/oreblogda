@@ -129,7 +129,11 @@ export async function POST(req, { params }) {
 
   try {
     const body = await req.json();
-    const { name, text, parentCommentId, replyTo, fingerprint } = body;
+    const { name, text, stickerId, parentCommentId, replyTo, fingerprint } = body;
+
+    if (!stickerId && !text?.trim()) {
+      return NextResponse.json({ message: "Comment text or stickerId required" }, { status: 400 });
+    }
 
     const foundMobileUser = await MobileUser.findOne({ deviceId: fingerprint });
     const mobileUserId = foundMobileUser?._id;
@@ -138,12 +142,17 @@ export async function POST(req, { params }) {
     const post = await Post.findOne(searchFilter);
     if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
 
+    const commentType = stickerId ? "sticker" : "text";
+    const commentText = stickerId ? "" : (text || "");
+
     const newComment = {
       _id: new mongoose.Types.ObjectId(),
       authorFingerprint: fingerprint,
       authorUserId: mobileUserId,
       name,
-      text,
+      text: commentText,
+      stickerId: stickerId || null,
+      type: commentType,
       replyTo: replyTo || null,
       date: new Date(),
       replies: []
@@ -201,7 +210,9 @@ export async function POST(req, { params }) {
       notifications.push({
         recipientId: immediateRecipientId,
         title: "New Reply 💬",
-        message: `${name} replied: "${text.substring(0, 20)}..."`,
+        message: stickerId
+          ? `${name} sent a sticker`
+          : `${name} replied: "${text?.substring(0, 20)}..."`,
         type: "reply",
         commentId: targetRootComment?._id || parentCommentId,
         isMongoId: true
@@ -212,7 +223,9 @@ export async function POST(req, { params }) {
       notifications.push({
         recipientId: post.authorUserId,
         title: "New Signal 📝",
-        message: `${name} started a new signal (#${post.comments.length})`,
+        message: stickerId
+          ? `${name} started a new signal with a sticker`
+          : `${name} started a new signal (#${post.comments.length})`,
         type: "comment",
         commentId: newComment._id,
         isMongoId: true

@@ -8,7 +8,7 @@ const MessagePillSchema = new mongoose.Schema({
     },
     type: {
         type: String,
-        enum: ['system', 'event', 'achievement', 'drop', 'warning', 'aura_gain', 'clan_points', 'post_like', 'post_comment', 'post_reply', 'clan_post', 'clan_message'],
+        enum: ['system', 'event', 'achievement', 'drop', 'warning', 'aura_gain', 'clan_points', 'post_like', 'post_comment', 'post_discussion', 'post_reply', 'clan_post', 'clan_message'],
         default: 'system'
     },
     link: {
