@@ -286,8 +286,6 @@ export async function GET(req) {
         if (targetAuthor) {
             posts = await Post.find(query)
                 .select({
-                    comments: 0, // ⚡️ Optimization: Don't send full arrays in feed
-                    likes: 0
                 })
                 .sort({ createdAt: -1 })
                 .skip(skip)
