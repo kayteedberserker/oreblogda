@@ -12,20 +12,21 @@ import { GoogleGenAI } from "@google/genai";
 import geoip from "geoip-lite";
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
+
 // ----------------------
-// AI MODERATOR & AUTO-TAGGER
+// AI MODERATOR & AUTO-TAGGER (OPTIMIZED)
 // ----------------------
 async function runAIModerator(title, message, clanId, category, mediaUrl, mediaType) {
     const API_KEY = process.env.GEMINI_API_KEY;
     if (!API_KEY) return { action: "flag", reason: "AI Config Error", interests: [] };
 
-    const client = new GoogleGenAI({ apiKey: API_KEY });
+    const genAI = new GoogleGenAI({ apiKey: API_KEY });
 
-    // Valid tagging lists for consistency
     const VALID_ANIMES = ["Naruto", "One Piece", "Bleach", "Dragon Ball Z", "Hunter x Hunter", "JJK", "Solo Leveling", "My Hero Academia", "Hell's Paradise", "Demon Slayer", "AOT", "Chainsaw Man", "Death Note", "Fullmetal Alchemist", "Code Geass", "Steins;Gate", "Berserk", "Vinland Saga", "Monster", "Vagabond", "Baki", "Nana", "Horimiya", "Fruits Basket", "Ouran High", "Haikyuu", "Blue Lock", "One Punch Man"];
     const VALID_GENRES = ["Shonen", "Seinen", "Romance", "Isekai", "Psychological", "Ecchi", "Action", "Slice of Life", "Manga", "Fantasy", "Sci-Fi", "Comedy", "Manhwa"];
 
     try {
+        // Keeping your prompt exactly as requested
         const prompt = `
             TASK: Moderate and Tag this 'Diary Entry' for 'Oreblogda' (Anime/Gaming blog).
             
@@ -67,38 +68,65 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
             }
         `;
 
-        const modelId = "gemini-2.0-flash"; // Correcting model version string if needed
+        const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
         const contents = [{ role: 'user', parts: [{ text: prompt }] }];
 
+        // --- OPTIMIZED MEDIA FETCH WITH RETRY ---
         if (mediaUrl && mediaUrl.includes("cloudinary")) {
             const isVideo = mediaType === "video" || mediaUrl.match(/\.(mp4|mov|webm|mkv)$/i);
             const isImage = mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i);
 
             if (isVideo || isImage) {
-                try {
-                    const mediaRes = await fetch(mediaUrl);
+                let mediaRes = null;
+                // Retry loop: Cloudinary might need a second to process the edited image
+                for (let i = 0; i < 3; i++) {
+                    try {
+                        mediaRes = await fetch(mediaUrl);
+                        if (mediaRes.ok) break;
+                    } catch (e) {
+                        console.log(`Fetch attempt ${i + 1} failed, retrying...`);
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 1500)); // Wait 1.5s
+                }
+
+                if (mediaRes && mediaRes.ok) {
                     const arrayBuffer = await mediaRes.arrayBuffer();
-                    contents[0].parts.push({
-                        inlineData: {
-                            data: Buffer.from(arrayBuffer).toString("base64"),
-                            mimeType: isVideo ? "video/mp4" : "image/jpeg"
-                        }
-                    });
-                } catch (e) { console.error("Media fetch failed, text-only scan."); }
+                    const base64Data = Buffer.from(arrayBuffer).toString("base64");
+
+                    // Only add if we actually have data (prevents 429 errors from empty buffers)
+                    if (base64Data.length > 0) {
+                        contents[0].parts.push({
+                            inlineData: {
+                                data: base64Data,
+                                mimeType: isVideo ? "video/mp4" : "image/jpeg"
+                            }
+                        });
+                    }
+                } else {
+                    console.error("Cloudinary fetch failed after retries. Proceeding as text-only.");
+                }
             }
         }
 
-        const response = await client.models.generateContent({ model: modelId, contents: contents });
-        let text = response.text;
-        const cleanJson = text.replace(/```json|```/g, "").trim();
-        const result = JSON.parse(cleanJson);
+        const result = await model.generateContent({ contents });
+        const responseText = result.response.text();
 
-        if (!result.interests) result.interests = [];
-        return result;
+        // Robust JSON cleaning
+        const cleanJson = responseText.replace(/```json|```/g, "").trim();
+        const parsedResult = JSON.parse(cleanJson);
+
+        if (!parsedResult.interests) parsedResult.interests = [];
+        return parsedResult;
 
     } catch (err) {
         console.error("❌ 2026 Moderator Error:", err.message);
-        return { action: "flag", reason: "Service unavailable", interests: [] };
+        // If it's a 429, we explicitly mention it for your logs
+        const isRateLimit = err.message.includes("429") || err.message.includes("Resource");
+        return {
+            action: "flag",
+            reason: isRateLimit ? "AI Rate Limit - Pending" : "Service unavailable",
+            interests: []
+        };
     }
 }
 
