@@ -1,8 +1,8 @@
-import { NextResponse } from "next/server";
-import connectDB from "@/app/lib/mongodb";
-import UserModel from "@/app/models/UserModel"; 
-import MobileUserModel from "@/app/models/MobileUserModel";
 import cloudinary from "@/app/lib/cloudinary";
+import connectDB from "@/app/lib/mongodb";
+import MobileUserModel from "@/app/models/MobileUserModel";
+import UserModel from "@/app/models/UserModel";
+import { NextResponse } from "next/server";
 
 export async function PUT(req) {
   await connectDB();
@@ -17,14 +17,16 @@ export async function PUT(req) {
     const userId = formData.get("userId");
     const fingerprint = formData.get("fingerprint");
     const description = formData.get("description");
-    const username = formData.get("username"); 
-    const preferencesRaw = formData.get("preferences"); 
-    const inventoryRaw = formData.get("inventory"); // 🆕 Added to capture equipment changes
+    const username = formData.get("username");
+    const preferencesRaw = formData.get("preferences");
+    const inventoryRaw = formData.get("inventory");
+    const equippedTitle = formData.get("equippedTitle"); // 🆕 Extract Title name or empty string
     const file = formData.get("file");
+    console.log(equippedTitle);
 
     console.log("--- Profile Update Start ---");
     console.log("User ID:", userId);
-    console.log("New Alias:", username);
+    console.log("Equipping Title:", equippedTitle === "" ? "NONE (Unequip)" : equippedTitle);
 
     let user = null;
     let SelectedModel = null;
@@ -38,8 +40,8 @@ export async function PUT(req) {
         user = await MobileUserModel.findById(userId);
         if (user) SelectedModel = MobileUserModel;
       }
-    } 
-    
+    }
+
     if (!user && fingerprint) {
       user = await MobileUserModel.findOne({ deviceId: fingerprint });
       SelectedModel = MobileUserModel;
@@ -56,6 +58,16 @@ export async function PUT(req) {
       description: description ?? user.description,
     };
 
+    // 🔹 Handle Title Equip/Unequip
+    // We check !== null because "" (unequip) is a valid value we want to save
+    if (equippedTitle !== "") {
+      updateFields.equippedTitle = JSON.parse(equippedTitle);
+      console.log("🏷️  Title Update:", equippedTitle || "Cleared");
+    } else if (equippedTitle === "") {
+      updateFields.equippedTitle = null;
+      console.log("🏷️  Title Unequipped");
+    }
+
     // 🔹 Handle Preferences
     if (preferencesRaw) {
       try {
@@ -65,7 +77,7 @@ export async function PUT(req) {
           favCharacter: parsed.favCharacter || user.preferences?.favCharacter || "",
           favGenres: parsed.favGenres || user.preferences?.favGenres || []
         };
-        console.log("🧠 Neural Prefs Synced:", updateFields.preferences);
+        console.log("🧠 Neural Prefs Synced");
       } catch (pErr) {
         console.error("Preference Parse Error:", pErr);
       }
@@ -75,7 +87,6 @@ export async function PUT(req) {
     if (inventoryRaw) {
       try {
         const parsedInventory = JSON.parse(inventoryRaw);
-        // Syncing to inventory field in DB
         updateFields.inventory = parsedInventory;
         console.log("🎒 Inventory Equipment Synced");
       } catch (iErr) {
@@ -116,19 +127,19 @@ export async function PUT(req) {
       };
     }
 
-    // 3. Unified Update using $set to ensure nested objects are overwritten correctly
+    // 3. Unified Update using $set
     const updatedUser = await SelectedModel.findByIdAndUpdate(
       user._id,
       { $set: updateFields },
       { new: true, runValidators: true }
     );
-    
-    console.log("💾 Database updated: All Character Data & Equipment synced.");
+
+    console.log("💾 Database updated: All Character Data, Equipment & Titles synced.");
     console.log("--- Profile Update End ---");
 
-    return NextResponse.json({ 
-      message: "Character Data Synced", 
-      user: updatedUser 
+    return NextResponse.json({
+      message: "Character Data Synced",
+      user: updatedUser
     }, { status: 200 });
 
   } catch (err) {

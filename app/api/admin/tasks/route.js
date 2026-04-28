@@ -1,9 +1,9 @@
-import { NextResponse } from 'next/server';
 import connectDB from '@/app/lib/mongodb';
 import MobileUser from '@/app/models/MobileUserModel';
 import Post from '@/app/models/PostModel';
+import { NextResponse } from 'next/server';
 // ⚡️ IMPORT BOTH MULTI AND SINGLE PUSH HELPERS
-import { sendMultiplePushNotifications, sendPushNotification } from "@/app/lib/pushNotifications"; 
+import { sendMultiplePushNotifications, sendPushNotification } from "@/app/lib/pushNotifications";
 import MessagePill from "@/app/models/MessagePillModel";
 // ==========================================
 // ⚡️ GET HANDLER: FETCH ALL POSTS FOR ADMIN
@@ -46,13 +46,13 @@ export async function POST(req) {
         const { task, payload } = await req.json();
 
         switch (task) {
-            
+
             // ⚡️ NEW: SEND PILL LOGIC
             case 'SEND_PILL':
                 if (!payload.text || !payload.type || !payload.targetAudience) {
                     return NextResponse.json({ success: false, message: 'Missing pill parameters' }, { status: 400 });
                 }
-                
+
                 let expiresAt = null;
                 // If the admin sets an expiry duration (in hours), calculate the exact future date
                 if (payload.expiresInHours) {
@@ -85,11 +85,11 @@ export async function POST(req) {
 
                 const tokensArray = allUsersWithTokens.map(u => u.pushToken);
                 await sendMultiplePushNotifications(tokensArray, payload.title, payload.message);
-                
+
                 console.log(`BROADCAST TO ALL: [${payload.title}] ${payload.message}. Sent to ${tokensArray.length} users.`);
-                return NextResponse.json({ 
-                    success: true, 
-                    message: `Broadcast initiated successfully to ${tokensArray.length} operatives.` 
+                return NextResponse.json({
+                    success: true,
+                    message: `Broadcast initiated successfully to ${tokensArray.length} operatives.`
                 });
 
             case 'GIVE_OC':
@@ -102,16 +102,16 @@ export async function POST(req) {
                     { new: true }
                 );
                 if (!user) return NextResponse.json({ success: false, message: 'User not found' }, { status: 404 });
-                
+
                 if (user.pushToken) {
                     await sendPushNotification(
-                        user.pushToken, 
-                        "Energy Received 🪙", 
+                        user.pushToken,
+                        "Energy Received 🪙",
                         `THE SYSTEM has granted you ${payload.amount} OC.`,
                         { type: 'WALLET_UPDATE' }
                     );
                 }
-                
+
                 return NextResponse.json({ success: true, message: `Granted ${payload.amount} OC to ${user.username}` });
 
             case 'UPDATE_POST_STATUS':
@@ -129,10 +129,10 @@ export async function POST(req) {
 
                 if (payload.status === 'approved') {
                     updateData.rejectionReason = baseReason + "Approved by THE SYSTEM!!";
-                    unsetData.expiresAt = 1; 
+                    unsetData.expiresAt = 1;
                 } else if (payload.status === 'rejected') {
                     updateData.rejectionReason = baseReason + "Rejected by THE SYSTEM!!";
-                    updateData.expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000); 
+                    updateData.expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
                 }
 
                 let mongoUpdateQuery = { $set: updateData };
@@ -148,12 +148,20 @@ export async function POST(req) {
 
                 if (updatedPost.authorUserId) {
                     const author = await MobileUser.findById(updatedPost.authorUserId);
+                    if (payload.status == "approved") {
+                        if (author.totalPost == 0) {
+                            author.aura = (author.aura || 0) + 50; // Award 50 Aura for first approved post
+                        } else {
+                            author.aura = (author.aura || 0) + 15; // Award 15 Aura for approved post
+                        }
+                        await author.save();
+                    }
                     if (author && author.pushToken) {
                         const title = payload.status === 'approved' ? "Scroll Approved! ✅" : "Scroll Rejected ❌";
-                        const body = payload.status === 'approved' 
-                            ? `Your log "${updatedPost.title}" has been approved by THE SYSTEM after validation.` 
+                        const body = payload.status === 'approved'
+                            ? `Your log "${updatedPost.title}" has been approved by THE SYSTEM after validation.`
                             : `Your log "${updatedPost.title}" was rejected and will be burned in 12 hours.`;
-                        
+
                         await sendPushNotification(author.pushToken, title, body, { type: 'POST_STATUS', postId: updatedPost._id });
                     }
                 }
@@ -166,13 +174,13 @@ export async function POST(req) {
                 }
                 const deletedPost = await Post.findByIdAndDelete(payload.postId);
                 if (!deletedPost) return NextResponse.json({ success: false, message: 'Post not found' }, { status: 404 });
-                
+
                 if (deletedPost) {
                     const author = await MobileUser.findById(deletedPost.authorUserId);
                     if (author && author.pushToken) {
                         const title = "Scroll Deleted ❌";
                         const body = `Your log "${deletedPost.title}" was deleted due to not following platform rules.`;
-                        
+
                         // Fix: Replaced updatedPost with deletedPost
                         await sendPushNotification(author.pushToken, title, body, { type: 'POST_STATUS', postId: deletedPost._id });
                     }
@@ -185,9 +193,9 @@ export async function POST(req) {
                 }
                 const editedPost = await Post.findByIdAndUpdate(
                     payload.postId,
-                    { 
-                        title: payload.title, 
-                        message: payload.message, 
+                    {
+                        title: payload.title,
+                        message: payload.message,
                         category: payload.category || 'News'
                     },
                     { new: true }
@@ -198,9 +206,9 @@ export async function POST(req) {
                     const author = await MobileUser.findById(editedPost.authorUserId);
                     if (author && author.pushToken) {
                         await sendPushNotification(
-                            author.pushToken, 
-                            "Scroll Edited 📝", 
-                            `Your log "${editedPost.title}" was updated by THE SYSTEM.`, 
+                            author.pushToken,
+                            "Scroll Edited 📝",
+                            `Your log "${editedPost.title}" was updated by THE SYSTEM.`,
                             { type: 'POST_EDIT', postId: editedPost._id }
                         );
                     }

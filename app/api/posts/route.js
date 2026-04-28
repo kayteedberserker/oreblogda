@@ -394,7 +394,8 @@ export async function GET(req) {
                         displayRank: rankInfo.rankName,
                         auraVisuals: auraInfo,
                         equippedGlow: inv.find(i => (i.category === 'GLOW' || i.category === 'NAME_GLOW') && i.isEquipped) || null,
-                        equippedBadges: inv.filter(i => i.category === 'BADGE' && i.isEquipped).slice(0, 3) || []
+                        equippedBadges: inv.filter(i => i.category === 'BADGE' && i.isEquipped).slice(0, 3) || [],
+                        equippedTitle: u.equippedTitle || null // Added Equipped Title mapping here
                     };
                 });
             }
@@ -454,6 +455,49 @@ function addCorsHeaders(res) {
     return res;
 }
 
+// 🏆 Enhanced Title Thresholds
+const TITLE_THRESHOLDS = {
+    // ✍️ Creator Path Thresholds
+    totalPosts: [
+        { limit: 1, name: "Origin Point", tier: "COMMON" },
+        { limit: 5, name: "Quiet Scribe", tier: "COMMON" },
+        { limit: 50, name: "Active Voice", tier: "RARE" },
+        { limit: 250, name: "The Chronicler", tier: "EPIC" },
+        { limit: 1000, name: "Architect of Lore", tier: "LEGENDARY" }
+    ]
+};
+
+// 🛠 Helper to check and award titles
+async function checkTitleUnlocks(user, field, currentCount) {
+    const thresholds = TITLE_THRESHOLDS[field];
+    if (!thresholds) return null;
+
+    const earnedTitle = [...thresholds].reverse().find(t => currentCount >= t.limit);
+
+    if (earnedTitle) {
+        const alreadyHas = user.unlockedTitles?.some(t => t.name === earnedTitle.name);
+        if (!alreadyHas) {
+            await MobileUser.findByIdAndUpdate(user._id, {
+                $addToSet: { unlockedTitles: earnedTitle }
+            });
+
+            if (user.pushToken) {
+                const titleMsg = `🏆 NEW TITLE: You are now a "${earnedTitle.name}"!`;
+                await sendPushNotification(user.pushToken, "Achievement Unlocked! 🎖", titleMsg, { type: "milestone_unlock" });
+                await sendPillParallel([user.pushToken], "Title Earned", titleMsg, { type: "milestone_unlock" }, {
+                    type: 'achievement',
+                    targetAudience: 'user',
+                    targetId: user._id.toString(),
+                    singleUser: true,
+                    priority: 3
+                });
+            }
+            return earnedTitle;
+        }
+    }
+    return null;
+}
+
 // ----------------------
 // POST: create a new post
 // ----------------------
@@ -481,22 +525,22 @@ export async function POST(req) {
         }
 
         const clanId = body.clanId || (category?.startsWith("Clan:") ? category.split(":")[2] : null);
-        let user = null;
+        let userDoc = null;
         let isMobile = false;
 
         if (token) {
-            try { user = verifyToken(token); } catch (err) { }
+            try {
+                const verified = verifyToken(token);
+                userDoc = await MobileUser.findById(verified.id);
+            } catch (err) { }
         }
 
-        if (!user && fingerprint) {
-            const foundMobileUser = await MobileUser.findOne({ deviceId: fingerprint });
-            if (foundMobileUser) {
-                user = { id: foundMobileUser._id.toString(), username: foundMobileUser.username };
-                isMobile = true;
-            }
+        if (!userDoc && fingerprint) {
+            userDoc = await MobileUser.findOne({ deviceId: fingerprint });
+            if (userDoc) isMobile = true;
         }
 
-        if (!user) return addCorsHeaders(NextResponse.json({ message: "Unauthorized" }, { status: 401 }));
+        if (!userDoc) return addCorsHeaders(NextResponse.json({ message: "Unauthorized" }, { status: 401 }));
 
         let finalStatus = isMobile ? "pending" : "approved";
         let rejectionReason = "";
@@ -534,8 +578,7 @@ export async function POST(req) {
         }
 
         const newMessage = removeEmptyLines(normalizePostContent(message));
-
-        const authorPrefix = user.username.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const authorPrefix = userDoc.username.toLowerCase().replace(/[^a-z0-9]/g, '');
         let cleanedTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().replace(/\s+/g, '-');
         if (cleanedTitle.length > 80) cleanedTitle = cleanedTitle.substring(0, 80).split('-').slice(0, -1).join('-');
 
@@ -555,9 +598,9 @@ export async function POST(req) {
         }
 
         const newPost = await Post.create({
-            authorUserId: user.id,
+            authorUserId: userDoc._id,
             authorId: fingerprint,
-            authorName: user.username,
+            authorName: userDoc.username,
             title,
             slug,
             message: newMessage,
@@ -577,27 +620,42 @@ export async function POST(req) {
             country: country
         });
 
-        // ⚡️ NEW AURA REWARD LOGIC: Capture stats for the frontend
         let isFirstPost = false;
         let auraStats = null;
 
         if (finalStatus === "approved") {
             try {
-                // Check how many approved posts this user currently has
-                const approvedPostCount = await Post.countDocuments({
-                    authorUserId: user.id,
-                    status: "approved"
-                });
-
-                // If it's exactly 1 (the one we just created), it's their first!
-                if (approvedPostCount === 1) {
-                    isFirstPost = true;
+                // ⚡️ Sync totalPosts if it doesn't exist (Migration logic)
+                if (userDoc.totalPosts === undefined || userDoc.totalPosts === null) {
+                    const historicalCount = await Post.countDocuments({
+                        authorUserId: userDoc._id,
+                        status: "approved"
+                    });
+                    userDoc.totalPosts = historicalCount;
+                } else {
+                    userDoc.totalPosts += 1;
                 }
 
-                const auraReward = isFirstPost ? 50 : 15;
+                if (userDoc.totalPosts === 1) isFirstPost = true;
 
-                // Award the Aura and capture the result
-                const auraResult = await awardAura(user.id, auraReward);
+                // 🏆 Check Creator Titles
+                await checkTitleUnlocks(userDoc, "totalPosts", userDoc.totalPosts);
+
+                // 🦉 Achievement: Night Owl (1 AM - 4 AM)
+                const hour = new Date().getHours();
+                if (hour >= 1 && hour <= 4) {
+                    const alreadyHasOwl = userDoc.unlockedTitles?.some(t => t.name === "Night Owl");
+                    if (!alreadyHasOwl) {
+                        await MobileUser.findByIdAndUpdate(userDoc._id, {
+                            $addToSet: { unlockedTitles: { name: "Night Owl", tier: "COMMON" } }
+                        });
+                    }
+                }
+
+                await userDoc.save();
+
+                const auraReward = isFirstPost ? 50 : 15;
+                const auraResult = await awardAura(userDoc._id, auraReward);
 
                 if (auraResult && auraResult.newRank) {
                     const nextReq = auraResult.newRank.nextRankReq || 12000;
@@ -612,6 +670,7 @@ export async function POST(req) {
             }
         }
 
+        // --- Notifications and Clan Logic (Keep as provided) ---
         if (finalStatus === "approved" && (newPost.clanId || newPost.category?.startsWith("Clan:"))) {
             try {
                 await Clan.findOneAndUpdate({ tag: newPost.clanId }, { $inc: { 'stats.totalPosts': 1 } });
@@ -632,13 +691,13 @@ export async function POST(req) {
                             from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
                             to: "Subscribers",
                             bcc: subscribers.map(s => s.email),
-                            subject: `📰 New Post from ${user.username}`,
+                            subject: `📰 New Post from ${userDoc.username}`,
                             html: `<h2>${title}</h2><p>${newMessage.substring(0, 200)}...</p><a href="${process.env.SITE_URL}/post/${newPost.slug}">Read More</a>`
                         };
                         await transporter.sendMail(mailOptions);
                     }
                 } catch (err) { console.error("Newsletter error", err); }
-                try { await notifyAllMobileUsersAboutPost(newPost, user.username); } catch (err) { }
+                try { await notifyAllMobileUsersAboutPost(newPost, userDoc.username); } catch (err) { }
             }
 
             if (clanId) {
@@ -648,14 +707,11 @@ export async function POST(req) {
                         path: 'userId', select: 'pushToken'
                     });
                     const tokens = followers.map(f => f.userId?.pushToken).filter(t => t?.startsWith('ExponentPushToken'));
-                    console.log(tokens)
-
                     if (tokens.length > 0) {
-                        console.log("trying to send notifications for clan")
                         await sendMultiplePushNotifications(
                             tokens,
                             `${clan?.name || clanId} Transmission 🚩`,
-                            `${user.username} posted: ${title}`,
+                            `${userDoc.username} posted: ${title}`,
                             { type: "open_post", postId: newPost._id.toString(), clanTag: clanId },
                             `clan_${clanId}`
                         );
@@ -687,10 +743,9 @@ export async function POST(req) {
 
         if (finalStatus === "rejected") {
             try {
-                const foundUser = await MobileUser.findById(user.id);
-                if (foundUser?.pushToken) {
+                if (userDoc?.pushToken) {
                     await sendPushNotification(
-                        foundUser.pushToken,
+                        userDoc.pushToken,
                         "Post Rejected ⚠️",
                         `Your post "${title.slice(0, 20)}..." was not approved. Reason: ${rejectionReason}`,
                         { type: "open_diary", status: "rejected", reason: rejectionReason, postId: newPost._id.toString() },
@@ -700,7 +755,6 @@ export async function POST(req) {
             } catch (err) { }
         }
 
-        // ⚡️ Send back the isFirstPost flag and auraStats
         return addCorsHeaders(NextResponse.json({
             message: finalStatus === "approved" ? "Post created successfully" :
                 finalStatus === "rejected" ? "Post rejected by AI" : "Post submitted for approval",

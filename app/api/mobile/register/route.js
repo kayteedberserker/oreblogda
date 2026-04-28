@@ -60,7 +60,6 @@ export async function POST(req) {
     const generatedUid = `ORE-${cleanName}-${suffix}-DA`;
 
     // 3. Handle Duplicate deviceId for DB uniqueness
-    // Since SecureStore sends the same deviceId, we append an account number for the DB unique index
     let finalDeviceId = deviceId;
     if (existingAccounts.length > 0) {
       finalDeviceId = `${deviceId}-ACC${existingAccounts.length + 1}`;
@@ -78,13 +77,33 @@ export async function POST(req) {
       const cleanRef = referredBy.trim();
       const referrer = await MobileUser.findOne({ referralCode: cleanRef });
 
-      if (referrer && referrer.hardwareId !== hardwareId) { // Prevent self-referral via multi-account
+      if (referrer && referrer.hardwareId !== hardwareId) { // Prevent self-referral
         finalReferrer = cleanRef;
         referrer.invitedUsers.push({ username: username, date: new Date() });
         referrer.referralCount = (referrer.referralCount || 0) + 1;
         referrer.weeklyAura = (referrer.weeklyAura || 0) + 20;
         referrer.coins = (referrer.coins || 0) + 50;
         referrer.doubleStreakUntil = boostExpiry;
+
+        // 🎖 Achievement: The Recruiter (RARE)
+        const alreadyHasRecruiter = referrer.unlockedTitles?.some(t => t.name === "The Recruiter");
+        if (!alreadyHasRecruiter) {
+          const recruiterTitle = { name: "The Recruiter", tier: "RARE" };
+          referrer.unlockedTitles.push(recruiterTitle);
+
+          // Notify Referrer of Title
+          if (referrer.pushToken) {
+            try {
+              await sendPushNotification(
+                referrer.pushToken,
+                "Achievement Unlocked! 🎖",
+                "You've earned the title: 'The Recruiter'!",
+                { type: "milestone_unlock" }
+              );
+            } catch (err) { }
+          }
+        }
+
         await referrer.save();
 
         if (referrer.pushToken) {
@@ -92,7 +111,7 @@ export async function POST(req) {
             await sendPushNotification(
               referrer.pushToken,
               "New Recruit Joined! 🌀",
-              `${username} joined your clan. 72h boost active!`,
+              `${username} joined using your referral link. 72h boost active!`,
               { type: "referral_success" }
             );
           } catch (pErr) { console.error(pErr); }
@@ -109,11 +128,11 @@ export async function POST(req) {
       { clothingId: 'default_shoe', name: 'Issued Boots', type: 'shoe', isDefault: true },
     ];
 
-    // ⚡️ CREATE NEW ACCOUNT (No 'else' block needed, always create!)
+    // ⚡️ CREATE NEW ACCOUNT
     const user = await MobileUser.create({
-      uid: generatedUid,    // The Login ID
-      deviceId: finalDeviceId, // Unique for DB
-      hardwareId,           // Linked to physical phone
+      uid: generatedUid,
+      deviceId: finalDeviceId,
+      hardwareId,
       username,
       pushToken,
       country: detectedCountry,
@@ -129,7 +148,9 @@ export async function POST(req) {
       aura: auraBonus,
       weeklyAura: auraBonus,
       doubleStreakUntil: boostDate,
-      lastActive: new Date()
+      lastActive: new Date(),
+      totalPosts: 0, // Initialize for the new posting logic
+      unlockedTitles: []
     });
 
     // Log referral event
@@ -141,20 +162,19 @@ export async function POST(req) {
             referrerId: referrerDoc._id,
             referredId: user._id,
             referredUsername: user.username,
-            deviceId: hardwareId, // Use hardwareId for tracking
+            deviceId: hardwareId,
             status: 'verified'
           });
         }
       } catch (e) { console.error(e); }
     }
 
-    // Return structured profile payload
     return NextResponse.json({
       message: "Neural Link Established",
       user: {
         uid: user.uid,
         username: user.username,
-        deviceId: user.deviceId, // They keep this local link
+        deviceId: user.deviceId,
         country: user.country,
         pushToken: user.pushToken,
         preferences: user.preferences,

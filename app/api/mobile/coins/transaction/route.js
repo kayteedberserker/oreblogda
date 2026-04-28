@@ -1,3 +1,4 @@
+import { sendPillParallel } from '@/app/lib/messagePillService';
 import connectDB from '@/app/lib/mongodb';
 import { sendPushNotification } from '@/app/lib/pushNotifications';
 import MobileUser from '@/app/models/MobileUserModel';
@@ -69,7 +70,71 @@ export async function GET(req) {
     }
 }
 
-// --- POST HANDLER: TRANSACTIONS ---
+// 🏆 Transaction Title Thresholds
+const TITLE_THRESHOLDS = {
+    // For Buying Coins (IAP)
+    totalPurchasedCoins: [
+        { limit: 1000, name: "Patron", tier: "COMMON" },
+        { limit: 10000, name: "Ore-Magnate", tier: "RARE" },
+        { limit: 50000, name: "The Exalted", tier: "EPIC" },
+        { limit: 100000, name: "System Benefactor", tier: "LEGENDARY" }
+    ],
+    // For Spending Coins (Shop/Inventory)
+    lifetimeCoinsSpent: [
+        { limit: 1, name: "First Blood", tier: "COMMON" },
+        { limit: 5000, name: "Shop regular", tier: "RARE" },
+        { limit: 25000, name: "Big Spender", tier: "EPIC" },
+        { limit: 100000, name: "Gilded Collector", tier: "LEGENDARY" }
+    ]
+};
+
+// 🛠 Helper to check and award titles using parallel notification stack
+async function checkTitleUnlocks(user, field, currentCount) {
+    const thresholds = TITLE_THRESHOLDS[field];
+    if (!thresholds) return null;
+
+    const earnedTitle = [...thresholds].reverse().find(t => currentCount >= t.limit);
+
+    if (earnedTitle) {
+        const alreadyHas = user.unlockedTitles?.some(t => t.name === earnedTitle.name);
+        if (!alreadyHas) {
+            await MobileUser.findByIdAndUpdate(user._id, {
+                $addToSet: { unlockedTitles: earnedTitle }
+            });
+
+            // 🔔 Handle Notifications for Title Unlock
+            if (user.pushToken) {
+                const titleMsg = `🏆 NEW TITLE: You are now a "${earnedTitle.name}"!`;
+
+                // Push Notification
+                await sendPushNotification(
+                    user.pushToken,
+                    "Achievement Unlocked! 🎖",
+                    titleMsg,
+                    { type: "achievement" }
+                );
+
+                // UI Pill
+                await sendPillParallel(
+                    [user.pushToken],
+                    "Title Earned",
+                    titleMsg,
+                    { type: "achievement" },
+                    {
+                        type: 'achievement',
+                        targetAudience: 'user',
+                        targetId: user._id.toString(),
+                        singleUser: true,
+                        priority: 3
+                    }
+                );
+            }
+            return earnedTitle;
+        }
+    }
+    return null;
+}
+
 export async function POST(req) {
     try {
         await connectDB();
@@ -78,6 +143,8 @@ export async function POST(req) {
         // ⚡️ Added expiresInDays to the destructured body
         const { deviceId, action, type, packId, coinType, itemId, price, name, category, rarity, visualConfig, rewards, payload, expiresInDays } = body;
 
+        // Note: For complex multi-user transactions like 'transfer', findOne is okay, 
+        // but for individual updates, findOneAndUpdate is safer.
         const user = await MobileUser.findOne({ deviceId });
         if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
@@ -99,6 +166,7 @@ export async function POST(req) {
                 return NextResponse.json({ error: 'Target shinobi not found' }, { status: 404 });
             }
 
+            // Perform atomic updates
             user.coins -= transferAmount;
             recipient.coins = (recipient.coins || 0) + transferAmount;
 
@@ -125,6 +193,7 @@ export async function POST(req) {
             });
         }
 
+        // --- ACTION: BUY ITEM ---
         if (action === 'buy_item') {
             const isCC = coinType === 'CC' || body.currency === 'CC';
             const balanceKey = isCC ? 'clanCoins' : 'coins';
@@ -133,55 +202,52 @@ export async function POST(req) {
                 return NextResponse.json({ error: `Insufficient ${isCC ? 'CC' : 'OC'}` }, { status: 400 });
             }
 
-            if (!user.inventory) user.inventory = [];
+            // Tracking lifetime spend for Titles (Usually tracked in OC)
+            let spendIncrement = !isCC ? price : 0;
 
-            // 1. Find if the user already owns this exact item
-            const existingItemIndex = user.inventory.findIndex(i => i.itemId === itemId);
+            const existingItemIndex = user.inventory?.findIndex(i => i.itemId === itemId);
 
             if (existingItemIndex > -1) {
-                // 2. If owned, check if it's a temporary item
                 if (!expiresInDays) {
-                    // It is permanent. Reject it.
                     return NextResponse.json({ error: 'Already owned permanently' }, { status: 400 });
                 } else {
-                    // It is temporary. We stack/extend the duration!
                     const existingItem = user.inventory[existingItemIndex];
-                    let newExpiryDate;
+                    let newExpiryDate = (existingItem.expiresAt && new Date(existingItem.expiresAt) > new Date())
+                        ? new Date(existingItem.expiresAt)
+                        : new Date();
 
-                    // If it hasn't expired yet, add days to the existing future date
-                    if (existingItem.expiresAt && new Date(existingItem.expiresAt) > new Date()) {
-                        newExpiryDate = new Date(existingItem.expiresAt);
-                    } else {
-                        // If it already expired (or didn't have a date), start fresh from right now
-                        newExpiryDate = new Date();
-                    }
-
-                    // Add the new days
                     newExpiryDate.setDate(newExpiryDate.getDate() + parseInt(expiresInDays));
 
-                    // Update the item and deduct coins
-                    existingItem.expiresAt = newExpiryDate;
-                    user[balanceKey] -= price;
+                    // Atomic update for extension
+                    const updatedUser = await MobileUser.findOneAndUpdate(
+                        { deviceId, "inventory.itemId": itemId },
+                        {
+                            $inc: { [balanceKey]: -price, lifetimeCoinsSpent: spendIncrement },
+                            $set: { "inventory.$.expiresAt": newExpiryDate }
+                        },
+                        { new: true }
+                    );
 
-                    // Tell Mongoose the inventory array was modified so it saves correctly
-                    user.markModified('inventory');
+                    // 🏆 Check Titles with fresh data
+                    await checkTitleUnlocks(updatedUser, "lifetimeCoinsSpent", updatedUser.lifetimeCoinsSpent);
 
-                    await user.save();
-                    return NextResponse.json({ success: true, balance: user.coins, clanBalance: user.clanCoins, inventory: user.inventory });
+                    return NextResponse.json({
+                        success: true,
+                        balance: updatedUser.coins,
+                        clanBalance: updatedUser.clanCoins,
+                        inventory: updatedUser.inventory
+                    });
                 }
             }
 
-            // 3. If NOT owned, proceed with normal addition
-            user[balanceKey] -= price;
-
-            // ⚡️ Expiration Logic Added Here
+            // Logic for NOT owned
             let expiryDate = null;
             if (expiresInDays) {
                 expiryDate = new Date();
                 expiryDate.setDate(expiryDate.getDate() + parseInt(expiresInDays));
             }
 
-            user.inventory.push({
+            const newItem = {
                 itemId,
                 name: name || 'Unnamed Item',
                 category,
@@ -200,15 +266,29 @@ export async function POST(req) {
                     isAnimated: visualConfig?.isAnimated || !!(visualConfig?.animated || visualConfig?.animationType)
                 },
                 acquiredAt: new Date(),
-                expiresAt: expiryDate // ⚡️ Applied here
-            });
-            console.log(user.inventory);
+                expiresAt: expiryDate
+            };
 
-            await user.save();
-            return NextResponse.json({ success: true, balance: user.coins, clanBalance: user.clanCoins, inventory: user.inventory });
+            const updatedUser = await MobileUser.findOneAndUpdate(
+                { deviceId },
+                {
+                    $inc: { [balanceKey]: -price, lifetimeCoinsSpent: spendIncrement },
+                    $push: { inventory: newItem }
+                },
+                { new: true }
+            );
+
+            await checkTitleUnlocks(updatedUser, "lifetimeCoinsSpent", updatedUser.lifetimeCoinsSpent);
+
+            return NextResponse.json({
+                success: true,
+                balance: updatedUser.coins,
+                clanBalance: updatedUser.clanCoins,
+                inventory: updatedUser.inventory
+            });
         }
 
-        // --- ACTION: PURCHASE PACK (UNPACKING REWARDS) ---
+        // --- ACTION: PURCHASE PACK ---
         if (action === 'purchase_pack') {
             const packData = rewards;
             if (!packData) return NextResponse.json({ error: 'Pack data missing' }, { status: 400 });
@@ -217,6 +297,7 @@ export async function POST(req) {
                 return NextResponse.json({ error: 'Pack already purchased' }, { status: 400 });
             }
 
+            // Since packs have multiple different reward types, we'll keep the loop but save once at the end
             packData.forEach(reward => {
                 if (reward.type === 'OC') {
                     user.coins = (user.coins || 0) + reward.amount;
@@ -233,8 +314,6 @@ export async function POST(req) {
                 if (inventoryCategories.includes(reward.type)) {
                     const alreadyHasItem = user.inventory.some(inv => inv.itemId === reward.id);
                     if (!alreadyHasItem) {
-
-                        // ⚡️ Expiration Logic Added Here for Pack Rewards
                         let expiryDate = null;
                         if (reward.expiresInDays) {
                             expiryDate = new Date();
@@ -255,7 +334,7 @@ export async function POST(req) {
                                 isAnimated: reward.visualConfig?.isAnimated || false
                             },
                             acquiredAt: new Date(),
-                            expiresAt: expiryDate // ⚡️ Applied here
+                            expiresAt: expiryDate
                         });
                     }
                 }
@@ -279,22 +358,29 @@ export async function POST(req) {
             const amount = matchedNumbers ? parseInt(matchedNumbers[0], 10) : 0;
             let purchasedCurrency = 'OC';
 
+            const updateQuery = { $inc: { totalPurchasedCoins: amount } };
+
             if (type.toLowerCase().includes('clan') || coinType === 'CC') {
-                user.clanCoins = (user.clanCoins || 0) + amount;
+                updateQuery.$inc.clanCoins = amount;
                 purchasedCurrency = 'Clan Coins (CC)';
             } else {
-                user.coins = (user.coins || 0) + amount;
+                updateQuery.$inc.coins = amount;
             }
 
-            // ⚡️ Add to total purchased REGARDLESS of OC or CC (since both use real money)
-            user.totalPurchasedCoins = (user.totalPurchasedCoins || 0) + amount;
+            const updatedUser = await MobileUser.findOneAndUpdate(
+                { deviceId },
+                updateQuery,
+                { new: true }
+            );
 
-            // ⚡️ Automatically calculate and upgrade Peak Level
-            user.peakLevel = calculatePeakLevel(user.totalPurchasedCoins);
+            // Recalculate Peak Level based on fresh data
+            updatedUser.peakLevel = calculatePeakLevel(updatedUser.totalPurchasedCoins);
+            await updatedUser.save();
 
-            await user.save();
+            // 🏆 Check Titles
+            await checkTitleUnlocks(updatedUser, "totalPurchasedCoins", updatedUser.totalPurchasedCoins);
 
-            // Notify Admins about the purchase
+            // Email Logic
             try {
                 const transporter = nodemailer.createTransport({
                     service: "gmail",
@@ -302,66 +388,50 @@ export async function POST(req) {
                 });
 
                 const mailOptions = {
-                    from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
+                    from: `"O hablo" <${process.env.MAILEREMAIL}>`,
                     to: "Admins",
                     bcc: ["kayteedberserker@gmail.com"],
                     subject: `💰 New Coin Purchase Alert!`,
                     html: `
                         <h2>New In-App Purchase!</h2>
-                        <p><strong>User:</strong> ${user.username || 'Unknown User'} (Device ID: ${deviceId})</p>
+                        <p><strong>User:</strong> ${updatedUser.username || 'Unknown User'} (Device ID: ${deviceId})</p>
                         <p><strong>Package Type:</strong> ${type}</p>
                         <p><strong>Amount Gained:</strong> ${amount} ${purchasedCurrency}</p>
-                        <p><strong>New Peak Level:</strong> ${user.peakLevel}</p>
+                        <p><strong>New Peak Level:</strong> ${updatedUser.peakLevel}</p>
                     `
                 };
-
                 await transporter.sendMail(mailOptions);
             } catch (emailErr) {
                 console.error("Coin purchase email notification failed:", emailErr);
             }
 
-            // ⚡️ Return the new total and peak back to the app context
             return NextResponse.json({
                 success: true,
-                newBalance: user.coins,
-                newClanBalance: user.clanCoins,
-                totalPurchasedCoins: user.totalPurchasedCoins,
-                peakLevel: user.peakLevel
+                newBalance: updatedUser.coins,
+                newClanBalance: updatedUser.clanCoins,
+                totalPurchasedCoins: updatedUser.totalPurchasedCoins,
+                peakLevel: updatedUser.peakLevel
             });
         }
 
-        // --- ACTION: CLAIM DAILY OR EVENTS ---
+        // --- ACTION: CLAIM ---
         if (action === 'claim') {
             const amount = OC_VALUES[type];
             if (!amount) return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
 
-            // 🔹 Validation 1: Daily Login Streak
             if (type === 'daily_login' || type === 'daily_login_7') {
                 const today = new Date().setHours(0, 0, 0, 0);
                 if (user.lastClaimedDate && new Date(user.lastClaimedDate).setHours(0, 0, 0, 0) === today) {
                     return NextResponse.json({ error: 'Already claimed today' }, { status: 400 });
                 }
+
                 user.lastClaimedDate = new Date();
-                if (user.consecutiveStreak == 7) {
-                    user.consecutiveStreak = 1
-                } else {
-                    user.consecutiveStreak += 1
-                }
-            }
-            // 🔹 Validation 2: Special One-Time Events (e.g., '1kpostevent')
-            else {
-                // Ensure the array exists
+                user.consecutiveStreak = (user.consecutiveStreak >= 7) ? 1 : (user.consecutiveStreak || 0) + 1;
+            } else {
                 if (!user.claimedEvents) user.claimedEvents = [];
-
-                // Check if they already claimed this specific event
-                const hasClaimed = user.claimedEvents.some(event => event.eventId === type);
-
-                if (hasClaimed) {
-                    // ⚡️ Note: The frontend explicitly looks for the word "Already claimed" to lock the button!
+                if (user.claimedEvents.some(event => event.eventId === type)) {
                     return NextResponse.json({ error: 'Reward already claimed.' }, { status: 400 });
                 }
-
-                // Record the claim so they can never get it again
                 user.claimedEvents.push({ eventId: type });
             }
 
@@ -370,19 +440,37 @@ export async function POST(req) {
             return NextResponse.json({ success: true, newBalance: user.coins });
         }
 
+        // --- ACTION: SPEND ---
         if (action === 'spend') {
             const amount = OC_VALUES[type];
             if (user.coins < amount) return NextResponse.json({ error: 'Insufficient OC' }, { status: 400 });
-            user.coins -= amount;
-            await user.save();
-            return NextResponse.json({ success: true, newBalance: user.coins });
+
+            const updatedUser = await MobileUser.findOneAndUpdate(
+                { deviceId },
+                {
+                    $inc: { coins: -amount, lifetimeCoinsSpent: amount }
+                },
+                { new: true }
+            );
+
+            await checkTitleUnlocks(updatedUser, "lifetimeCoinsSpent", updatedUser.lifetimeCoinsSpent);
+            return NextResponse.json({ success: true, newBalance: updatedUser.coins });
         }
 
+        // --- ACTION: REFUND ---
         if (action === 'refund') {
             const amount = OC_VALUES[type];
-            user.coins += amount;
-            await user.save();
-            return NextResponse.json({ success: true, newBalance: user.coins });
+            const updatedUser = await MobileUser.findOneAndUpdate(
+                { deviceId },
+                {
+                    $inc: { coins: amount },
+                    // Use Math.max logic outside or use a $cond in update, but simple inc is usually okay
+                    $inc: { lifetimeCoinsSpent: -amount }
+                },
+                { new: true }
+            );
+
+            return NextResponse.json({ success: true, newBalance: updatedUser.coins });
         }
 
         return NextResponse.json({ error: 'Invalid action' }, { status: 400 });

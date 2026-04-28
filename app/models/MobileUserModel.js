@@ -82,6 +82,13 @@ const mobileUserSchema = new mongoose.Schema(
       public_id: { type: String, default: "" },
     },
     totalPurchasedCoins: { type: Number, default: 0 },
+    lifetimeCoinsSpent: { type: Number, default: 0 },
+    totalLikes: { type: Number, default: 0 },
+    totalPosts: { type: Number, default: 0 },
+    receivedCommentsCount: { type: Number, default: 0 },
+    lifetimeCommentsCount: { type: Number, default: 0 },
+    totalShares: { type: Number, default: 0 },
+    totalViews: { type: Number, default: 0 },
     peakLevel: { type: Number, default: 0 },
     totalRejectedPost: { type: Number, default: 0 },
     consecutiveStreak: { type: Number, default: 0 },
@@ -128,6 +135,8 @@ const mobileUserSchema = new mongoose.Schema(
       badge: { type: String, default: null },
       effect: { type: String, default: null }
     },
+    unlockedTitles: [{ name: String, tier: String }],
+    equippedTitle: { name: String, tier: String },
 
     // --- 💰 COIN SYSTEM ---
     coins: { type: Number, default: 0 },

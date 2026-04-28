@@ -123,6 +123,70 @@ export async function GET(req, { params }) {
   }
 }
 
+// 🏆 Updated Threshold Mapping
+const TITLE_THRESHOLDS = {
+  totalCommentsReceived: [
+    { limit: 10, name: "Signal Starter", tier: "COMMON" },
+    { limit: 200, name: "Topic Starter", tier: "RARE" },
+    { limit: 2000, name: "Debate Master", tier: "EPIC" },
+    { limit: 10000, name: "The Great Orator", tier: "LEGENDARY" }
+  ],
+  lifetimeCommentsMade: [
+    { limit: 1, name: "First Response", tier: "COMMON" }, // Special "First Time" title
+    { limit: 500, name: "Active Citizen", tier: "RARE" }
+  ]
+};
+
+// 🛠 Helper to check and award titles using parallel notification stack
+async function checkTitleUnlocks(user, field, currentCount) {
+  const thresholds = TITLE_THRESHOLDS[field];
+  console.log(user, field, currentCount);
+
+  if (!thresholds) return null;
+
+  const earnedTitle = [...thresholds].reverse().find(t => currentCount >= t.limit);
+  console.log(earnedTitle);
+
+  if (earnedTitle) {
+    const alreadyHas = user.unlockedTitles?.some(t => t.name === earnedTitle.name);
+    if (!alreadyHas) {
+      await MobileUser.findByIdAndUpdate(user._id, {
+        $addToSet: { unlockedTitles: earnedTitle }
+      });
+
+      // 🔔 Handle Notifications for Title Unlock
+      if (user.pushToken) {
+        const titleMsg = `🏆 NEW TITLE: You are now a "${earnedTitle.name}"!`;
+
+        // Push Notification
+        await sendPushNotification(
+          user.pushToken,
+          "Achievement Unlocked! 🎖",
+          titleMsg,
+          { type: "achievement" }
+        );
+
+        // UI Pill
+        await sendPillParallel(
+          [user.pushToken],
+          "Title Earned",
+          titleMsg,
+          { type: "achievement" },
+          {
+            type: 'achievement',
+            targetAudience: 'user',
+            targetId: user._id.toString(),
+            singleUser: true,
+            priority: 3
+          }
+        );
+      }
+      return earnedTitle;
+    }
+  }
+  return null;
+}
+
 export async function POST(req, { params }) {
   await connectDB();
   const { id } = await params;
@@ -135,6 +199,7 @@ export async function POST(req, { params }) {
       return NextResponse.json({ message: "Comment text or stickerId required" }, { status: 400 });
     }
 
+    // Identify who is making the comment
     const foundMobileUser = await MobileUser.findOne({ deviceId: fingerprint });
     const mobileUserId = foundMobileUser?._id;
 
@@ -176,29 +241,60 @@ export async function POST(req, { params }) {
       }
     };
 
-    // ⚡️ RULE 1: TOP-LEVEL COMMENT AURA
+    // ⚡️ RULE 1: TOP-LEVEL COMMENT AURA & STATS
     if (!parentCommentId) {
       post.comments.unshift(newComment);
       immediateRecipientId = post.authorUserId;
 
-      // The Author of the Post gets +10 Aura when someone comments on their thread
       if (post.authorUserId && post.authorUserId.toString() !== mobileUserId?.toString()) {
-        // ⚡️ Using Centralized Aura Manager
         await awardAura(post.authorUserId, 10);
         await awardClanPoints(post, 20, 'comment');
+
+        // 🏆 TITLE LOGIC: Increment Recipient's stats and check unlock
+        const postAuthor = await MobileUser.findByIdAndUpdate(
+          post.authorUserId,
+          { $inc: { receivedCommentsCount: 1 } },
+          { new: true }
+        );
+
+        if (postAuthor) {
+          await checkTitleUnlocks(postAuthor, "totalCommentsReceived", postAuthor.receivedCommentsCount);
+        }
       }
     }
-    // ⚡️ RULE 2: REPLY AURA
+    // ⚡️ RULE 2: REPLY AURA & STATS
     else {
       immediateRecipientId = findAndReply(post.comments);
       if (!immediateRecipientId) return NextResponse.json({ message: "Signal lost" }, { status: 404 });
       post.markModified("comments");
 
-      // The Main Commenter gets +5 Aura when someone replies to them
       if (immediateRecipientId.toString() !== mobileUserId?.toString()) {
-        // ⚡️ Using Centralized Aura Manager
         await awardAura(immediateRecipientId, 5);
         await awardClanPoints(post, 10, 'comment');
+
+        // 🏆 TITLE LOGIC: Increment Parent Author's stats and check unlock
+        const parentAuthor = await MobileUser.findByIdAndUpdate(
+          immediateRecipientId,
+          { $inc: { receivedCommentsCount: 1 } },
+          { new: true }
+        );
+
+        if (parentAuthor) {
+          await checkTitleUnlocks(parentAuthor, "totalCommentsReceived", parentAuthor.receivedCommentsCount);
+        }
+      }
+    }
+
+    // 🏆 TITLE LOGIC: Increment Commenter's lifetime stats and check unlock
+    if (mobileUserId) {
+      const updatedCommenter = await MobileUser.findByIdAndUpdate(
+        mobileUserId,
+        { $inc: { lifetimeCommentsCount: 1 } },
+        { new: true }
+      );
+
+      if (updatedCommenter) {
+        await checkTitleUnlocks(updatedCommenter, "lifetimeCommentsMade", updatedCommenter.lifetimeCommentsCount);
       }
     }
 
@@ -237,18 +333,13 @@ export async function POST(req, { params }) {
       const { participants, totalMessages } = getBranchData(targetRootComment);
 
       if (totalMessages > 0 && totalMessages % 5 === 0) {
-
-        // Gather everyone who deserves the +1 Discussion Aura
-        const rewardIds = new Set(participants); // This includes all repliers and the main commenter
-        if (post.authorUserId) rewardIds.add(post.authorUserId.toString()); // Add the original post author
-
-        // Remove the person who just commented so they can't farm Aura by replying to themselves
+        const rewardIds = new Set(participants);
+        if (post.authorUserId) rewardIds.add(post.authorUserId.toString());
         if (mobileUserId) rewardIds.delete(mobileUserId.toString());
 
         const idsToReward = Array.from(rewardIds);
 
         if (idsToReward.length > 0) {
-          // ⚡️ Using Promise.all to run the Aura Manager for every participant concurrently
           await Promise.all(idsToReward.map(id => awardAura(id, 1)));
           await awardClanPoints(post, 5, 'comment');
         }
@@ -309,17 +400,19 @@ export async function POST(req, { params }) {
       }
     }));
 
-    // Attach derived author data to the newly created comment so the UI updates properly right away
+    // Prepare response data with enriched profile info
     let enrichedAuthor = { name: newComment.name };
-    if (foundMobileUser) {
-      const equippedItems = foundMobileUser.inventory ? foundMobileUser.inventory.filter(i => i.isEquipped) : [];
+    const latestSender = await MobileUser.findOne({ deviceId: fingerprint });
+
+    if (latestSender) {
+      const equippedItems = latestSender.inventory ? latestSender.inventory.filter(i => i.isEquipped) : [];
       enrichedAuthor = {
-        username: foundMobileUser.username,
-        name: foundMobileUser.username,
-        peakLevel: foundMobileUser.peakLevel || 0,
-        lastStreak: foundMobileUser.lastStreak || 0,
-        streak: foundMobileUser.consecutiveStreak || 0,
-        auraRank: foundMobileUser.previousRank || null,
+        username: latestSender.username,
+        name: latestSender.username,
+        peakLevel: latestSender.peakLevel || 0,
+        lastStreak: latestSender.lastStreak || 0,
+        streak: latestSender.consecutiveStreak || 0,
+        auraRank: latestSender.previousRank || null,
         equippedGlow: equippedItems.find(i => ['GLOW', 'NAME_GLOW', 'TEXT_GLOW', 'EFFECT'].includes(i.category?.toUpperCase())) || null,
         badges: equippedItems.filter(i => i.category?.toUpperCase() === 'BADGE') || []
       };

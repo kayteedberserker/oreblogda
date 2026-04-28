@@ -5,7 +5,6 @@ import connectDB from "@/app/lib/mongodb";
 import { sendPushNotification } from "@/app/lib/pushNotifications";
 import Clan from "@/app/models/ClanModel";
 import MobileUser from "@/app/models/MobileUserModel";
-import Notification from "@/app/models/NotificationModel";
 import Post from "@/app/models/PostModel";
 import crypto from "crypto";
 import { NextResponse } from "next/server";
@@ -141,6 +140,76 @@ export async function OPTIONS() {
     return addCorsHeaders(new NextResponse(null, { status: 204 }));
 }
 
+// 🏆 Title Thresholds Mapping
+const TITLE_THRESHOLDS = {
+    totalLikes: [
+        { limit: 100, name: "Appreciated", tier: "COMMON" },
+        { limit: 2500, name: "Crowd Favorite", tier: "RARE" },
+        { limit: 10000, name: "Golden Soul", tier: "EPIC" },
+        { limit: 100000, name: "The People's Choice", tier: "LEGENDARY" }
+    ],
+    totalViews: [
+        { limit: 10000, name: "Visible One", tier: "RARE" },
+        { limit: 100000, name: "Viral Spec", tier: "EPIC" },
+        { limit: 1000000, name: "Omnipresent", tier: "LEGENDARY" }
+    ],
+    totalShares: [
+        { limit: 50, name: "Messenger", tier: "COMMON" },
+        { limit: 500, name: "Trendsetter", tier: "RARE" },
+        { limit: 2000, name: "Signal Booster", tier: "EPIC" },
+        { limit: 5000, name: "Broadcast Master", tier: "LEGENDARY" }
+    ]
+};
+
+// 🛠 Helper to check and award titles
+async function checkTitleUnlocks(user, field, currentCount) {
+    const thresholds = TITLE_THRESHOLDS[field];
+    if (!thresholds) return null;
+
+    // Find the highest title they just qualified for
+    const earnedTitle = [...thresholds].reverse().find(t => currentCount >= t.limit);
+
+    if (earnedTitle) {
+        // Check if they already have this title to avoid duplicate notifications
+        const alreadyHas = user.unlockedTitles?.some(t => t.name === earnedTitle.name);
+
+        if (!alreadyHas) {
+            await MobileUser.findByIdAndUpdate(user._id, {
+                $addToSet: { unlockedTitles: earnedTitle }
+            });
+
+            // 🔔 Using your notification stack for the unlock
+            if (user.pushToken) {
+                const titleMsg = `🏆 NEW TITLE UNLOCKED: You are now a "${earnedTitle.name}"!`;
+
+                await sendPushNotification(
+                    user.pushToken,
+                    "New Achievement! 🎖",
+                    titleMsg,
+                    { type: "achievement" }
+                );
+
+                await sendPillParallel(
+                    [user.pushToken],
+                    "Title Earned",
+                    titleMsg,
+                    { type: "achievement" },
+                    {
+                        type: 'achievement',
+                        targetAudience: 'user',
+                        targetId: user._id.toString(),
+                        singleUser: true,
+                        priority: 3
+                    }
+                );
+            }
+
+            return earnedTitle;
+        }
+    }
+    return null;
+}
+
 // ----------------------
 // PATCH: Handle Likes, Views, Shares, Votes
 // ----------------------
@@ -192,7 +261,6 @@ export async function PATCH(req, { params }) {
                     // 🛡️ CLAN: Only if the post is a Clan Post
                     await awardClanPoints(post, 10);
                     const msg = `Someone voted on your post: "${post.title.substring(0, 15)}..."`;
-                    await Notification.create({ recipientId: post.authorId, senderName: "Someone", type: "like", postId: post._id, message: msg });
 
                     if (author.pushToken) {
                         // 🔔 GROUPING ADDED: Uses "vote_<PostID>" so votes stack
@@ -235,23 +303,23 @@ export async function PATCH(req, { params }) {
 
             // ✨ AURA & CLAN LOGIC
             if (updatedPost.authorId !== fingerprint) {
-                const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
+                // ⚡️ INCREMENT STATS: Incrementing author's total global likes
+                const author = await MobileUser.findOneAndUpdate(
+                    { deviceId: updatedPost.authorId },
+                    { $inc: { totalLikes: 1 } },
+                    { new: true }
+                );
 
                 if (author) {
                     // ⚡️ Centralized Aura Manager
                     await awardAura(author._id, 5);
                     await awardClanPoints(updatedPost, 10, 'like');
 
+                    // 🏆 TITLE LOGIC: Check for Like Milestone
+                    await checkTitleUnlocks(author, "totalLikes", author.totalLikes || 0);
+
                     // Handle Notifications
                     const msg = `Someone liked your post: "${updatedPost.title.substring(0, 15)}..."`;
-                    await Notification.create({
-                        recipientId: updatedPost.authorId,
-                        senderName: "Someone",
-                        type: "like",
-                        priority: "high",
-                        postId: updatedPost._id,
-                        message: msg
-                    });
 
                     if (author.pushToken) {
                         const tokens = [author.pushToken];
@@ -275,13 +343,6 @@ export async function PATCH(req, { params }) {
                     const milestones = [5, 10, 25, 50, 100];
                     if (milestones.includes(updatedPost.likes.length)) {
                         const mMsg = `🔥 Trending! Your post reached ${updatedPost.likes.length} likes!`;
-                        await Notification.create({
-                            recipientId: updatedPost.authorId,
-                            senderName: "System",
-                            type: "trending",
-                            postId: updatedPost._id,
-                            message: mMsg
-                        });
 
                         if (author.pushToken) {
                             await sendPushNotification(
@@ -305,11 +366,19 @@ export async function PATCH(req, { params }) {
 
             // ✨ AURA LOGIC: +3 for Sharing
             if (updatedPost && updatedPost.authorId !== fingerprint) {
-                const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
+                // ⚡️ INCREMENT STATS: Incrementing author's total global likes
+                const author = await MobileUser.findOneAndUpdate(
+                    { deviceId: updatedPost.authorId },
+                    { $inc: { totalShares: 1 } },
+                    { new: true }
+                );
                 if (author) {
                     // ⚡️ Centralized Aura Manager
                     await awardAura(author._id, 3);
                     await awardClanPoints(updatedPost, 20, 'share');
+
+                    // 🏆 TITLE LOGIC: Check for Share Milestone
+                    await checkTitleUnlocks(author, "totalShares", author.totalShares || 0);
                 }
             }
 
@@ -353,15 +422,25 @@ export async function PATCH(req, { params }) {
                 );
 
                 if (updatedPost) {
-                    // ✨ AURA LOGIC: +2 Aura for every 5 unique views
-                    if (updatedPost.views % 5 === 0) {
-                        const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
-                        if (author) {
+                    // ⚡️ INCREMENT STATS: Incrementing author's total global likes
+                    const author = await MobileUser.findOneAndUpdate(
+                        { deviceId: updatedPost.authorId },
+                        { $inc: { totalViews: 1 } },
+                        { new: true }
+                    );
+
+                    if (author) {
+                        // ✨ AURA LOGIC: +2 Aura for every 5 unique views
+                        if (updatedPost.views % 5 === 0) {
                             // ⚡️ Centralized Aura Manager
                             await awardAura(author._id, 2);
                             await awardClanPoints(updatedPost, 5, 'view');
                         }
+
+                        // 🏆 TITLE LOGIC: Check for View Milestone
+                        await checkTitleUnlocks(author, "totalViews", author.totalViews || 0);
                     }
+
                     return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
                 }
             }
