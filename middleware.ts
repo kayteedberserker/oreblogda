@@ -6,26 +6,33 @@ const APP_SECRET = process.env.APP_INTERNAL_SECRET;
 const JWT_SECRET = process.env.JWT_SECRET;
 const MY_DOMAIN = "oreblogda";
 
-// 🔹 1. PUBLIC ROUTES: No Token Required
+// 🔹 1. PUBLIC ROUTES: No Token Required even in Debug Mode
 const PUBLIC_API_ROUTES = [
   "/api/mobile/sync-identity",
   "/api/mobile/register",
   "/api/mobile/recover",
   "/api/mobile/secure-uplink",
-  "/api/mobile/refresh", // 🛡️ MUST BE PUBLIC so we can get new tokens!
+  "/api/version",
+  "/api/mobile/refresh", 
 ];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   const userAgent = req.headers.get('user-agent') || '';
   const method = req.method;
+  
+  // 🛡️ THE SYSTEM TOGGLE
+  // If true: Test the new Token/JWT logic.
+  // If false: Standard public access (no token check).
+  const isDebugMode = req.headers.get('x-the-system-debug') === 'true';
+
   const response = NextResponse.next();
 
   if (pathname.startsWith("/api")) {
     // A. Standard Security Headers
     response.headers.set("Access-Control-Allow-Origin", "*");
     response.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS");
-    response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-oreblogda-secret, x-user-deviceId");
+    response.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, x-oreblogda-secret, x-user-deviceId, x-the-system-debug");
 
     if (method === "OPTIONS") {
       return new NextResponse(null, { status: 204, headers: response.headers });
@@ -42,7 +49,7 @@ export async function middleware(req: NextRequest) {
     if (!isSearchEngine && !isInternal && !isCronJob) {
       const clientSecret = req.headers.get('x-oreblogda-secret');
 
-      // 1. Check App Secret
+      // 1. Basic App Secret Check (Always Active)
       if (!clientSecret || clientSecret !== APP_SECRET) {
         return new NextResponse(
           JSON.stringify({ success: false, message: "NEURAL_LINK_DENIED: Unauthorized Source." }),
@@ -50,12 +57,11 @@ export async function middleware(req: NextRequest) {
         );
       }
 
-      // 2. JWT Logic
+      // 2. NEW FEATURE: JWT/Token Logic
+      // ONLY runs if isDebugMode is true. Normal users bypass this entirely.
       const isPublicAction = PUBLIC_API_ROUTES.some(route => pathname.startsWith(route));
       
-      // 🛡️ PROTECT: In THE SYSTEM, we check tokens for ALL non-public API calls, 
-      // not just "Write" actions, to ensure user data remains private.
-      if (!isPublicAction) {
+      if (isDebugMode && !isPublicAction) {
         const authHeader = req.headers.get('authorization');
         const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
         const clientDeviceId = req.headers.get('x-user-deviceId');
@@ -69,9 +75,8 @@ export async function middleware(req: NextRequest) {
 
         try {
           const secret = new TextEncoder().encode(JWT_SECRET);
-          // This will throw if the 15-minute access token is expired
           const { payload } = await jwtVerify(token, secret);
-          // Device DNA Check
+          
           if (payload.userId !== clientDeviceId) {
             return new NextResponse(
               JSON.stringify({ success: false, message: "NEURAL_MISMATCH: Hardware signature invalid." }),
@@ -79,10 +84,8 @@ export async function middleware(req: NextRequest) {
             );
           }
 
-          // Pass user data to the route
           response.headers.set('x-user-level', String(payload.level));
         } catch (err: any) {
-          // 🛡️ REFRESH TRIGGER: If expired, send a specific code for the frontend to catch
           const isExpired = err.code === 'ERR_JWT_EXPIRED';
           
           return new NextResponse(
