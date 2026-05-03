@@ -8,6 +8,7 @@ import Clan from "@/app/models/ClanModel";
 import MobileUser from "@/app/models/MobileUserModel";
 import Newsletter from "@/app/models/Newsletter";
 import Post from "@/app/models/PostModel";
+import userModel from "@/app/models/UserModel";
 import { GoogleGenAI } from "@google/genai";
 import geoip from "geoip-lite";
 import { NextResponse } from "next/server";
@@ -589,7 +590,7 @@ export async function POST(req) {
         if (token) {
             try {
                 const verified = verifyToken(token);
-                userDoc = await MobileUser.findById(verified.id);
+                userDoc = await userModel.findById(verified.id);
             } catch (err) { }
         }
 
