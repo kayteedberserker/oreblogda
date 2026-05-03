@@ -11,11 +11,19 @@ export async function POST(req) {
             return NextResponse.json({ message: "Missing operative ID." }, { status: 400 });
         }
 
+
         // ⚡️ Nullify the push token so this device stops receiving targeted intel
         await MobileUser.findOneAndUpdate(
             { deviceId },
-            { $set: { pushToken: null, hasLoggedOut: true } }
+            {
+                $set: {
+                    pushToken: null,
+                    hasLoggedOut: true,
+                    activeSessionDeviceId: null // 🛡️ Invalidate session - forces other devices to re-auth
+                }
+            }
         );
+
 
         return NextResponse.json({ message: "Neural link detached successfully." }, { status: 200 });
 

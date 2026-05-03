@@ -229,25 +229,36 @@ export async function PATCH(req, { params }) {
         if (action === "vote") {
             const { selectedOptions } = payload; // Array of indices
 
-            const post = await Post.findOneAndUpdate(
-                { _id: id, voters: { $ne: fingerprint } },
-                { $addToSet: { voters: fingerprint } },
-                { new: true }
-            );
+            // Support legacy string voters + new objects
+            const hasVoted = await Post.findOne({
+                _id: id,
+                $or: [
+                    { "voters": fingerprint },  // Legacy string
+                    { "voters.fingerprint": fingerprint }  // New object
+                ]
+            });
 
-            if (!post) {
+            if (hasVoted) {
                 return addCorsHeaders(NextResponse.json({ message: "Already voted or post missing" }, { status: 400 }));
             }
 
-            if (post.poll && Array.isArray(post.poll.options)) {
-                for (const index of selectedOptions) {
-                    if (post.poll.options[index]) {
-                        await Post.updateOne(
-                            { _id: id },
-                            { $inc: { [`poll.options.${index}.votes`]: 1 } }
-                        );
-                    }
-                }
+            // Atomically increment votes + store voter object
+            const voteUpdates = [];
+            for (const index of selectedOptions) {
+                voteUpdates.push({ [`poll.options.${index}.votes`]: 1 });
+            }
+
+            const updatedPost = await Post.findByIdAndUpdate(
+                { _id: id },
+                {
+                    $push: { voters: { fingerprint, selectedOptions } },
+                    ...Object.fromEntries(voteUpdates)
+                },
+                { new: true }
+            );
+
+            if (!updatedPost) {
+                return addCorsHeaders(NextResponse.json({ message: "Post not found" }, { status: 404 }));
             }
 
             // ✨ AURA LOGIC: +5 for Voting
@@ -468,6 +479,9 @@ export async function GET(req, { params }) {
         const { id } = resolvedParams;
         if (!id) return addCorsHeaders(NextResponse.json({ message: "Post identifier required" }, { status: 400 }));
 
+        // Get deviceId from headers for hasLiked check
+        const deviceId = req.headers.get("x-user-deviceId") || "";
+
         // 1. Fetch the post
         let post;
         if (id.includes("-")) {
@@ -538,6 +552,28 @@ export async function GET(req, { params }) {
             .trim();
 
         // 3. Package and return
+        // ⚡️ CHECK IF USER HAS LIKED THIS POST
+        const postLikes = post.likes || [];
+        const hasLiked = deviceId ? postLikes.some(like => like?.fingerprint == deviceId) : false;
+
+        // Compute hasViewed & poll vote status
+        const hasViewed = post.viewsFingerprints?.includes(deviceId) || false;
+
+        let pollVoteStatus = null;
+
+        if (post.poll && post.voters.length > 0) {
+            const voterMatch = post.voters.find(v =>
+                v.fingerprint === deviceId || v === deviceId  // Legacy string support
+            );
+
+            pollVoteStatus = {
+                hasVoted: !!voterMatch,
+                userVotedOptions: voterMatch?.selectedOptions || []
+            };
+            console.log("pollVoteStatus from single post page is", pollVoteStatus);
+
+        }
+
         const responseData = {
             ...post,
             authorPostCount,
@@ -547,7 +583,13 @@ export async function GET(req, { params }) {
             formattedViews: formatViewsServer(post.viewsCount ?? post.views ?? 0),
             likesCount: post.likeCount ?? (post.likes?.length || 0),
             commentsCount: post.comments?.length || 0,
-            discussionCount: calculateDiscussionCount(post.comments || [])
+            discussionCount: calculateDiscussionCount(post.comments || []),
+            hasLiked,
+            hasViewed,
+            poll: post.poll ? {
+                ...post.poll,
+                ...pollVoteStatus
+            } : post.poll
         };
 
         return addCorsHeaders(NextResponse.json(responseData));

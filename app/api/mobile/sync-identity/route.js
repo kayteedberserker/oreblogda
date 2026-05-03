@@ -63,6 +63,7 @@ export async function POST(req) {
         return NextResponse.json({
             success: true,
             uid: user.uid,
+            securityLevel: user.securityLevel || 0,
             message: "Identity Synchronized and Locked."
         });
 

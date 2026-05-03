@@ -36,11 +36,15 @@ export async function createMessagePill({
                     const newMatch = text.match(/\d+/);
                     if (oldMatch && newMatch) {
                         const oldAmount = parseInt(oldMatch[0], 10);
-                        const newMatch = parseInt(newMatch[0], 10);
+                        // Change 'const newMatch' to 'const newAmount'
+                        const newAmount = parseInt(newMatch[0], 10);
+
+                        // Now this calculation works perfectly
                         const totalAmount = oldAmount + newAmount;
+
                         finalText = type === 'aura_gain'
                             ? `+${totalAmount} Aura Gained.`
-                            : `+${totalAmount} Clan Points Gained.`;
+                            : `+${totalAmount} Clan Points Gained!`;
                     }
                     await MessagePillModel.deleteOne({ _id: existingPill._id });
                 }

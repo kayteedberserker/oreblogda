@@ -1,3 +1,4 @@
+import bcrypt from "bcryptjs"; // NEW: For hashing the PIN
 import mongoose from "mongoose";
 
 // 🎒 Inventory Item Schema (Frames, Badges, etc.)
@@ -28,7 +29,7 @@ const InventoryItemSchema = new mongoose.Schema({
 });
 
 const StickerSchema = new mongoose.Schema({
-  stickerId: { type: String, required: true, unique: true }, // e.g., 'burning_quill', 'luffy_shock'
+  stickerId: { type: String, required: true, unique: true },
   name: { type: String, required: true },
   rarity: {
     type: String,
@@ -41,13 +42,13 @@ const StickerSchema = new mongoose.Schema({
     required: true
   },
   visualData: {
-    svgCode: { type: String }, // For your SVG codes
-    lottieUrl: { type: String }, // For animated stickers
-    imageUrl: { type: String }, // NEW: For PNGs/JPEGs
+    svgCode: { type: String },
+    lottieUrl: { type: String },
+    imageUrl: { type: String },
     color: { type: String }
   },
   isRentable: { type: Boolean, default: true },
-  isActive: { type: Boolean, default: true } // If you ever want to remove a sticker from the store
+  isActive: { type: Boolean, default: true }
 });
 
 // 👗 Wardrobe Schema for Character Clothing
@@ -65,14 +66,37 @@ const WardrobeItemSchema = new mongoose.Schema({
 
 const mobileUserSchema = new mongoose.Schema(
   {
-    // --- 🔑 IDENTITY SYSTEM ---
-    // uid is the human-readable 'ORE-USER-XXXX-DA' used for login/recovery
+    // --- 🔑 IDENTITY & SECURITY SYSTEM ---
     uid: { type: String, unique: true, sparse: true },
-    // deviceId is the software fingerprint (unique slot per app install)
     deviceId: { type: String, required: true, unique: true },
-    // hardwareId is the physical DNA of the phone (used for the 3-account limit)
     hardwareId: { type: String, index: true },
 
+    // 🛡️ TRUSTED DEVICES SYSTEM (Multi-device login)
+    trustedDevices: [{
+      hardwareId: { type: String, required: true },
+      deviceId: { type: String, required: true },
+      addedAt: { type: Date, default: Date.now },
+      lastActive: { type: Date, default: Date.now }
+    }],
+    activeSessionDeviceId: { type: String, default: null }, // Currently active device - clearing this logs out other devices
+
+    // NEW: Security Fields
+    pin: {
+      type: String,
+      required: false, // Optional initially for Level 1 guests
+      select: false    // CRITICAL: Won't show up in normal queries (API won't leak it)
+    },
+    email: {
+      type: String,
+      unique: true,
+      sparse: true, // Allows nulls while keeping unique constraint for those who provide it
+      lowercase: true
+    },
+    securityLevel: { type: Number, default: 1 }, // LVL 1: Device, LVL 2: PIN, LVL 3: Email
+
+    // 🛡️ BRUTE-FORCE PROTECTION FIELDS
+    loginAttempts: { type: Number, default: 0, select: false },
+    lockUntil: { type: Date, default: null, select: false },
     username: { type: String, default: "Guest Author" },
     pushToken: { type: String, default: null },
     role: { type: String, default: "Author" },
@@ -92,6 +116,7 @@ const mobileUserSchema = new mongoose.Schema(
     peakLevel: { type: Number, default: 0 },
     totalRejectedPost: { type: Number, default: 0 },
     consecutiveStreak: { type: Number, default: 0 },
+    refreshToken: { type: String },
     country: { type: String, default: 'Unknown' },
     lastActive: { type: Date, default: Date.now },
     appOpens: { type: Number, default: 0 },
@@ -127,7 +152,7 @@ const mobileUserSchema = new mongoose.Schema(
     // --- 🎒 USER INVENTORY (Frames/Badges Only) ---
     inventory: [InventoryItemSchema],
     stickers: {
-      owned: [{ type: String }], // Array of stickerIds they bought permanently
+      owned: [{ type: String }],
     },
     activeCustomizations: {
       frame: { type: String, default: null },
@@ -146,7 +171,7 @@ const mobileUserSchema = new mongoose.Schema(
       claimedAt: { type: Date, default: Date.now }
     }],
 
-    // ⚡️ DYNAMIC EVENT TRACKERS (Mapped by eventId)
+    // ⚡️ DYNAMIC EVENT TRACKERS
     gachaPityCounters: { type: Map, of: Number, default: {} },
     eventPoints: { type: Map, of: Number, default: {} },
 
@@ -159,7 +184,6 @@ const mobileUserSchema = new mongoose.Schema(
       }],
       default: []
     },
-    // ⚡️ Store their current calculated level so you can easily query/sort by it
     currentRankLevel: { type: Number, default: 1 },
     hasLoggedOut: { type: Boolean, default: false },
     // --- ✨ AURA SYSTEM ---
@@ -187,6 +211,27 @@ const mobileUserSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+// --- 🛡️ SECURITY MIDDLEWARE ---
+
+// Automatically hash the PIN before saving to the database
+mobileUserSchema.pre("save", async function (next) {
+  // Only hash the pin if it has been modified (or is new)
+  if (!this.isModified("pin") || !this.pin) return next();
+
+  try {
+    const salt = await bcrypt.genSalt(10);
+    this.pin = await bcrypt.hash(this.pin, salt);
+    next();
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Helper method to compare PINs (used during login)
+mobileUserSchema.methods.comparePin = async function (enteredPin) {
+  return await bcrypt.compare(enteredPin, this.pin);
+};
 
 const MobileUser = mongoose.models.MobileUsers || mongoose.model("MobileUsers", mobileUserSchema);
 

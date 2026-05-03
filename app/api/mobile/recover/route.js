@@ -1,9 +1,20 @@
 import connectDB from "@/app/lib/mongodb";
+import ClanFollower from "@/app/models/ClanFollower";
 import MobileUser from "@/app/models/MobileUserModel";
 import geoip from "geoip-lite";
+import jwt from "jsonwebtoken";
+import sanitize from "mongo-sanitize";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 
-// ⚡️ HELPER: Generate secure random suffix (Re-used for legacy recovery)
+const loginSchema = z.object({
+  recoverId: z.string().min(3),
+  hardwareId: z.string().min(5),
+  deviceId: z.string().optional(),
+  pin: z.string().optional(),
+  pushToken: z.string().optional(),
+});
+
 const generateSecureSuffix = () => {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let suffix = "";
@@ -21,84 +32,174 @@ export async function POST(req) {
   try {
     await connectDB();
 
-    const { deviceId, hardwareId, recoverId, pushToken } = await req.json();
-    console.log("Recovery Attempt:", { deviceId, hardwareId, recoverId });
+    const rawBody = await req.json();
+    const cleanBody = sanitize(rawBody);
+    const validation = loginSchema.safeParse(cleanBody);
 
-    if (!recoverId) {
-      return NextResponse.json({ message: "Operative identity is required for recovery" }, { status: 400 });
+    if (!validation.success) {
+      return NextResponse.json({
+        message: "Neural Protocol Violation, Incorrect data format.",
+        errors: validation.error.format()
+      }, { status: 400 });
     }
 
+    const { hardwareId, recoverId, pin, pushToken } = validation.data;
     const cleanRecoverId = recoverId.trim();
 
-    // 1. 🔍 DUAL-LAYER SEARCH: Check UID first, then legacy deviceId
+    // 1. 🔍 SEARCH USER
     let user = await MobileUser.findOne({
       $or: [
         { uid: cleanRecoverId },
-        { deviceId: cleanRecoverId } // Support for old users using their UUID
+        { deviceId: cleanRecoverId }
       ]
-    });
+    }).select("+pin +loginAttempts +lockUntil +refreshToken");
 
     if (!user) {
-      return NextResponse.json({
-        message: "Identity not found. Check your credentials or initiate new registration."
-      }, { status: 404 });
+      return NextResponse.json({ message: "Identity not found." }, { status: 404 });
     }
 
-    // 2. 🛡️ LEGACY AWAKENING: If they found the account via deviceId but have no UID yet
+    // 2. 🛡️ BRUTE-FORCE PROTECTION
+    if (user.lockUntil && user.lockUntil > Date.now()) {
+      const remainingMinutes = Math.ceil((user.lockUntil - Date.now()) / 60000);
+      return NextResponse.json({
+        message: `SECURITY_LOCKOUT: Try again in ${remainingMinutes} minutes.`
+      }, { status: 429 });
+    }
+
+    // 3. 🛡️ TRUSTED DEVICES AUTHENTICATION
+    const isTrustedDevice = user.trustedDevices.some(device => device.hardwareId === hardwareId);
+    const isSameDevice = user.hardwareId === hardwareId;
+    // 🛡️ Set this device as active session (logs out other devices)
+    user.activeSessionDeviceId = validation.data.deviceId || deviceId;
+
+
+    if (!isTrustedDevice && !isSameDevice) {
+      // New device - require PIN if security level requires it
+      if (user.securityLevel >= 2) {
+        if (!pin) {
+          return NextResponse.json({
+            message: "ENCRYPTION_REQUIRED",
+            detail: "New device detected. PIN required to add as trusted device."
+          }, { status: 401 });
+        }
+
+        const isMatch = await user.comparePin(pin);
+        if (!isMatch) {
+          user.loginAttempts = (user.loginAttempts || 0) + 1;
+          if (user.loginAttempts >= 5) {
+            user.lockUntil = Date.now() + 30 * 60 * 1000;
+          }
+          await user.save();
+          return NextResponse.json({
+            message: "Access Denied. Incorrect PIN.",
+            attemptsRemaining: 5 - (user.loginAttempts || 0)
+          }, { status: 401 });
+        }
+
+        // Success! Add new device to trusted devices
+        user.trustedDevices.push({
+          hardwareId: hardwareId,
+          deviceId: validation.data.deviceId || deviceId,
+          addedAt: new Date(),
+          lastActive: new Date()
+        });
+        user.loginAttempts = 0;
+        user.lockUntil = null;
+      } else {
+        return NextResponse.json({
+          message: "UNTRUSTED_DEVICE",
+          detail: "Set up PIN first (Security Level 2+) to add new devices."
+        }, { status: 403 });
+      }
+    }
+
+    // Update last active for trusted device
+    const trustedDeviceIndex = user.trustedDevices.findIndex(device => device.hardwareId === hardwareId);
+    if (trustedDeviceIndex !== -1) {
+      user.trustedDevices[trustedDeviceIndex].lastActive = new Date();
+    }
+
+
+    // 4. 🛡️ UID GENERATION (For legacy users)
     if (!user.uid) {
       const suffix = generateSecureSuffix();
       const cleanName = (user.username || "Guest").trim().toUpperCase().replace(/\s+/g, "_");
       user.uid = `ORE-${cleanName}-${suffix}-DA`;
-      console.log(`AWAKENED: Legacy user ${user.username} assigned UID: ${user.uid}`);
     }
 
-    // 3. 🛡️ HARDWARE PROTECTION: Check 3-account limit
+
+    // 5. 🛡️ ANTI-SPAM: Hardware Account Limit (Max 3 accounts per phone)
     const existingAccountsOnHardware = await MobileUser.find({ hardwareId });
     const isAlreadyOnThisHardware = user.hardwareId === hardwareId;
-
-    if (!isAlreadyOnThisHardware && existingAccountsOnHardware.length >= 3) {
+    if (!isTrustedDevice && !isAlreadyOnThisHardware && existingAccountsOnHardware.length >= 3) {
       return NextResponse.json({
-        message: "DEVICE_LIMIT: This hardware unit is already at maximum capacity (3/3)."
+        message: "DEVICE_LIMIT: This hardware unit is at maximum capacity (3/3)."
       }, { status: 403 });
     }
 
-    // 4. 🔗 UPDATE NEURAL LINK: Keep original deviceId, update physical DNA
-    // ⚡️ We intentionally DO NOT update user.deviceId here anymore. We keep their original identity intact.
-    user.hardwareId = hardwareId;
 
-    // ⚡️ Re-bind the push token to wake up notifications for this session
+    // 6. 🔗 UPDATE METADATA
     if (pushToken) user.pushToken = pushToken;
-
-    // Geo-Intel Update
     const forwarded = req.headers.get("x-forwarded-for");
     const ip = forwarded ? forwarded.split(/, /)[0] : "127.0.0.1";
     const geo = geoip.lookup(ip);
-    const detectedCountry = geo ? geo.country : "Unknown";
+    user.country = user.country && user.country !== "Unknown" ? user.country : (geo ? geo.country : "Unknown");
 
-    if (!user.country || user.country === "Unknown") {
-      user.country = detectedCountry;
-    }
-    user.hasLoggedOut = false; // Reset logout status on recovery
+    user.hasLoggedOut = false;
     user.lastActive = new Date();
-    await user.save();
-    console.log("Recovery Success:", { uid: user.uid, deviceId: user.deviceId, hardwareId: user.hardwareId, country: user.country });
 
-    // 5. 🚀 RETURN FULL PROFILE
+    // 7. 🛡️ TOKEN GENERATION (Single Session Enforcement)
+    // By saving the refreshToken to the user, we invalidate any previous device
+    const accessToken = jwt.sign(
+      { userId: user.deviceId, uid: user.uid, level: user.securityLevel },
+      process.env.JWT_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    const refreshToken = jwt.sign(
+      { uid: user.uid },
+      process.env.REFRESH_TOKEN_SECRET,
+      { expiresIn: "90d" }
+    );
+
+    user.refreshToken = refreshToken; // Overwrites previous session's token
+    await user.save();
+
+    // 8. 🔍 DATA SYNC (Clans)
+    const followedClans = await ClanFollower.find({ userId: user._id }).select("clanTag");
+    const followedClanTags = followedClans.map(f => f.clanTag);
+
+    // 9. 🛡️ ONBOARDING FLAGS (Skip intro for returning users)
+    const onboardingFlags = {
+      has_seen_profile_onboarding: true,
+      HAS_SEEN_WELCOME: "true",
+      HAS_SEEN_CLAN_UPDATE: "true",
+      HAS_SEEN_COINS_V3: "true",
+      HAS_SEEN_PEAK_V5: "true",
+      HAS_SEEN_STORE_V4: "true",
+    };
+
     return NextResponse.json({
-      message: "Neural link re-established. Welcome back, Operative.",
+      message: "Neural link re-established.",
+      accessToken,
+      refreshToken,
       user: {
         uid: user.uid,
         username: user.username,
-        deviceId: user.deviceId, // ⚡️ This returns their ORIGINAL deviceId to the frontend
-        country: user.country,
-        pushToken: user.pushToken,
-        preferences: user.preferences,
-        referredBy: user.referredBy
+        deviceId: user.deviceId,
+        securityLevel: user.securityLevel,
+        coins: user.coins,
+        aura: user.aura,
+        character: user.character
+      },
+      sessionData: {
+        followedClans: followedClanTags,
+        ...onboardingFlags
       }
     }, { status: 200 });
 
   } catch (err) {
-    console.error("Recovery Error:", err);
+    console.error("Login/Recovery Error:", err);
     return NextResponse.json({
       message: "Uplink synchronization failed",
       error: err.message

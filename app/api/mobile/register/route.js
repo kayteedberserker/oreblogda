@@ -4,9 +4,9 @@ import MobileUser from "@/app/models/MobileUserModel";
 import ReferralEvent from "@/app/models/ReferralEvent";
 import crypto from "crypto";
 import geoip from "geoip-lite";
+import jwt from "jsonwebtoken";
 import { NextResponse } from "next/server";
 
-// ⚡️ HELPER: Generate secure random suffix for UID
 const generateSecureSuffix = () => {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let suffix = "";
@@ -15,7 +15,6 @@ const generateSecureSuffix = () => {
     for (let i = 0; i < 4; i++) {
       suffix += chars.charAt(Math.floor(Math.random() * chars.length));
     }
-    // Basic check to avoid 1111 or 1234
     if (!/^(\w)\1+$/.test(suffix) && !"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".includes(suffix)) break;
   }
   return suffix;
@@ -42,24 +41,18 @@ export async function POST(req) {
     const geo = geoip.lookup(ip);
     const detectedCountry = geo ? geo.country : "Unknown";
 
-    // ⚡️ Master Check: Find how many accounts already exist on this physical hardware
     const existingAccounts = await MobileUser.find({ hardwareId });
 
-    // 🚀 STRICT REGISTRATION PHASE
-
-    // 1. Limit Check: Max 3 accounts per hardwareId
     if (existingAccounts.length >= 3) {
       return NextResponse.json({
         message: "SECURITY_PROTOCOL: Device limit reached. Maximum 3 operatives allowed per device."
       }, { status: 403 });
     }
 
-    // 2. Generate the Public UID (Login ID)
     const suffix = generateSecureSuffix();
     const cleanName = username.trim().toUpperCase().replace(/\s+/g, "_");
     const generatedUid = `ORE-${cleanName}-${suffix}-DA`;
 
-    // 3. Handle Duplicate deviceId for DB uniqueness
     let finalDeviceId = deviceId;
     if (existingAccounts.length > 0) {
       finalDeviceId = `${deviceId}-ACC${existingAccounts.length + 1}`;
@@ -72,12 +65,11 @@ export async function POST(req) {
     const boostExpiry = new Date();
     boostExpiry.setHours(boostExpiry.getHours() + 72);
 
-    // Referral Logic
     if (referredBy && referredBy.trim() !== "") {
       const cleanRef = referredBy.trim();
       const referrer = await MobileUser.findOne({ referralCode: cleanRef });
 
-      if (referrer && referrer.hardwareId !== hardwareId) { // Prevent self-referral
+      if (referrer && referrer.hardwareId !== hardwareId) {
         finalReferrer = cleanRef;
         referrer.invitedUsers.push({ username: username, date: new Date() });
         referrer.referralCount = (referrer.referralCount || 0) + 1;
@@ -85,13 +77,10 @@ export async function POST(req) {
         referrer.coins = (referrer.coins || 0) + 50;
         referrer.doubleStreakUntil = boostExpiry;
 
-        // 🎖 Achievement: The Recruiter (RARE)
         const alreadyHasRecruiter = referrer.unlockedTitles?.some(t => t.name === "The Recruiter");
         if (!alreadyHasRecruiter) {
           const recruiterTitle = { name: "The Recruiter", tier: "RARE" };
           referrer.unlockedTitles.push(recruiterTitle);
-
-          // Notify Referrer of Title
           if (referrer.pushToken) {
             try {
               await sendPushNotification(
@@ -128,11 +117,34 @@ export async function POST(req) {
       { clothingId: 'default_shoe', name: 'Issued Boots', type: 'shoe', isDefault: true },
     ];
 
-    // ⚡️ CREATE NEW ACCOUNT
+    // 🛡️ DOUBLE TOKEN GENERATION (Preparation)
+    const accessTokenSecret = process.env.JWT_SECRET;
+    const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET;
+
+    const initialAccessToken = jwt.sign(
+      { userId: finalDeviceId, uid: generatedUid, level: 1 },
+      accessTokenSecret,
+      { expiresIn: "15m" }
+    );
+
+    const initialRefreshToken = jwt.sign(
+      { uid: generatedUid },
+      refreshTokenSecret,
+      { expiresIn: "90d" }
+    );
+
     const user = await MobileUser.create({
       uid: generatedUid,
       deviceId: finalDeviceId,
       hardwareId,
+      // 🛡️ TRUSTED DEVICES: Add initial device as trusted
+      trustedDevices: [{
+        hardwareId: hardwareId,
+        deviceId: finalDeviceId,
+        addedAt: new Date(),
+        lastActive: new Date()
+      }],
+      activeSessionDeviceId: finalDeviceId, // First device is active
       username,
       pushToken,
       country: detectedCountry,
@@ -149,11 +161,12 @@ export async function POST(req) {
       weeklyAura: auraBonus,
       doubleStreakUntil: boostDate,
       lastActive: new Date(),
-      totalPosts: 0, // Initialize for the new posting logic
-      unlockedTitles: []
+      totalPosts: 0,
+      unlockedTitles: [],
+      securityLevel: 1,
+      refreshToken: initialRefreshToken // 🛡️ SAVE TO DB
     });
 
-    // Log referral event
     if (finalReferrer) {
       try {
         const referrerDoc = await MobileUser.findOne({ referralCode: finalReferrer }).select("_id");
@@ -171,14 +184,14 @@ export async function POST(req) {
 
     return NextResponse.json({
       message: "Neural Link Established",
+      accessToken: initialAccessToken,
+      refreshToken: initialRefreshToken,
       user: {
         uid: user.uid,
         username: user.username,
         deviceId: user.deviceId,
-        country: user.country,
-        pushToken: user.pushToken,
-        preferences: user.preferences,
-        referredBy: user.referredBy
+        securityLevel: user.securityLevel,
+        preferences: user.preferences
       }
     }, { status: 201 });
 

@@ -126,7 +126,7 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
         const isRateLimit = err.message.includes("429") || err.message.includes("Resource");
         return {
             action: "flag",
-            reason: isRateLimit ? "AI Rate Limit - Pending" : "Service unavailable",
+            reason: isRateLimit ? "Automatic Check failed - Pending" : "Service unavailable",
             interests: []
         };
     }
@@ -264,6 +264,7 @@ export async function GET(req) {
         const category = searchParams.get("category");
         const viewerId = searchParams.get("viewerId");
 
+        const deviceId = req.headers.get("x-user-deviceId") || "";
         const userCountry = req.headers.get("x-user-country") || "Global";
         const favAnimes = req.headers.get("x-user-animes")?.split(",").map(s => s.trim()).filter(Boolean) || [];
         const favGenres = req.headers.get("x-user-genres")?.split(",").map(s => s.trim()).filter(Boolean) || [];
@@ -451,6 +452,27 @@ export async function GET(req) {
                 .replace(/\n+/g, ' ')
                 .trim();
 
+            // 3. Package and return
+            // ⚡️ CHECK IF USER HAS LIKED THIS POST
+            const postLikes = p.likes || [];
+            const hasLiked = deviceId ? postLikes.some(like => like?.fingerprint == deviceId) : false;
+            // Compute hasViewed & poll vote status (same as single post)
+            const hasViewed = p.viewsFingerprints?.includes(deviceId) || false;
+
+            let pollVoteStatus = null;
+            if (p.poll && p.voters.length > 0) {
+                const voterMatch = p.voters.find(v =>
+                    v.fingerprint === deviceId || v === deviceId  // Legacy string support
+                );
+
+                pollVoteStatus = {
+                    hasVoted: !!voterMatch,
+                    userVotedOptions: voterMatch?.selectedOptions || []
+                };
+                console.log("pollVoteStatus from server is", pollVoteStatus);
+
+            }
+
             return {
                 ...p,
                 _id: p._id.toString(),
@@ -460,6 +482,12 @@ export async function GET(req) {
                 likesCount: p.likesCount ?? (p.likes?.length || 0),
                 commentsCount: p.commentsCount ?? (p.comments?.length || 0),
                 discussionCount: calculateDiscussionCount(p.comments || []),
+                hasLiked: hasLiked,
+                hasViewed,
+                poll: p.poll ? {
+                    ...p.poll,
+                    ...pollVoteStatus
+                } : p.poll,
                 authorData: userMap[aId] || null,
                 clanData: clanMap[cTag] || null
             };
