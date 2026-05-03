@@ -19,12 +19,12 @@ export async function POST(req) {
             decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
         } catch (err) {
             console.log("Session expired");
-            
             return NextResponse.json({ message: "ENCRYPTION_EXPIRED: Session Timed Out" }, { status: 401 });
         }
 
         // 2. Find user in MongoDB and verify token + deviceId match
         const user = await MobileUser.findOne({ uid: decoded.uid });
+        console.log("This user refreshToken is: ", refreshToken, " but its supposed to be? ", user.refreshToken);
 
         if (!user || user.refreshToken !== refreshToken || user.deviceId !== deviceId) {
             // This is critical: If the token doesn't match what we have in DB, 
@@ -33,7 +33,7 @@ export async function POST(req) {
             console.log("Expected deviceId:", user.deviceId);
             console.log("Received deviceId:", deviceId);
 
-            return NextResponse.json({ message: "SESSION_COMPROMISED: Neural Link Severed" }, { status: 401 });
+            return NextResponse.json({ message: "SESSION_COMPROMISED: Neural Link Severed" }, { status: 405 });
         }
 
         // 3. GENERATE NEW PAIR (Rotation)

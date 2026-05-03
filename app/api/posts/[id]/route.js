@@ -180,7 +180,7 @@ async function checkTitleUnlocks(user, field, currentCount) {
 
             // 🔔 Using your notification stack for the unlock
             if (user.pushToken) {
-                const titleMsg = `🏆 NEW TITLE UNLOCKED: You are now a "${earnedTitle.name}"!`;
+                const titleMsg = `🏆 NEW TITLE UNLOCKED: "${earnedTitle.name}"!`;
 
                 await sendPushNotification(
                     user.pushToken,
@@ -237,22 +237,23 @@ export async function PATCH(req, { params }) {
                     { "voters.fingerprint": fingerprint }  // New object
                 ]
             });
+            console.log("hasVoted is: ", hasVoted, selectedOptions);
 
             if (hasVoted) {
                 return addCorsHeaders(NextResponse.json({ message: "Already voted or post missing" }, { status: 400 }));
             }
 
             // Atomically increment votes + store voter object
-            const voteUpdates = [];
+            // Build the $inc object correctly
+            const incUpdates = {};
             for (const index of selectedOptions) {
-                voteUpdates.push({ [`poll.options.${index}.votes`]: 1 });
+                incUpdates[`poll.options.${index}.votes`] = 1;
             }
-
             const updatedPost = await Post.findByIdAndUpdate(
-                { _id: id },
+                id, // findByIdAndUpdate takes the ID directly as the first arg
                 {
                     $push: { voters: { fingerprint, selectedOptions } },
-                    ...Object.fromEntries(voteUpdates)
+                    $inc: incUpdates // Use $inc to atomically increment
                 },
                 { new: true }
             );
@@ -262,16 +263,16 @@ export async function PATCH(req, { params }) {
             }
 
             // ✨ AURA LOGIC: +5 for Voting
-            if (post.authorId !== fingerprint) {
-                const author = await MobileUser.findOne({ deviceId: post.authorId });
+            if (updatedPost.authorId !== fingerprint) {
+                const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
 
                 if (author) {
                     // ⚡️ Replaced manual $inc with centralized Aura Manager
                     await awardAura(author._id, 5);
 
                     // 🛡️ CLAN: Only if the post is a Clan Post
-                    await awardClanPoints(post, 10);
-                    const msg = `Someone voted on your post: "${post.title.substring(0, 15)}..."`;
+                    await awardClanPoints(updatedPost, 10);
+                    const msg = `Someone voted on your post: "${updatedPost.title.substring(0, 15)}..."`;
 
                     if (author.pushToken) {
                         // 🔔 GROUPING ADDED: Uses "vote_<PostID>" so votes stack
@@ -279,8 +280,8 @@ export async function PATCH(req, { params }) {
                             author.pushToken,
                             "New Vote! ✅",
                             msg,
-                            { postId: post._id.toString(), type: "post_detail" },
-                            `vote_${post._id}`
+                            { postId: updatedPost._id.toString(), type: "post_detail" },
+                            `vote_${updatedPost._id}`
                         );
                     }
                 }

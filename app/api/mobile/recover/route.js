@@ -7,8 +7,9 @@ import sanitize from "mongo-sanitize";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+// Let Zod handle the trimming so we don't have to do it manually later
 const loginSchema = z.object({
-  recoverId: z.string().min(3),
+  recoverId: z.string().min(3).trim(),
   hardwareId: z.string().min(5),
   deviceId: z.string().optional(),
   pin: z.string().optional(),
@@ -43,14 +44,14 @@ export async function POST(req) {
       }, { status: 400 });
     }
 
-    const { hardwareId, recoverId, pin, pushToken } = validation.data;
-    const cleanRecoverId = recoverId.trim();
+    const { hardwareId, recoverId, pin, pushToken, deviceId } = validation.data;
 
     // 1. 🔍 SEARCH USER
+    // Finds the account associated with the provided UID or Device ID
     let user = await MobileUser.findOne({
       $or: [
-        { uid: cleanRecoverId },
-        { deviceId: cleanRecoverId }
+        { uid: recoverId },
+        { deviceId: recoverId }
       ]
     }).select("+pin +loginAttempts +lockUntil +refreshToken");
 
@@ -58,7 +59,8 @@ export async function POST(req) {
       return NextResponse.json({ message: "Identity not found." }, { status: 404 });
     }
 
-    // 2. 🛡️ BRUTE-FORCE PROTECTION
+    // 2. 🛡️ BRUTE-FORCE PROTECTION (Fail Fast)
+    // Checks if the user is currently locked out before doing any heavy processing
     if (user.lockUntil && user.lockUntil > Date.now()) {
       const remainingMinutes = Math.ceil((user.lockUntil - Date.now()) / 60000);
       return NextResponse.json({
@@ -66,80 +68,80 @@ export async function POST(req) {
       }, { status: 429 });
     }
 
-    // 3. 🛡️ TRUSTED DEVICES AUTHENTICATION
+    // 3. 🛡️ ANTI-SPAM: Hardware Account Limit 
+    // Prevents abuse by limiting how many unique accounts can log in from a single physical phone
+    const existingAccountsOnHardware = await MobileUser.find({ hardwareId }).select('_id');
+    const isAlreadyOnThisHardware = existingAccountsOnHardware.some(acc => acc._id.equals(user._id));
+
+    if (!isAlreadyOnThisHardware && existingAccountsOnHardware.length >= 3) {
+      return NextResponse.json({
+        message: "DEVICE_LIMIT: This hardware unit is at maximum capacity (3/3)."
+      }, { status: 403 });
+    }
+
+    // 4. 🛡️ TRUSTED DEVICES & PIN AUTHENTICATION
+    // Only enforce PIN and Trusted Device checks if the user actually has a PIN setup
+    const requiresPinAuth = user.securityLevel >= 2 && user.pin;
     const isTrustedDevice = user.trustedDevices.some(device => device.hardwareId === hardwareId);
-    const isSameDevice = user.hardwareId === hardwareId;
-    // 🛡️ Set this device as active session (logs out other devices)
-    user.activeSessionDeviceId = validation.data.deviceId || deviceId;
 
-
-    if (!isTrustedDevice && !isSameDevice) {
-      // New device - require PIN if security level requires it
-      if (user.securityLevel >= 2) {
-        if (!pin) {
-          return NextResponse.json({
-            message: "ENCRYPTION_REQUIRED",
-            detail: "New device detected. PIN required to add as trusted device."
-          }, { status: 401 });
-        }
-
-        const isMatch = await user.comparePin(pin);
-        if (!isMatch) {
-          user.loginAttempts = (user.loginAttempts || 0) + 1;
-          if (user.loginAttempts >= 5) {
-            user.lockUntil = Date.now() + 30 * 60 * 1000;
-          }
-          await user.save();
-          return NextResponse.json({
-            message: "Access Denied. Incorrect PIN.",
-            attemptsRemaining: 5 - (user.loginAttempts || 0)
-          }, { status: 401 });
-        }
-
-        // Success! Add new device to trusted devices
-        user.trustedDevices.push({
-          hardwareId: hardwareId,
-          deviceId: validation.data.deviceId || deviceId,
-          addedAt: new Date(),
-          lastActive: new Date()
-        });
-        user.loginAttempts = 0;
-        user.lockUntil = null;
-      } else {
+    if (requiresPinAuth && !isTrustedDevice) {
+      // It's a protected account and an unknown device. Demand a PIN.
+      if (!pin) {
         return NextResponse.json({
-          message: "UNTRUSTED_DEVICE",
-          detail: "Set up PIN first (Security Level 2+) to add new devices."
-        }, { status: 403 });
+          message: "ENCRYPTION_REQUIRED",
+          detail: "The data of this account has been encrypted, Input PIN to decrypt."
+        }, { status: 401 });
+      }
+
+      const isMatch = await user.comparePin(pin);
+      if (!isMatch) {
+        user.loginAttempts = (user.loginAttempts || 0) + 1;
+        if (user.loginAttempts >= 5) {
+          user.lockUntil = Date.now() + 30 * 60 * 1000;
+        }
+        await user.save();
+        return NextResponse.json({
+          message: "Access Denied. Incorrect PIN.",
+          attemptsRemaining: 5 - user.loginAttempts
+        }, { status: 401 });
+      }
+
+      // Success! Reset attempts and manage the Trusted Devices array
+      user.loginAttempts = 0;
+      user.lockUntil = null;
+
+      // Enforce max 3 trusted devices: remove the oldest one if at capacity
+      if (user.trustedDevices.length >= 3) {
+        user.trustedDevices.shift(); // Removes the first item (the oldest)
+      }
+
+      user.trustedDevices.push({
+        hardwareId: hardwareId,
+        deviceId: deviceId || user.deviceId,
+        addedAt: new Date(),
+        lastActive: new Date()
+      });
+    } else if (requiresPinAuth && isTrustedDevice) {
+      // Device is known, just update its last active timestamp
+      const trustedDeviceIndex = user.trustedDevices.findIndex(device => device.hardwareId === hardwareId);
+      if (trustedDeviceIndex !== -1) {
+        user.trustedDevices[trustedDeviceIndex].lastActive = new Date();
       }
     }
+    // If !requiresPinAuth, the logic cleanly skips this entire block and lets them in.
 
-    // Update last active for trusted device
-    const trustedDeviceIndex = user.trustedDevices.findIndex(device => device.hardwareId === hardwareId);
-    if (trustedDeviceIndex !== -1) {
-      user.trustedDevices[trustedDeviceIndex].lastActive = new Date();
-    }
-
-
-    // 4. 🛡️ UID GENERATION (For legacy users)
+    // 5. 🛡️ UID GENERATION (For legacy users)
     if (!user.uid) {
       const suffix = generateSecureSuffix();
       const cleanName = (user.username || "Guest").trim().toUpperCase().replace(/\s+/g, "_");
       user.uid = `ORE-${cleanName}-${suffix}-DA`;
     }
 
-
-    // 5. 🛡️ ANTI-SPAM: Hardware Account Limit (Max 3 accounts per phone)
-    const existingAccountsOnHardware = await MobileUser.find({ hardwareId });
-    const isAlreadyOnThisHardware = user.hardwareId === hardwareId;
-    if (!isTrustedDevice && !isAlreadyOnThisHardware && existingAccountsOnHardware.length >= 3) {
-      return NextResponse.json({
-        message: "DEVICE_LIMIT: This hardware unit is at maximum capacity (3/3)."
-      }, { status: 403 });
-    }
-
-
     // 6. 🔗 UPDATE METADATA
+    // Updates session tokens, IPs, and active device states
     if (pushToken) user.pushToken = pushToken;
+    user.activeSessionDeviceId = deviceId || user.deviceId; // Fixes the crash bug from original code
+
     const forwarded = req.headers.get("x-forwarded-for");
     const ip = forwarded ? forwarded.split(/, /)[0] : "127.0.0.1";
     const geo = geoip.lookup(ip);
@@ -149,7 +151,6 @@ export async function POST(req) {
     user.lastActive = new Date();
 
     // 7. 🛡️ TOKEN GENERATION (Single Session Enforcement)
-    // By saving the refreshToken to the user, we invalidate any previous device
     const accessToken = jwt.sign(
       { userId: user.deviceId, uid: user.uid, level: user.securityLevel },
       process.env.JWT_SECRET,
@@ -169,7 +170,7 @@ export async function POST(req) {
     const followedClans = await ClanFollower.find({ userId: user._id }).select("clanTag");
     const followedClanTags = followedClans.map(f => f.clanTag);
 
-    // 9. 🛡️ ONBOARDING FLAGS (Skip intro for returning users)
+    // 9. 🛡️ ONBOARDING FLAGS
     const onboardingFlags = {
       has_seen_profile_onboarding: true,
       HAS_SEEN_WELCOME: "true",

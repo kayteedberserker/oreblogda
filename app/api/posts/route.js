@@ -540,7 +540,7 @@ async function checkTitleUnlocks(user, field, currentCount) {
             });
 
             if (user.pushToken) {
-                const titleMsg = `🏆 NEW TITLE: You are now a "${earnedTitle.name}"!`;
+                const titleMsg = `🏆 NEW TITLE: You have received the "${earnedTitle.name}" TITLE!`;
                 await sendPushNotification(user.pushToken, "Achievement Unlocked! 🎖", titleMsg, { type: "milestone_unlock" });
                 await sendPillParallel([user.pushToken], "Title Earned", titleMsg, { type: "milestone_unlock" }, {
                     type: 'achievement',

@@ -156,7 +156,7 @@ async function checkTitleUnlocks(user, field, currentCount) {
 
       // 🔔 Handle Notifications for Title Unlock
       if (user.pushToken) {
-        const titleMsg = `🏆 NEW TITLE: You are now a "${earnedTitle.name}"!`;
+        const titleMsg = `🏆 NEW TITLE: You have received the "${earnedTitle.name}" TITLE!`;
 
         // Push Notification
         await sendPushNotification(

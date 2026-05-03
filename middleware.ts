@@ -58,10 +58,11 @@ export async function middleware(req: NextRequest) {
       }
 
       // 2. NEW FEATURE: JWT/Token Logic
-      // ONLY runs if isDebugMode is true. Normal users bypass this entirely.
+      // 🔓 UPDATE: GET requests and PUBLIC_API_ROUTES bypass JWT validation
       const isPublicAction = PUBLIC_API_ROUTES.some(route => pathname.startsWith(route));
+      const isGetRequest = method === "GET";
       
-      if (isDebugMode && !isPublicAction) {
+      if (isDebugMode && !isPublicAction && !isGetRequest) {
         const authHeader = req.headers.get('authorization');
         const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
         const clientDeviceId = req.headers.get('x-user-deviceId');
@@ -94,7 +95,7 @@ export async function middleware(req: NextRequest) {
               message: isExpired ? "TOKEN_EXPIRED" : "SESSION_INVALID", 
               detail: isExpired ? "Your neural link requires refreshing." : "Please re-authenticate." 
             }),
-            { status: 401, headers: { 'content-type': 'application/json' } }
+            { status: 421, headers: { 'content-type': 'application/json' } }
           );
         }
       }

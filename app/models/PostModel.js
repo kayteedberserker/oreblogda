@@ -123,8 +123,10 @@ const postSchema = new mongoose.Schema(
 
     /* ---------- POLLS ---------- */
     poll: pollSchema,
-    voters: [{ type: String }],
-    votersOld: [{ type: String }],
+    voters: {
+      type: [mongoose.Schema.Types.Mixed], // Allows both "fingerprint-string" and { fingerprint, selectedOptions }
+      default: []
+    },
 
     /* ---------- META ---------- */
     slug: { type: String, unique: true, trim: true },
