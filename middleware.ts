@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 
 const APP_SECRET = process.env.APP_INTERNAL_SECRET;
 const JWT_SECRET = process.env.JWT_SECRET;
-const MY_DOMAIN = "localhost";
+const MY_DOMAIN = "oreblogda";
 
 // 🔹 1. PUBLIC ROUTES: No Token Required
 const PUBLIC_API_ROUTES = [
