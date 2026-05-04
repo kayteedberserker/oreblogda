@@ -392,7 +392,7 @@ export async function PATCH(req, { params }) {
                             await sendPillParallel(
                                 [author.pushToken],
                                 `Going Viral!"`,
-                                msg,
+                                mMsg,
                                 { postId: updatedPost._id.toString(), type: "post_detail" },
                                 {
                                     type: 'event',

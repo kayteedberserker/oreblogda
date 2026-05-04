@@ -198,6 +198,11 @@ export async function POST(req, { params }) {
     const post = await Post.findOne(searchFilter);
     if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
 
+    // Truncate post title for notifications (Max 20 chars)
+    const displayTitle = post.title?.length > 20
+      ? `${post.title.substring(0, 20)}...`
+      : post.title || "Post";
+
     const commentType = stickerId ? "sticker" : "text";
     const commentText = stickerId ? "" : (text || "");
 
@@ -298,8 +303,8 @@ export async function POST(req, { params }) {
         recipientId: immediateRecipientId,
         title: "New Reply 💬",
         message: stickerId
-          ? `${name} sent a sticker`
-          : `${name} replied: "${text?.substring(0, 20)}..."`,
+          ? `${name} sent a sticker on "${displayTitle}"`
+          : `${name} on "${displayTitle}": "${text?.substring(0, 20)}..."`,
         type: "reply",
         commentId: targetRootComment?._id || parentCommentId,
         isMongoId: true
@@ -311,8 +316,8 @@ export async function POST(req, { params }) {
         recipientId: post.authorUserId,
         title: "New Signal 📝",
         message: stickerId
-          ? `${name} started a new signal with a sticker`
-          : `${name} started a new signal (#${post.comments.length})`,
+          ? `${name} sent a sticker on "${displayTitle}"`
+          : `${name} commented on "${displayTitle}" (#${post.comments.length})`,
         type: "comment",
         commentId: newComment._id,
         isMongoId: true
@@ -337,7 +342,7 @@ export async function POST(req, { params }) {
       }
 
       if (typeof shouldNotifyMilestone === 'function' && shouldNotifyMilestone(totalMessages)) {
-        const discussionMsg = `Discussion Ongoing: ${totalMessages} replies on ${targetRootComment.name}'s signal.`;
+        const discussionMsg = `[${displayTitle}] Active: ${totalMessages} replies on ${targetRootComment.name}'s signal.`;
         participants.forEach(pId => {
           if (pId !== mobileUserId?.toString()) {
             notifications.push({
