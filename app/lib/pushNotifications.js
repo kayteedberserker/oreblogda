@@ -68,7 +68,7 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
   const chunkPromises = chunks.map(async (chunk, index) => {
     const messages = chunk.map(token => ({
       to: token,
-      sound: true,
+      sound: "default",
       title: title,
       body: message,
       data: data,
