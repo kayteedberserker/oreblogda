@@ -38,7 +38,8 @@ const MessagePillSchema = new mongoose.Schema({
     },
     expiresAt: {
         type: Date,
-        default: null
+        default: null,
+        index: { expires: 0 }
     },
 
 }, { timestamps: true });

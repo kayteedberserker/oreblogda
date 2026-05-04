@@ -8,8 +8,17 @@ import { NextResponse } from 'next/server';
 
 // --- LOGIC FUNCTIONS ---
 
-// ⚡️ NEW: Daily New User Broadcast
+// ⚡️ Updated: Daily New User Broadcast with Cleanup
 async function dailyNewUserBroadcast() {
+  // 1️⃣ Cleanup: Delete any pills that have already expired
+  const cleanup = await MessagePill.deleteMany({
+    expiresAt: { $lt: new Date() }
+  });
+  if (cleanup.deletedCount > 0) {
+    console.log(`[CRON] Cleaned up ${cleanup.deletedCount} expired pills.`);
+  }
+
+  // 2️⃣ Logic for New User Count
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   yesterday.setHours(0, 0, 0, 0);
@@ -26,7 +35,7 @@ async function dailyNewUserBroadcast() {
       text: `SYSTEM UPDATE: WELCOME TO THE ${newUsersCount} NEW OPERATORS WHO AWAKENED YESTERDAY.`,
       type: 'system',
       targetAudience: 'global',
-      priority: 5, // Medium-high priority
+      priority: 2,
       expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // ⚡️ Strict 24-hour expiry
     });
     console.log(`[CRON] Broadcasted New User Pill: ${newUsersCount} users.`);
@@ -301,10 +310,10 @@ async function weeklyClanReset() {
         replaceExistingType: false
       }));
     } else if (newRank < currentRank) {
-      const demotionMsg = newRank === 0 
+      const demotionMsg = newRank === 0
         ? `⚠️ EXILED: Your clan is in DEBT (${decayedPoints} pts). Earn points to restore rank!`
         : `⚠️ DEMOTION: Weekly decay dropped your clan to Tier ${newRank}.`;
-        
+
       pillPromises.push(createMessagePill({
         text: demotionMsg,
         type: 'warning',
