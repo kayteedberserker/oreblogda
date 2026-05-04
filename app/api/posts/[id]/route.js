@@ -267,9 +267,12 @@ export async function PATCH(req, { params }) {
                     const msg = `Someone voted on your post: "${updatedPost.title.substring(0, 15)}..."`;
 
                     if (author.pushToken) {
+                        // 🛡️ FIX: Wrap author.pushToken in an array to prevent .filter error
+                        const tokens = [author.pushToken];
+
                         // 🔔 GROUPING ADDED: Uses "vote_<PostID>" so votes stack
                         await sendPillParallel(
-                            author.pushToken,
+                            tokens,
                             `New Vote! ✅ on post: "${updatedPost.title.substring(0, 10)}..."`,
                             msg,
                             { postId: updatedPost._id.toString(), type: "post_detail" },
@@ -357,7 +360,7 @@ export async function PATCH(req, { params }) {
 
                         if (author.pushToken) {
                             await sendPillParallel(
-                                author.pushToken,
+                                [author.pushToken],
                                 `Going Viral!"`,
                                 msg,
                                 { postId: updatedPost._id.toString(), type: "post_detail" },
