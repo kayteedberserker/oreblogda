@@ -1,5 +1,5 @@
-import { NextResponse } from "next/server";
 import connectDB from "@/app/lib/mongodb";
+import { NextResponse } from "next/server";
 
 // ============================================================================
 // 📡 GET: Fetch Active Pills (Global + Targeted)
@@ -7,12 +7,12 @@ import connectDB from "@/app/lib/mongodb";
 export async function GET(req) {
     try {
         await connectDB();
-        
+
         // Extract targeting parameters from the URL
         const { searchParams } = new URL(req.url);
         const userId = searchParams.get("userId");
         const clanId = searchParams.get("clanId");
-        
+
         const now = new Date();
 
         // ⚡️ Build the Audience Array
@@ -29,26 +29,61 @@ export async function GET(req) {
             audienceConditions.push({ targetAudience: 'clan', targetId: clanId });
         }
 
-        // ⚡️ The Master Query
-        const activePills = await MessagePillModel.find({
-            isActive: true,
-            // Use $and to combine the expiration logic with the audience logic safely
-            $and: [
-                { 
-                    $or: [
-                        { expiresAt: null }, 
-                        { expiresAt: { $gt: now } } 
-                    ] 
-                },
-                { 
-                    $or: audienceConditions 
+        // ⚡️ The Master Query - Upgraded to Aggregation Pipeline for Deduplication
+        const activePills = await MessagePillModel.aggregate([
+            // 1. Filter out expired, inactive, and wrong audience
+            {
+                $match: {
+                    isActive: true,
+                    // Use $and to combine the expiration logic with the audience logic safely
+                    $and: [
+                        {
+                            $or: [
+                                { expiresAt: null },
+                                { expiresAt: { $gt: now } }
+                            ]
+                        },
+                        {
+                            $or: audienceConditions
+                        }
+                    ]
                 }
-            ]
-        })
-        .sort({ priority: -1, createdAt: -1 }) // Highest priority first, then newest
-        .limit(5) // Max 5 to keep the UI clean
-        .lean();
+            },
+            // 2. Sort by priority and newest first so $first picks the best one in the group
+            {
+                $sort: { priority: -1, createdAt: -1 }
+            },
+            // 3. Group by our dynamic condition (groupId OR type+link)
+            {
+                $group: {
+                    _id: {
+                        $cond: {
+                            // If groupId exists and is not an empty string, use it as the unique key
+                            if: { $and: [{ $ne: ["$groupId", null] }, { $ne: ["$groupId", ""] }] },
+                            then: { $concat: ["group_", "$groupId"] },
+                            // Else fallback to grouping by type and link (defaulting link to "nolink" if null)
+                            else: { $concat: ["typelink_", "$type", "_", { $ifNull: ["$link", "nolink"] }] }
+                        }
+                    },
+                    // Grabs the highest priority/newest document for this group
+                    doc: { $first: "$$ROOT" }
+                }
+            },
+            // 4. Flatten the document structure back to normal
+            {
+                $replaceRoot: { newRoot: "$doc" }
+            },
+            // 5. Re-sort the final unique list because $group messes up the original sort order
+            {
+                $sort: { priority: -1, createdAt: -1 }
+            },
+            // 6. Max 25 to keep the UI clean
+            {
+                $limit: 25
+            }
+        ]);
 
+        // Note: Aggregation returns plain JavaScript objects, so no need for .lean()
         return NextResponse.json({ success: true, pills: activePills }, { status: 200 });
 
     } catch (err) {
@@ -66,7 +101,7 @@ import MessagePillModel from "@/app/models/MessagePillModel";
 export async function POST(req) {
     try {
         const body = await req.json();
-        
+
         if (!body.text) {
             return NextResponse.json({ success: false, message: "Text is required" }, { status: 400 });
         }

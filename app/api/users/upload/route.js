@@ -8,8 +8,12 @@ export async function PUT(req) {
   await connectDB();
 
   const contentType = req.headers.get("content-type") || "";
+
+  // LOG FOR DEBUGGING: If this shows 'application/json', that's your 400 error.
+  console.log("Incoming Content-Type:", contentType);
+
   if (!contentType.includes("multipart/form-data")) {
-    return NextResponse.json({ message: "Invalid Content-Type" }, { status: 400 });
+    return NextResponse.json({ message: "Invalid Content-Type. Expected multipart/form-data" }, { status: 400 });
   }
 
   try {
@@ -20,13 +24,11 @@ export async function PUT(req) {
     const username = formData.get("username");
     const preferencesRaw = formData.get("preferences");
     const inventoryRaw = formData.get("inventory");
-    const equippedTitle = formData.get("equippedTitle"); // 🆕 Extract Title name or empty string
+    const equippedTitle = formData.get("equippedTitle");
     const file = formData.get("file");
-    console.log(equippedTitle);
 
     console.log("--- Profile Update Start ---");
     console.log("User ID:", userId);
-    console.log("Equipping Title:", equippedTitle === "" ? "NONE (Unequip)" : equippedTitle);
 
     let user = null;
     let SelectedModel = null;
@@ -48,24 +50,28 @@ export async function PUT(req) {
     }
 
     if (!user || !SelectedModel) {
-      console.log("❌ Error: User not found.");
       return NextResponse.json({ message: "User not found" }, { status: 404 });
     }
 
     // 🔹 Initialize Update Object
-    let updateFields = {
-      username: username || user.username,
-      description: description ?? user.description,
-    };
+    let updateFields = {};
+    if (username) updateFields.username = username;
+    if (description !== null) updateFields.description = description;
 
     // 🔹 Handle Title Equip/Unequip
-    // We check !== null because "" (unequip) is a valid value we want to save
-    if (equippedTitle !== "") {
-      updateFields.equippedTitle = JSON.parse(equippedTitle);
-      console.log("🏷️  Title Update:", equippedTitle || "Cleared");
-    } else if (equippedTitle === "") {
-      updateFields.equippedTitle = null;
-      console.log("🏷️  Title Unequipped");
+    // formData.get returns null if key is missing, "" if appended as empty
+    if (equippedTitle !== null) {
+      if (equippedTitle === "") {
+        updateFields.equippedTitle = null; // Explicit Unequip
+        console.log("🏷️ Title Unequipped");
+      } else {
+        try {
+          updateFields.equippedTitle = JSON.parse(equippedTitle);
+          console.log("🏷️ Title Update:", updateFields.equippedTitle.name);
+        } catch (e) {
+          console.error("Title Parse Error:", e);
+        }
+      }
     }
 
     // 🔹 Handle Preferences
@@ -77,28 +83,27 @@ export async function PUT(req) {
           favCharacter: parsed.favCharacter || user.preferences?.favCharacter || "",
           favGenres: parsed.favGenres || user.preferences?.favGenres || []
         };
-        console.log("🧠 Neural Prefs Synced");
+        console.log("🧠 Preferences Synced");
       } catch (pErr) {
         console.error("Preference Parse Error:", pErr);
       }
     }
 
-    // 🔹 Handle Inventory / Equipment Sync
+    // 🔹 Handle Inventory
     if (inventoryRaw) {
       try {
-        const parsedInventory = JSON.parse(inventoryRaw);
-        updateFields.inventory = parsedInventory;
-        console.log("🎒 Inventory Equipment Synced");
+        updateFields.inventory = JSON.parse(inventoryRaw);
+        console.log("🎒 Inventory Synced");
       } catch (iErr) {
         console.error("Inventory Parse Error:", iErr);
       }
     }
 
-    // 2. Cloudinary Processing (Images)
-    const hasValidFile = file && typeof file === 'object' && (file.size > 0 || file.name);
+    // 2. Cloudinary Processing
+    const hasValidFile = file && typeof file === 'object' && file.size > 0;
 
     if (hasValidFile) {
-      console.log("📸 Image detected, starting Cloudinary upload...");
+      console.log("📸 Image detected, uploading...");
 
       if (user.profilePic?.public_id) {
         try {
@@ -127,14 +132,14 @@ export async function PUT(req) {
       };
     }
 
-    // 3. Unified Update using $set
+    // 3. Unified Update
     const updatedUser = await SelectedModel.findByIdAndUpdate(
       user._id,
       { $set: updateFields },
       { new: true, runValidators: true }
     );
 
-    console.log("💾 Database updated: All Character Data, Equipment & Titles synced.");
+    console.log("💾 Sync Complete for Oleblogda User.");
     console.log("--- Profile Update End ---");
 
     return NextResponse.json({

@@ -12,6 +12,8 @@ export async function createMessagePill({
     expiresInHours = null,
     replaceExistingType = false
 }) {
+    // console.log("the link inside cmpill is: ", link);
+
     try {
         await connectDB();
 
@@ -91,7 +93,7 @@ export async function sendPillParallel(tokens, title, body, data = {}, pillConte
     if (!tokens || tokens.length === 0) return;
 
     // ⚡️ FIX 1: Construct a URL string that actually includes the query parameters
-    let generatedLink = data.screen ? `${data.screen}` : null;
+    let generatedLink = data.screen ? data.screen : pillContext.link;
 
     // Append the relevant IDs to the URL so the Marquee can use useLocalSearchParams
     if (generatedLink) {
@@ -122,12 +124,13 @@ export async function sendPillParallel(tokens, title, body, data = {}, pillConte
             ? sendPushNotification(tokens[0], title, body, data)
             : sendMultiplePushNotifications(tokens, title, body, data);
     });
+    console.log("generating pill message for: ", type, link, "for ", targetAudience, targetId);
 
     // Parallel pill
     await createMessagePill({
         text: pillText,
         type,
-        link,
+        link: generatedLink,
         groupId: data.postId || data.clanTag || 'default',
         targetAudience: audience,
         targetId: pillTarget,

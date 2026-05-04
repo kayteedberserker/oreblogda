@@ -139,12 +139,10 @@ const TITLE_THRESHOLDS = {
 // 🛠 Helper to check and award titles using parallel notification stack
 async function checkTitleUnlocks(user, field, currentCount) {
   const thresholds = TITLE_THRESHOLDS[field];
-  console.log(user, field, currentCount);
 
   if (!thresholds) return null;
 
   const earnedTitle = [...thresholds].reverse().find(t => currentCount >= t.limit);
-  console.log(earnedTitle);
 
   if (earnedTitle) {
     const alreadyHas = user.unlockedTitles?.some(t => t.name === earnedTitle.name);

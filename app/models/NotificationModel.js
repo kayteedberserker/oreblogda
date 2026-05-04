@@ -2,8 +2,8 @@ import mongoose from "mongoose";
 
 const notificationSchema = new mongoose.Schema({
   recipientId: { type: String, required: true }, // The person getting the alert
-  senderName: { type: String, required: true }, 
-  type: { type: String, enum: ["like", "comment", "voted", "reply", "trending", "discussion"] },
+  senderName: { type: String, required: true },
+  type: { type: String, enum: ["like", "comment", "voted", "reply", "trending", "discussion", "system"] },
   priority: { type: String, enum: ["low", "medium", "high"], default: "high" },
   postId: { type: mongoose.Schema.Types.ObjectId, ref: "Post" },
   message: { type: String },
