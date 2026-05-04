@@ -1,6 +1,7 @@
 import { awardAura } from "@/app/lib/auraManager";
 import { verifyToken } from "@/app/lib/auth";
 import { awardClanPoints } from "@/app/lib/clanService";
+import { sendPillParallel } from "@/app/lib/messagePillService";
 import connectDB from "@/app/lib/mongodb";
 import { sendMultiplePushNotifications, sendPushNotification } from "@/app/lib/pushNotifications";
 import ClanFollower from "@/app/models/ClanFollower";
@@ -542,8 +543,7 @@ async function checkTitleUnlocks(user, field, currentCount) {
 
             if (user.pushToken) {
                 const titleMsg = `🏆 NEW TITLE: You have received the "${earnedTitle.name}" TITLE!`;
-                await sendPushNotification(user.pushToken, "Achievement Unlocked! 🎖", titleMsg, { type: "milestone_unlock" });
-                await sendPillParallel([user.pushToken], "Title Earned", titleMsg, { type: "milestone_unlock" }, {
+                await sendPillParallel([user.pushToken], "Title Earned", titleMsg, { type: "achievement" }, {
                     type: 'achievement',
                     targetAudience: 'user',
                     targetId: user._id.toString(),
@@ -763,19 +763,38 @@ export async function POST(req) {
                 try {
                     const clan = await Clan.findOne({ tag: clanId }).select("name");
                     const followers = await ClanFollower.find({ clanTag: clanId }).populate({
-                        path: 'userId', select: 'pushToken'
+                        path: 'userId',
+                        select: 'pushToken'
                     });
-                    const tokens = followers.map(f => f.userId?.pushToken).filter(t => t?.startsWith('ExponentPushToken'));
+
+                    const tokens = followers
+                        .map(f => f.userId?.pushToken)
+                        .filter(t => t?.startsWith('ExponentPushToken'));
+
                     if (tokens.length > 0) {
-                        await sendMultiplePushNotifications(
+                        await sendPillParallel(
                             tokens,
                             `${clan?.name || clanId} Transmission 🚩`,
                             `${userDoc.username} posted: ${title}`,
-                            { type: "open_post", postId: newPost._id.toString(), clanTag: clanId },
-                            `clan_${clanId}`
+                            {
+                                type: "open_post",
+                                postId: newPost._id.toString(),
+                                clanTag: clanId,
+                                screen: `clan_${clanId}` // Used by sendPillParallel to generate the link
+                            },
+                            {
+                                type: 'clan_post',
+                                targetAudience: 'clan',
+                                targetId: clanId,
+                                priority: 3,
+                                link: `clan_${clanId}`,
+                                expiresInHours: 6
+                            }
                         );
                     }
-                } catch (err) { console.error("Clan notification error:", err); }
+                } catch (err) {
+                    console.error("Clan notification error:", err);
+                }
             }
         }
 
@@ -803,15 +822,31 @@ export async function POST(req) {
         if (finalStatus === "rejected") {
             try {
                 if (userDoc?.pushToken) {
-                    await sendPushNotification(
-                        userDoc.pushToken,
+                    await sendPillParallel(
+                        [userDoc.pushToken],
                         "Post Rejected ⚠️",
                         `Your post "${title.slice(0, 20)}..." was not approved. Reason: ${rejectionReason}`,
-                        { type: "open_diary", status: "rejected", reason: rejectionReason, postId: newPost._id.toString() },
-                        `rejected_${newPost._id.toString()}`
+                        {
+                            type: "open_diary",
+                            status: "rejected",
+                            reason: rejectionReason,
+                            postId: newPost._id.toString(),
+                            screen: "/authordiary"
+                        },
+                        {
+                            type: 'post_rejection',
+                            targetAudience: 'user',
+                            link: "/authordiary",
+                            targetId: userDoc._id.toString(),
+                            singleUser: true,
+                            priority: 10, // High priority since it's a direct moderation action
+                            expiresInHours: 12
+                        }
                     );
                 }
-            } catch (err) { }
+            } catch (err) {
+                console.error("Rejection notification error:", err);
+            }
         }
 
         return addCorsHeaders(NextResponse.json({

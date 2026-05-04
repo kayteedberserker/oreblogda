@@ -174,6 +174,7 @@ export async function POST(req) {
     const onboardingFlags = {
       has_seen_profile_onboarding: true,
       HAS_SEEN_WELCOME: "true",
+      ONBOARDING_KEY: "true",
       HAS_SEEN_CLAN_UPDATE: "true",
       HAS_SEEN_COINS_V3: "true",
       HAS_SEEN_PEAK_V5: "true",

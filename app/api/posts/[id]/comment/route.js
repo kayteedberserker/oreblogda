@@ -1,6 +1,5 @@
 import { awardClanPoints } from "@/app/lib/clanService";
 import connectDB from "@/app/lib/mongodb";
-import { sendPushNotification } from "@/app/lib/pushNotifications";
 import MobileUser from "@/app/models/MobileUserModel";
 import Notification from "@/app/models/NotificationModel";
 import Post from "@/app/models/PostModel";
@@ -159,12 +158,6 @@ async function checkTitleUnlocks(user, field, currentCount) {
         const titleMsg = `🏆 NEW TITLE: You have received the "${earnedTitle.name}" TITLE!`;
 
         // Push Notification
-        await sendPushNotification(
-          user.pushToken,
-          "Achievement Unlocked! 🎖",
-          titleMsg,
-          { type: "achievement" }
-        );
 
         // UI Pill
         await sendPillParallel(
@@ -375,7 +368,7 @@ export async function POST(req, { params }) {
           message: n.message
         });
 
-        if (user.pushToken && typeof sendPushNotification === 'function') {
+        if (user.pushToken) {
           const tokens = [user.pushToken];
           const groupId = `${n.type}_${post._id}`;
           await sendPillParallel(

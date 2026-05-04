@@ -2,13 +2,13 @@ import { sendPillParallel } from "@/app/lib/messagePillService";
 import connectDB from "@/app/lib/mongodb";
 import Clan from "@/app/models/ClanModel";
 import MobileUser from "@/app/models/MobileUserModel";
-import Post from "@/app/models/PostModel"; // 🔹 Added Post model import
+import Post from "@/app/models/PostModel";
 import { NextResponse } from "next/server";
 
 const getRankDetails = (points) => {
     if (points >= 300000) return { title: "The Akatsuki", next: 1000000, color: "#ef4444" };
     if (points >= 100000) return { title: "The Espada", next: 300000, color: "#e0f2fe" };
-    if (points >= 50000) return { title: "Phantom Troupe", next: 100000, color: "#a855f7" };
+    if (points >= 5000) return { title: "Phantom Troupe", next: 100000, color: "#a855f7" };
     if (points >= 20000) return { title: "Upper Moon", next: 50000, color: "#60a5fa" };
     if (points >= 5000) return { title: "Squad 13", next: 20000, color: "#10b981" };
     return { title: "Wandering Ronin", next: 5000, color: "#94a3b8" };
@@ -70,29 +70,43 @@ export async function PATCH(req, { params }) {
         if (action === "APPOINT_VICE") {
             if (!isLeader) return NextResponse.json({ message: "Forbidden: Leader access required" }, { status: 403 });
 
-            // If userId is provided, appoint them. If null, demote current vice.
-            clan.viceLeader = payload.userId || null;
+            if (payload.userId) {
+                // Ensure the new Vice is actually a member of the clan first
+                const isMember = clan.members.some(m => m.toString() === payload.userId);
+                if (!isMember) return NextResponse.json({ message: "User must be a clan member first" }, { status: 400 });
+
+                clan.viceLeader = payload.userId;
+
+                try {
+                    const targetUser = await MobileUser.findById(payload.userId).select("pushToken username");
+                    if (targetUser?.pushToken) {
+                        await sendPillParallel(
+                            [targetUser.pushToken],
+                            "Promotion! 🎖️",
+                            `You have been appointed as Vice Leader of [${clan.name}]!`,
+                            { screen: "/clanprofile", clanTag: clan.tag },
+                            { type: 'clan_alert', targetAudience: 'user', targetId: targetUser._id.toString(), link: `/clanprofile`, priority: 3 }
+                        );
+                    }
+                } catch (e) { console.error("Notification Error:", e); }
+            } else {
+                clan.viceLeader = null; // Demote
+            }
         }
 
         // 🔹 2. DELETE POST (Admin Only)
         if (action === "DELETE_POST") {
             if (!isAdmin) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
 
-            // We find the post globally but verify it belongs to this clan
             const postToDelete = await Post.findById(payload.postId);
+            if (!postToDelete) return NextResponse.json({ message: "Post not found" }, { status: 404 });
 
-            if (!postToDelete) {
-                return NextResponse.json({ message: "Post already deleted or not found" }, { status: 404 });
-            }
-
-            // Security check: Ensure this post actually belongs to the clan being managed
-            // We use tag or _id depending on how clanId is stored in your Post model
+            // Security check: Match tag or ID
             if (postToDelete.clanId !== clan.tag && postToDelete.clanId !== clan._id.toString()) {
                 return NextResponse.json({ message: "Unauthorized post deletion" }, { status: 403 });
             }
 
             await Post.findByIdAndDelete(payload.postId);
-
             return NextResponse.json({ success: true, message: "Post deleted successfully" });
         }
 
@@ -109,23 +123,18 @@ export async function PATCH(req, { params }) {
             }
 
             else if (itemId.startsWith('badge_')) {
-                const daysStr = itemId.split('_')[1];
-                const days = parseInt(daysStr);
-
+                const days = parseInt(itemId.split('_')[1]);
                 const now = new Date();
-                const currentExpiry = (clan.verifiedUntil && clan.verifiedUntil > now)
-                    ? new Date(clan.verifiedUntil)
-                    : now;
+                const currentExpiry = (clan.verifiedUntil && clan.verifiedUntil > now) ? new Date(clan.verifiedUntil) : now;
 
                 currentExpiry.setDate(currentExpiry.getDate() + days);
                 clan.verifiedUntil = currentExpiry;
 
                 if (!clan.specialInventory) clan.specialInventory = [];
-                let badgeItem = clan.specialInventory.find(i => i.category === 'BADGE' && i.itemId.includes('badge'));
+                let badgeItem = clan.specialInventory.find(i => i.category === 'BADGE');
 
                 if (badgeItem) {
                     badgeItem.expiresAt = clan.verifiedUntil;
-                    badgeItem.name = "Verified Badge";
                 } else {
                     clan.specialInventory.push({
                         itemId: itemId,
@@ -151,7 +160,7 @@ export async function PATCH(req, { params }) {
             }
         }
 
-        // 🔹 Equip Items from Inventory
+        // 🔹 Equip Items
         if (action === "EQUIP_ITEM") {
             if (!isAdmin) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
 
@@ -174,7 +183,7 @@ export async function PATCH(req, { params }) {
             if (item.category === 'EFFECT') clan.activeCustomizations.effect = isEquipping ? item.itemId : null;
         }
 
-        // 🔹 Standard Clan Management
+        // 🔹 Management Actions
         if (action === "EDIT_CLAN") {
             if (!isAdmin) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
             clan.description = payload.description;
@@ -193,6 +202,37 @@ export async function PATCH(req, { params }) {
             }
             clan.members.push(payload.userId);
             clan.joinRequests = clan.joinRequests.filter(r => r.userId.toString() !== payload.userId);
+
+            try {
+                const targetUser = await MobileUser.findById(payload.userId).select("pushToken _id");
+                if (targetUser?.pushToken) {
+                    await sendPillParallel(
+                        [targetUser.pushToken],
+                        "Application Accepted! ⚔️",
+                        `You are now a member of [${clan.name}]!`,
+                        { screen: "/clanprofile", clanTag: clan.tag },
+                        { type: 'clan_alert', targetAudience: 'user', targetId: targetUser._id.toString(), link: `/clanprofile`, priority: 3 }
+                    );
+                }
+            } catch (e) { console.error("Notification Error:", e); }
+        }
+
+        if (action === "DECLINE_MEMBER") {
+            if (!isAdmin) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
+            clan.joinRequests = clan.joinRequests.filter(r => r.userId.toString() !== payload.userId);
+
+            try {
+                const targetUser = await MobileUser.findById(payload.userId).select("pushToken _id");
+                if (targetUser?.pushToken) {
+                    await sendPillParallel(
+                        [targetUser.pushToken],
+                        "Application Declined",
+                        `[${clan.name}] has declined your request to join.`,
+                        { screen: "/clanprofile" },
+                        { type: 'clan_alert', targetAudience: 'user', targetId: targetUser._id.toString(), link: `/clanprofile`, priority: 3 }
+                    );
+                }
+            } catch (e) { console.error("Notification Error:", e); }
         }
 
         if (action === "KICK_MEMBER") {
@@ -200,27 +240,33 @@ export async function PATCH(req, { params }) {
             if (payload.userId === clan.leader.toString()) return NextResponse.json({ message: "Cannot kick leader" }, { status: 400 });
 
             if (payload.userId === clan.viceLeader?.toString()) clan.viceLeader = null;
-
             clan.members = clan.members.filter(m => m.toString() !== payload.userId);
+
+            try {
+                const targetUser = await MobileUser.findById(payload.userId).select("pushToken _id");
+                if (targetUser?.pushToken) {
+                    await sendPillParallel(
+                        [targetUser.pushToken],
+                        "Removed from Clan",
+                        `You have been removed from [${clan.name}].`,
+                        { screen: "/clans" },
+                        { type: 'clan_alert', targetAudience: 'user', targetId: targetUser._id.toString(), priority: 3 }
+                    );
+                }
+            } catch (e) { console.error("Notification Error:", e); }
         }
 
         if (action === "LEAVE_CLAN") {
             if (clan.leader.toString() === user._id.toString()) return NextResponse.json({ message: "Transfer leadership first" }, { status: 403 });
             if (user._id.toString() === clan.viceLeader?.toString()) clan.viceLeader = null;
-
             clan.members = clan.members.filter(m => m.toString() !== user._id.toString());
         }
 
-        // 💬 🔹 NEW: HANDLE CLAN CHAT MESSAGES
         if (action === "SEND_MESSAGE") {
             const isMember = clan.members.some(m => m.toString() === user._id.toString()) || isLeader || isVice;
-
-            if (!isMember) {
-                return NextResponse.json({ message: "Forbidden: Not a clan member" }, { status: 403 });
-            }
+            if (!isMember) return NextResponse.json({ message: "Forbidden" }, { status: 403 });
 
             if (!clan.messages) clan.messages = [];
-
             clan.messages.push({
                 authorId: user.deviceId,
                 authorUserId: user._id,
@@ -229,61 +275,37 @@ export async function PATCH(req, { params }) {
                 date: new Date()
             });
 
-            if (clan.messages.length > 250) {
-                clan.messages = clan.messages.slice(-250);
-            }
+            if (clan.messages.length > 250) clan.messages = clan.messages.slice(-250);
 
-            // 🔔 --- PUSH NOTIFICATION LOGIC ---
             try {
-                // 1. Get all clan members except the sender
                 const memberIds = [clan.leader, clan.viceLeader, ...clan.members].filter(
                     id => id && id.toString() !== user._id.toString()
                 );
 
-                // 2. Fetch their Expo Push Tokens
                 const recipients = await MobileUser.find({
                     _id: { $in: memberIds },
                     pushToken: { $exists: true, $ne: null }
                 }).select("pushToken");
 
-                const tokens = recipients.map(r => r.pushToken);
+                const tokens = [...new Set(recipients.map(r => r.pushToken))]; // Unique tokens only
 
                 if (tokens.length > 0) {
-                    // 3. Send the broadcast
                     await sendPillParallel(
                         tokens,
                         `${clan.name} Hall`,
                         `${user.username}: ${payload.text.slice(0, 100)}`,
-                        {
-                            screen: "/clanprofile", // Ensure this matches your Expo Router path
-                            clanTag: clan.tag,
-                            type: "CLAN_CHAT"
-                        },
-                        {
-                            type: 'clan_message',
-                            targetAudience: 'clan',
-                            targetId: clan.tag,
-                            link: `/clan/${clan.tag}`,
-                            priority: 4
-                        }
+                        { screen: "/clanprofile", clanTag: clan.tag, type: "CLAN_CHAT" },
+                        { type: 'clan_message', targetAudience: 'clan', targetId: clan.tag, link: `/clanprofile`, priority: 4 }
                     );
                 }
-            } catch (pushErr) {
-                console.error("🔔 Push Notification Error:", pushErr);
-                // We don't return an error response here because the message was successfully saved
-            }
+            } catch (pushErr) { console.error("Push Error:", pushErr); }
         }
 
-        // 🔹 FINAL SAVE
         clan.markModified('specialInventory');
         clan.markModified('activeCustomizations');
-
         const savedClan = await clan.save();
 
-        return NextResponse.json({
-            success: true,
-            clan: savedClan
-        });
+        return NextResponse.json({ success: true, clan: savedClan });
 
     } catch (err) {
         console.error("Clan PATCH Error:", err);

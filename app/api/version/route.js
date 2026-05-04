@@ -1,5 +1,6 @@
 import connectDB from '@/app/lib/mongodb';
-import { sendPushNotification } from '@/app/lib/pushNotifications';
+// Updated import to use the new service
+import { sendPillParallel } from '@/app/lib/messagePillService';
 import MobileUser from '@/app/models/MobileUserModel';
 import mongoose from 'mongoose';
 import { NextResponse } from 'next/server';
@@ -79,22 +80,32 @@ export async function POST(req) {
                 "pushToken"
             );
 
-            // 3. Notify them
+            // 3. Notify them using the parallel service
             if (mobileUsers.length > 0) {
                 const title = "🚀 Critical System Update";
                 const message = `New System Patch ${appV} is ready. Please update to avoid connection loss.`;
+                const tokens = mobileUsers.map(user => user.pushToken);
 
-                for (const user of mobileUsers) {
-                    try {
-                        await sendPushNotification(
-                            user.pushToken,
-                            title,
-                            message,
-                            { type: "version_update", appVersion: appV, runtimeVersion: runV }
-                        );
-                    } catch (err) {
-                        console.error("Push notify user failed:", err);
-                    }
+                try {
+                    // This sends pushes to all tokens and creates a global 'system' pill
+                    await sendPillParallel(
+                        tokens,
+                        title,
+                        message,
+                        {
+                            type: "version_update",
+                            appVersion: appV,
+                            runtimeVersion: runV
+                        },
+                        {
+                            type: 'system',
+                            targetAudience: 'global', // Set to global so one pill covers everyone
+                            priority: 5, // High priority for critical updates
+                            expiresInHours: 48
+                        }
+                    );
+                } catch (err) {
+                    console.error("Parallel notification failed:", err);
                 }
             }
         }

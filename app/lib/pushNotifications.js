@@ -60,7 +60,7 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
 
   const CHUNK_SIZE = 100;
   const chunks = [];
-  
+
   for (let i = 0; i < validTokens.length; i += CHUNK_SIZE) {
     chunks.push(validTokens.slice(i, i + CHUNK_SIZE));
   }
@@ -68,7 +68,7 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
   const chunkPromises = chunks.map(async (chunk, index) => {
     const messages = chunk.map(token => ({
       to: token,
-      sound: 'default',
+      sound: true,
       title: title,
       body: message,
       data: data,

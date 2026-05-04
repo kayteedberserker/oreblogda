@@ -2,7 +2,6 @@ import { awardAura } from "@/app/lib/auraManager";
 import { awardClanPoints } from "@/app/lib/clanService";
 import { sendPillParallel } from "@/app/lib/messagePillService";
 import connectDB from "@/app/lib/mongodb";
-import { sendPushNotification } from "@/app/lib/pushNotifications";
 import Clan from "@/app/models/ClanModel";
 import MobileUser from "@/app/models/MobileUserModel";
 import Post from "@/app/models/PostModel";
@@ -182,13 +181,6 @@ async function checkTitleUnlocks(user, field, currentCount) {
             if (user.pushToken) {
                 const titleMsg = `🏆 NEW TITLE UNLOCKED: "${earnedTitle.name}"!`;
 
-                await sendPushNotification(
-                    user.pushToken,
-                    "New Achievement! 🎖",
-                    titleMsg,
-                    { type: "achievement" }
-                );
-
                 await sendPillParallel(
                     [user.pushToken],
                     "Title Earned",
@@ -276,12 +268,19 @@ export async function PATCH(req, { params }) {
 
                     if (author.pushToken) {
                         // 🔔 GROUPING ADDED: Uses "vote_<PostID>" so votes stack
-                        await sendPushNotification(
+                        await sendPillParallel(
                             author.pushToken,
-                            "New Vote! ✅",
+                            `New Vote! ✅ on post: "${updatedPost.title.substring(0, 10)}..."`,
                             msg,
                             { postId: updatedPost._id.toString(), type: "post_detail" },
-                            `vote_${updatedPost._id}`
+                            {
+                                type: 'post_vote',
+                                targetAudience: 'user',
+                                targetId: author._id.toString(),
+                                singleUser: true,
+                                link: `/post/${updatedPost.slug}`,
+                                priority: 2
+                            }
                         );
                     }
                 }
@@ -357,12 +356,19 @@ export async function PATCH(req, { params }) {
                         const mMsg = `🔥 Trending! Your post reached ${updatedPost.likes.length} likes!`;
 
                         if (author.pushToken) {
-                            await sendPushNotification(
+                            await sendPillParallel(
                                 author.pushToken,
-                                "Going Viral!",
-                                mMsg,
+                                `Going Viral!"`,
+                                msg,
                                 { postId: updatedPost._id.toString(), type: "post_detail" },
-                                `milestone_${updatedPost._id}`
+                                {
+                                    type: 'event',
+                                    targetAudience: 'user',
+                                    targetId: author._id.toString(),
+                                    singleUser: true,
+                                    link: `/post/${updatedPost.slug}`,
+                                    priority: 2
+                                }
                             );
                         }
                     }

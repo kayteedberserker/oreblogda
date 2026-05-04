@@ -86,13 +86,24 @@ export async function createMessagePill({
  * @param {object} data - Push data (screen/postId)
  * @param {object} pillContext - {type, targetId, link, singleUser?}
  */
+
 export async function sendPillParallel(tokens, title, body, data = {}, pillContext = {}) {
-    if (!tokens || tokens.length === 0) return; // No audience = no pill
+    if (!tokens || tokens.length === 0) return;
+
+    // ⚡️ FIX 1: Construct a URL string that actually includes the query parameters
+    let generatedLink = data.screen ? `${data.screen}` : null;
+
+    // Append the relevant IDs to the URL so the Marquee can use useLocalSearchParams
+    if (generatedLink) {
+        if (data.commentId) generatedLink += `?commentId=${data.commentId}`;
+        else if (data.discussion) generatedLink += `?discussion=${data.discussion}`;
+        else if (data.comment) generatedLink += `?comment=${data.comment}`;
+    }
 
     const {
         type = 'system',
         targetId,
-        link = data.screen ? `/app${data.screen}` : null,
+        link = generatedLink, // <-- Use the newly constructed link
         targetAudience = 'user',
         singleUser = false,
         priority = 1,
