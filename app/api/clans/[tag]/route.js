@@ -6,9 +6,11 @@ import Post from "@/app/models/PostModel";
 import { NextResponse } from "next/server";
 
 const getRankDetails = (points) => {
+    console.log("Im collecting points: ", points);
+
     if (points >= 300000) return { title: "The Akatsuki", next: 1000000, color: "#ef4444" };
     if (points >= 100000) return { title: "The Espada", next: 300000, color: "#e0f2fe" };
-    if (points >= 5000) return { title: "Phantom Troupe", next: 100000, color: "#a855f7" };
+    if (points >= 50000) return { title: "Phantom Troupe", next: 100000, color: "#a855f7" };
     if (points >= 20000) return { title: "Upper Moon", next: 50000, color: "#60a5fa" };
     if (points >= 5000) return { title: "Squad 13", next: 20000, color: "#10b981" };
     return { title: "Wandering Ronin", next: 5000, color: "#94a3b8" };
@@ -32,6 +34,8 @@ export async function GET(req, { params }) {
 
         const user = deviceId ? await MobileUser.findOne({ deviceId }) : null;
         const rank = getRankDetails(clan.totalPoints || 0);
+        console.log(rank, clan.totalPoints);
+
 
         const responseData = clan.toObject();
         const isAdmin = clan.leader?._id.toString() === user?._id.toString() ||
