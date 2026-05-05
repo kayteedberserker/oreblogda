@@ -23,19 +23,48 @@ const CLAN_TIERS = {
 };
 
 const getAuraTier = (rank) => {
-    if (!rank || rank > 10 || rank <= 0) return null;
+    // 🎨 Global Constants
+    const MONARCH_GOLD = '#fbbf24';
+    const JADE_GREEN = '#10b981';    // 🐉 Yonko (Consistent Jade)
+    const SHADOW_PURPLE = '#a855f7';
+    const STEEL_BLUE = '#3b82f6';
+
+    // ⚔️ Progressive Espada Gradient (Brightest -> Darkest)
+    const ESPADA_0 = '#f43f5e'; // Bright Rose (Rank 5)
+    const ESPADA_1 = '#e11d48'; // Vibrant Ruby
+    const ESPADA_2 = '#be123c'; // Royal Crimson
+    const ESPADA_3 = '#9f1239'; // Deep Crimson
+    const ESPADA_4 = '#881337'; // Dark Wine
+    const ESPADA_5 = '#4c0519'; // Black Cherry (Rank 10)
+
+    if (!rank || rank > 10 || rank <= 0) return;
+
     switch (rank) {
-        case 1: return { color: '#fbbf24', label: 'MONARCH' };
-        case 2: return { color: '#ef4444', label: 'YONKO' };
-        case 3: return { color: '#a855f7', label: 'KAGE' };
-        case 4: return { color: '#3b82f6', label: 'SHOGUN' };
-        case 5: return { color: '#e0f2fe', label: 'ESPADA 0' };
-        case 6: return { color: '#cbd5e1', label: 'ESPADA 1' };
-        case 7: return { color: '#94a3b8', label: 'ESPADA 2' };
-        case 8: return { color: '#64748b', label: 'ESPADA 3' };
-        case 9: return { color: '#475569', label: 'ESPADA 4' };
-        case 10: return { color: '#334155', label: 'ESPADA 5' };
-        default: return { color: '#1e293b', label: 'OPERATIVE' };
+        case 1:
+            return { color: MONARCH_GOLD, label: 'MONARCH', icon: 'crown' };
+        case 2:
+            return { color: JADE_GREEN, label: 'YONKO', icon: 'flare' };
+        case 3:
+            return { color: SHADOW_PURPLE, label: 'KAGE', icon: 'moon-waxing-crescent' };
+        case 4:
+            return { color: STEEL_BLUE, label: 'SHOGUN', icon: 'shield-star' };
+
+        // --- ESPADA RANKS (Progressive & Unique) ---
+        case 5:
+            return { color: ESPADA_0, label: 'ESPADA 0', icon: 'skull' };
+        case 6:
+            return { color: ESPADA_1, label: 'ESPADA 1', icon: 'sword-cross' };
+        case 7:
+            return { color: ESPADA_2, label: 'ESPADA 2', icon: 'sword-cross' };
+        case 8:
+            return { color: ESPADA_3, label: 'ESPADA 3', icon: 'sword-cross' };
+        case 9:
+            return { color: ESPADA_4, label: 'ESPADA 4', icon: 'sword-cross' };
+        case 10:
+            return { color: ESPADA_5, label: 'ESPADA 5', icon: 'sword-cross' };
+
+        default:
+            return { color: '#1e293b', label: 'VANGUARD', icon: 'shield-check' };
     }
 };
 
