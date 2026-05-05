@@ -1,6 +1,6 @@
 import connectDB from "@/app/lib/mongodb";
-import Clan from "@/app/models/ClanModel";
 import ClanFollower from "@/app/models/ClanFollower";
+import Clan from "@/app/models/ClanModel";
 import MobileUser from "@/app/models/MobileUserModel";
 import { NextResponse } from "next/server";
 export async function GET(req) {
@@ -12,7 +12,7 @@ export async function GET(req) {
     const page = parseInt(searchParams.get("page")) || 1;
     const limit = parseInt(searchParams.get("limit")) || 10;
     const skip = (page - 1) * limit;
-    
+
     const userCountry = req.headers.get("x-user-country") || "Global";
 
     try {
@@ -23,12 +23,12 @@ export async function GET(req) {
             const mUser = await MobileUser.findOne({ deviceId: fingerprint });
             if (mUser) {
                 // Find clan where user is leader, viceLeader, or a member
-                const clan = await Clan.findOne({ 
+                const clan = await Clan.findOne({
                     $or: [
-                        { leader: mUser._id }, 
-                        { viceLeader: mUser._id }, 
+                        { leader: mUser._id },
+                        { viceLeader: mUser._id },
                         { members: mUser._id }
-                    ] 
+                    ]
                 }).select("tag name leader rank viceLeader");
 
                 if (clan) {
@@ -56,8 +56,8 @@ export async function GET(req) {
         }
 
         // --- 🔹 SEARCH & PAGINATION PIPELINE 🔹 ---
-        const query = search 
-            ? { name: { $regex: search, $options: "i" } } 
+        const query = search
+            ? { name: { $regex: search, $options: "i" } }
             : {};
 
         const aggregationPipeline = [
@@ -68,12 +68,12 @@ export async function GET(req) {
                     isLocal: { $cond: [{ $eq: ["$country", userCountry] }, 1, 0] },
                     canJoin: {
                         $cond: [
-                            { 
+                            {
                                 $and: [
                                     { $eq: ["$isRecruiting", true] },
                                     { $lt: [{ $size: { $ifNull: ["$members", []] } }, "$maxSlots"] }
                                 ]
-                            }, 
+                            },
                             1, 0
                         ]
                     },
@@ -133,9 +133,9 @@ export async function GET(req) {
                     currentWeeklyPoints: 1,
                     badgeCount: 1,
                     // The stored rank from the database
-                    rank: 1, 
+                    rank: 1,
                     // The dynamically calculated rank for this specific list/week
-                    lbRank: 1 
+                    lbRank: 1
                 }
             }
         ];
@@ -144,7 +144,7 @@ export async function GET(req) {
             Clan.aggregate(aggregationPipeline),
             Clan.countDocuments(query)
         ]);
-        
+
         const formattedClans = clans.map(clan => ({
             ...clan,
             isFollowing: followedClans.includes(clan.tag)
