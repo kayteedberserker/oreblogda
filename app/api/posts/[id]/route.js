@@ -92,7 +92,10 @@ function getAuraVisualsServer(rank) {
     const ESPADA_4 = '#881337'; // Dark Wine
     const ESPADA_5 = '#4c0519'; // Black Cherry (Lowest Tier)
 
-    if (!rank || rank > 10 || rank <= 0) return { color: '#475569', label: 'OPERATIVE', icon: 'target' };
+    // DEFAULT FALLBACK OBJECT
+    const fallback = { color: '#64748b', label: 'PLAYER', icon: 'shield-check' };
+
+    if (!rank || rank > 10 || rank <= 0) return fallback; // Return object, not undefined { color: '#475569', label: 'OPERATIVE', icon: 'target' };
 
     switch (rank) {
         case 1:

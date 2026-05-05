@@ -66,7 +66,10 @@ const getClanRankTitle = (rank) => {
 };
 
 const getAuraVisuals = (rank) => {
-	if (!rank || rank > 10 || rank <= 0) return null;
+	// DEFAULT FALLBACK OBJECT
+	const fallback = { color: '#64748b', label: 'PLAYER', icon: 'shield-check' };
+
+	if (!rank || rank > 10 || rank <= 0) return fallback; // Return object, not undefined null;
 	switch (rank) {
 		case 1: return { color: '#fbbf24', label: 'MONARCH', emoji: '👑' };
 		case 2: return { color: '#ef4444', label: 'YONKO', emoji: '☄️' };
