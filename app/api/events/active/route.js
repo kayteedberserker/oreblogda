@@ -21,7 +21,7 @@ export async function GET() {
                 eventType: 'referral',
                 promoImage: 'https://oreblogda.com/almost400.png',
                 icon: 'share-variant',
-                themeColor: '#10b981', // Emerald Green
+                themeColor: "#00D1FF", // Neon Blue
                 startsAt: new Date('2026-05-06T00:00:00Z').toISOString(),
                 endsAt: new Date('2026-05-13T23:59:59Z').toISOString(),
             },
