@@ -315,10 +315,14 @@ export async function GET(req) {
         const targetAuthor = author || authorId;
 
         let query = {};
+        let isAdmin = false
         if (targetAuthor) {
             const available = await Post.find({ authorId: targetAuthor });
             if (available.length > 0) {
                 query.authorId = targetAuthor;
+                if (query.authorId == "6968bd5dccd6a381fca3c0c8") {
+                    isAdmin = true
+                }
             } else {
                 query.authorUserId = targetAuthor;
             }
@@ -362,6 +366,7 @@ export async function GET(req) {
                 likeWeight: 2.0,
                 commentWeight: 4.0,
                 freshnessBoost: 20,
+                isAdminBoost: isAdmin ? 100 : 0,
                 freshnessWindow: 3,
                 gravityPower: 1.2,
                 prefBonus: 15,
