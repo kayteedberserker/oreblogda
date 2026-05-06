@@ -320,7 +320,7 @@ export async function GET(req) {
             const available = await Post.find({ authorId: targetAuthor });
             if (available.length > 0) {
                 query.authorId = targetAuthor;
-                if (query.authorId == "6968bd5dccd6a381fca3c0c8") {
+                if (query.authorId == "4bfe2b53-7591-462f-927e-68eedd7a6447") {
                     isAdmin = true
                 }
             } else {
@@ -357,7 +357,8 @@ export async function GET(req) {
             posts = await Post.find(query)
                 .select({
                 })
-                .sort({ createdAt: -1 })
+                // ⚡️ UPDATED: Added isAdminPost to sort so admin posts stay on top even here
+                .sort({ isAdminPost: -1, createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
                 .lean();
@@ -378,7 +379,7 @@ export async function GET(req) {
 
             const pipeline = [
                 { $match: query },
-                { $sort: { createdAt: -1 } },
+                // ⚡️ NOTE: Removed initial generic sort to allow sorting by Admin Flag later
                 { $limit: 1000 },
                 {
                     $addFields: {
@@ -389,6 +390,17 @@ export async function GET(req) {
                         likesCount: { $size: { $ifNull: ["$likes", []] } },
                         matchCount: {
                             $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] }
+                        },
+                        // ⚡️ UPDATED: Compute an Admin Flag to force them to the top
+                        isAdminFlag: {
+                            $cond: [
+                                { $or: [
+                                    { $eq: ["$isAdminPost", true] },
+                                    { $eq: ["$authorId", "4bfe2b53-7591-462f-927e-68eedd7a6447"] }
+                                ]},
+                                1,
+                                0
+                            ]
                         }
                     }
                 },
@@ -423,7 +435,9 @@ export async function GET(req) {
                     }
                 },
                 {
+                    // ⚡️ UPDATED: Added isAdminFlag to the top of the sorting hierarchy
                     $sort: {
+                        isAdminFlag: -1,
                         finalScore: -1,
                         createdAt: -1
                     }
