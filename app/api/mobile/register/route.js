@@ -1,5 +1,5 @@
+import { sendPillParallel } from "@/app/lib/messagePillService";
 import connectDB from "@/app/lib/mongodb";
-import { sendPillParallel } from "@/app/lib/pillNotifications"; // Ensure this path is correct
 import MobileUser from "@/app/models/MobileUserModel";
 import ReferralEvent from "@/app/models/ReferralEvent";
 import crypto from "crypto";
