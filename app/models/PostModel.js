@@ -164,6 +164,7 @@ const postSchema = new mongoose.Schema(
       default: Date.now
     },
     rejectionReason: { type: String, default: "" },
+    isAdminPost: { type: Boolean, default: false },
 
     expiresAt: {
       type: Date,

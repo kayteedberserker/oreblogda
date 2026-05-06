@@ -315,6 +315,9 @@ export async function GET(req) {
         const targetAuthor = author || authorId;
 
         let query = {};
+        // ⚡️ REMOVED: The global isAdmin check that was flagging all of your posts
+        let isAdmin = false; 
+
         if (targetAuthor) {
             const available = await Post.find({ authorId: targetAuthor });
             if (available.length > 0) {
@@ -353,7 +356,8 @@ export async function GET(req) {
             posts = await Post.find(query)
                 .select({
                 })
-                .sort({ createdAt: -1 })
+                // ⚡️ UPDATED: Sort strictly by the document's isAdminPost flag first
+                .sort({ isAdminPost: -1, createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
                 .lean();
@@ -362,6 +366,7 @@ export async function GET(req) {
                 likeWeight: 2.0,
                 commentWeight: 4.0,
                 freshnessBoost: 20,
+                isAdminBoost: isAdmin ? 100 : 0,
                 freshnessWindow: 3,
                 gravityPower: 1.2,
                 prefBonus: 15,
@@ -373,7 +378,8 @@ export async function GET(req) {
 
             const pipeline = [
                 { $match: query },
-                { $sort: { createdAt: -1 } },
+                // ⚡️ UPDATED: Protect admin posts from being chopped off by the 1000 limit
+                { $sort: { isAdminPost: -1, createdAt: -1 } },
                 { $limit: 1000 },
                 {
                     $addFields: {
@@ -419,6 +425,8 @@ export async function GET(req) {
                 },
                 {
                     $sort: {
+                        // ⚡️ UPDATED: Force explicitly flagged admin posts to the very top, overriding finalScore
+                        isAdminPost: -1, 
                         finalScore: -1,
                         createdAt: -1
                     }
