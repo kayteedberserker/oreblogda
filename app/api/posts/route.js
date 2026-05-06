@@ -315,11 +315,11 @@ export async function GET(req) {
         const targetAuthor = author || authorId;
 
         let query = {};
-        // ⚡️ REMOVED: The global isAdmin check that was flagging all of your posts
-        let isAdmin = false; 
+        let isAdmin = false;
 
         if (targetAuthor) {
-            const available = await Post.find({ authorId: targetAuthor });
+            // Check if it's an ID or a Username
+            const available = await Post.find({ authorId: targetAuthor }).limit(1);
             if (available.length > 0) {
                 query.authorId = targetAuthor;
             } else {
@@ -354,9 +354,6 @@ export async function GET(req) {
 
         if (targetAuthor) {
             posts = await Post.find(query)
-                .select({
-                })
-                // ⚡️ UPDATED: Sort strictly by the document's isAdminPost flag first
                 .sort({ isAdminPost: -1, createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
@@ -378,7 +375,6 @@ export async function GET(req) {
 
             const pipeline = [
                 { $match: query },
-                // ⚡️ UPDATED: Protect admin posts from being chopped off by the 1000 limit
                 { $sort: { isAdminPost: -1, createdAt: -1 } },
                 { $limit: 1000 },
                 {
@@ -425,8 +421,7 @@ export async function GET(req) {
                 },
                 {
                     $sort: {
-                        // ⚡️ UPDATED: Force explicitly flagged admin posts to the very top, overriding finalScore
-                        isAdminPost: -1, 
+                        isAdminPost: -1,
                         finalScore: -1,
                         createdAt: -1
                     }
@@ -442,18 +437,26 @@ export async function GET(req) {
         let clanMap = {};
 
         try {
-            const uniqueAuthorIds = [...new Set(posts.map(p => p.authorUserId || p.authorId).filter(Boolean))];
-            const uniqueClanTags = [...new Set(posts.map(p => p.clanTag || p.clanId).filter(Boolean))];
+            // ⚡️ FIXED: Stringify IDs before the Set to ensure true de-duplication
+            const uniqueAuthorIds = [...new Set(posts.map(p => (p.authorUserId || p.authorId)?.toString()).filter(Boolean))];
+            const uniqueClanTags = [...new Set(posts.map(p => (p.clanTag || p.clanId)?.toString()).filter(Boolean))];
 
             if (uniqueAuthorIds.length > 0) {
                 const users = await MobileUser.find({ _id: { $in: uniqueAuthorIds } }).lean();
+
                 users.forEach(u => {
-                    const inv = Array.isArray(u.inventory) ? u.inventory : (Array.isArray(u.specialInventory) ? u.specialInventory : []);
                     const userIdStr = u._id.toString();
 
-                    // Pre-calculate user ranks and visuals on server
-                    const rankInfo = resolveUserRankServer(u.currentRankLevel || 1);
-                    const auraInfo = getAuraVisualsServer(u.previousRank || 0);
+                    // ⚡️ SAFETY CHECK: Ensure these helpers exist or provide fallbacks
+                    const rankInfo = typeof resolveUserRankServer === 'function'
+                        ? resolveUserRankServer(u.currentRankLevel || 1)
+                        : { rankName: "Rookie" };
+
+                    const auraInfo = typeof getAuraVisualsServer === 'function'
+                        ? getAuraVisualsServer(u.previousRank || 0)
+                        : null;
+
+                    const inv = Array.isArray(u.inventory) ? u.inventory : (Array.isArray(u.specialInventory) ? u.specialInventory : []);
 
                     userMap[userIdStr] = {
                         name: u.username,
@@ -464,18 +467,23 @@ export async function GET(req) {
                         inventory: inv,
                         rankLevel: u.currentRankLevel || 1,
                         aura: u.aura || 0,
-                        // BAKE THESE IN:
                         displayRank: rankInfo.rankName,
                         auraVisuals: auraInfo,
                         equippedGlow: inv.find(i => (i.category === 'GLOW' || i.category === 'NAME_GLOW') && i.isEquipped) || null,
                         equippedBadges: inv.filter(i => i.category === 'BADGE' && i.isEquipped).slice(0, 3) || [],
-                        equippedTitle: u.equippedTitle || null // Added Equipped Title mapping here
+                        equippedTitle: u.equippedTitle || null
                     };
                 });
             }
 
             if (uniqueClanTags.length > 0) {
-                const clans = await Clan.find({ tag: { $in: uniqueClanTags } }).lean();
+                const clans = await Clan.find({
+                    $or: [
+                        { tag: { $in: uniqueClanTags } },
+                        { _id: { $in: uniqueClanTags.filter(id => id.length === 24) } }
+                    ]
+                }).lean();
+
                 clans.forEach(c => {
                     if (c.tag) clanMap[c.tag] = c;
                     if (c._id) clanMap[c._id.toString()] = c;
@@ -490,47 +498,42 @@ export async function GET(req) {
             const cTag = (p.clanTag || p.clanId)?.toString();
 
             // Clean message for the feed excerpt
-            const feedMessage = p.message
+            const rawMessage = p.message || "";
+            const feedMessage = rawMessage
                 .replace(/s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs, "$1$2$3$4$5$6$8$10")
                 .replace(/\n+/g, ' ')
                 .trim();
 
-            // 3. Package and return
-            // ⚡️ CHECK IF USER HAS LIKED THIS POST
             const postLikes = p.likes || [];
-            const hasLiked = deviceId ? postLikes.some(like => like?.fingerprint == deviceId) : false;
-            // Compute hasViewed & poll vote status (same as single post)
+            const hasLiked = deviceId ? postLikes.some(like => (like?.fingerprint === deviceId || like === deviceId)) : false;
             const hasViewed = p.viewsFingerprints?.includes(deviceId) || false;
 
             let pollVoteStatus = null;
-            if (p.poll && p.voters.length > 0) {
-                const voterMatch = p.voters.find(v =>
-                    v.fingerprint === deviceId || v === deviceId  // Legacy string support
-                );
-
+            if (p.poll && p.voters?.length > 0) {
+                const voterMatch = p.voters.find(v => (v.fingerprint === deviceId || v === deviceId));
                 pollVoteStatus = {
                     hasVoted: !!voterMatch,
                     userVotedOptions: voterMatch?.selectedOptions || []
                 };
-                console.log("pollVoteStatus from server is", pollVoteStatus);
-
             }
+            console.log("Looked for:", aId, "in Map keys:", Object.keys(userMap))
 
             return {
                 ...p,
                 _id: p._id.toString(),
-                message: normalizePostContent(p.message),
+                message: typeof normalizePostContent === 'function' ? normalizePostContent(p.message) : p.message,
                 feedExcerpt: feedMessage.length > 150 ? feedMessage.slice(0, 150) + "..." : feedMessage,
-                formattedViews: formatViewsServer(p.viewsCount ?? p.views ?? 0),
+                formattedViews: typeof formatViewsServer === 'function' ? formatViewsServer(p.viewsCount ?? p.views ?? 0) : (p.viewsCount || 0),
                 likesCount: p.likesCount ?? (p.likes?.length || 0),
                 commentsCount: p.commentsCount ?? (p.comments?.length || 0),
-                discussionCount: calculateDiscussionCount(p.comments || []),
-                hasLiked: hasLiked,
+                discussionCount: typeof calculateDiscussionCount === 'function' ? calculateDiscussionCount(p.comments || []) : 0,
+                hasLiked,
                 hasViewed,
                 poll: p.poll ? {
                     ...p.poll,
                     ...pollVoteStatus
                 } : p.poll,
+                // ⚡️ LOOKUP: Matches the stringified aId to the userMap key
                 authorData: userMap[aId] || null,
                 clanData: clanMap[cTag] || null
             };

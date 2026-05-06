@@ -1,5 +1,5 @@
 import connectDB from "@/app/lib/mongodb";
-import { sendPushNotification } from "@/app/lib/pushNotifications";
+import { sendPillParallel } from "@/app/lib/pillNotifications"; // Ensure this path is correct
 import MobileUser from "@/app/models/MobileUserModel";
 import ReferralEvent from "@/app/models/ReferralEvent";
 import crypto from "crypto";
@@ -36,6 +36,10 @@ export async function POST(req) {
       return NextResponse.json({ message: "Neural credentials incomplete." }, { status: 400 });
     }
 
+    // 1. Check current population for Alpha Lead eligibility
+    const currentGlobalUsers = await MobileUser.countDocuments();
+    const isEligibleForAlpha = currentGlobalUsers < 400;
+
     const forwarded = req.headers.get("x-forwarded-for");
     const ip = forwarded ? forwarded.split(/, /)[0] : "127.0.0.1";
     const geo = geoip.lookup(ip);
@@ -65,6 +69,9 @@ export async function POST(req) {
     const boostExpiry = new Date();
     boostExpiry.setHours(boostExpiry.getHours() + 72);
 
+    // Initial titles for the new user
+    const initialUnlockedTitles = [];
+
     if (referredBy && referredBy.trim() !== "") {
       const cleanRef = referredBy.trim();
       const referrer = await MobileUser.findOne({ referralCode: cleanRef });
@@ -77,19 +84,29 @@ export async function POST(req) {
         referrer.coins = (referrer.coins || 0) + 50;
         referrer.doubleStreakUntil = boostExpiry;
 
-        const alreadyHasRecruiter = referrer.unlockedTitles?.some(t => t.name === "The Recruiter");
-        if (!alreadyHasRecruiter) {
-          const recruiterTitle = { name: "The Recruiter", tier: "RARE" };
-          referrer.unlockedTitles.push(recruiterTitle);
-          if (referrer.pushToken) {
-            try {
-              await sendPushNotification(
-                referrer.pushToken,
-                "Achievement Unlocked! 🎖",
-                "You've earned the title: 'The Recruiter'!",
-                { type: "milestone_unlock" }
-              );
-            } catch (err) { }
+        // Give NEW user the Alpha Lead title if milestone not yet reached
+        if (isEligibleForAlpha) {
+          initialUnlockedTitles.push({ name: "Alpha Lead", tier: "LEGENDARY" });
+        }
+
+        // 🎖 RECRUITER TITLE LOGIC: Award only after 2 referrals
+        if (referrer.referralCount >= 2) {
+          const alreadyHasRecruiter = referrer.unlockedTitles?.some(t => t.name === "The Recruiter");
+          if (!alreadyHasRecruiter) {
+            const recruiterTitle = { name: "The Recruiter", tier: "RARE" };
+            referrer.unlockedTitles.push(recruiterTitle);
+
+            if (referrer.pushToken) {
+              try {
+                await sendPillParallel(
+                  [referrer.pushToken],
+                  "Achievement Unlocked! 🎖",
+                  "You've earned the title: 'The Recruiter'!",
+                  { type: "milestone_unlock" },
+                  { type: 'achievement', targetId: referrer.uid, singleUser: true }
+                );
+              } catch (err) { console.error("Pill Error:", err); }
+            }
           }
         }
 
@@ -97,11 +114,12 @@ export async function POST(req) {
 
         if (referrer.pushToken) {
           try {
-            await sendPushNotification(
-              referrer.pushToken,
+            await sendPillParallel(
+              [referrer.pushToken],
               "New Recruit Joined! 🌀",
               `${username} joined using your referral link. 72h boost active!`,
-              { type: "referral_success" }
+              { type: "referral_success" },
+              { type: 'system', targetId: referrer.uid, singleUser: true }
             );
           } catch (pErr) { console.error(pErr); }
         }
@@ -117,7 +135,6 @@ export async function POST(req) {
       { clothingId: 'default_shoe', name: 'Issued Boots', type: 'shoe', isDefault: true },
     ];
 
-    // 🛡️ DOUBLE TOKEN GENERATION (Preparation)
     const accessTokenSecret = process.env.JWT_SECRET;
     const refreshTokenSecret = process.env.REFRESH_TOKEN_SECRET;
 
@@ -137,14 +154,13 @@ export async function POST(req) {
       uid: generatedUid,
       deviceId: finalDeviceId,
       hardwareId,
-      // 🛡️ TRUSTED DEVICES: Add initial device as trusted
       trustedDevices: [{
         hardwareId: hardwareId,
         deviceId: finalDeviceId,
         addedAt: new Date(),
         lastActive: new Date()
       }],
-      activeSessionDeviceId: finalDeviceId, // First device is active
+      activeSessionDeviceId: finalDeviceId,
       username,
       pushToken,
       country: detectedCountry,
@@ -162,9 +178,9 @@ export async function POST(req) {
       doubleStreakUntil: boostDate,
       lastActive: new Date(),
       totalPosts: 0,
-      unlockedTitles: [],
+      unlockedTitles: initialUnlockedTitles, // Includes Alpha Lead if applicable
       securityLevel: 1,
-      refreshToken: initialRefreshToken // 🛡️ SAVE TO DB
+      refreshToken: initialRefreshToken
     });
 
     if (finalReferrer) {
