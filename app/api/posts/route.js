@@ -315,14 +315,13 @@ export async function GET(req) {
         const targetAuthor = author || authorId;
 
         let query = {};
-        let isAdmin = false
+        // ⚡️ REMOVED: The global isAdmin check that was flagging all of your posts
+        let isAdmin = false; 
+
         if (targetAuthor) {
             const available = await Post.find({ authorId: targetAuthor });
             if (available.length > 0) {
                 query.authorId = targetAuthor;
-                if (query.authorId == "4bfe2b53-7591-462f-927e-68eedd7a6447") {
-                    isAdmin = true
-                }
             } else {
                 query.authorUserId = targetAuthor;
             }
@@ -357,7 +356,7 @@ export async function GET(req) {
             posts = await Post.find(query)
                 .select({
                 })
-                // ⚡️ UPDATED: Added isAdminPost to sort so admin posts stay on top even here
+                // ⚡️ UPDATED: Sort strictly by the document's isAdminPost flag first
                 .sort({ isAdminPost: -1, createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
@@ -379,7 +378,8 @@ export async function GET(req) {
 
             const pipeline = [
                 { $match: query },
-                // ⚡️ NOTE: Removed initial generic sort to allow sorting by Admin Flag later
+                // ⚡️ UPDATED: Protect admin posts from being chopped off by the 1000 limit
+                { $sort: { isAdminPost: -1, createdAt: -1 } },
                 { $limit: 1000 },
                 {
                     $addFields: {
@@ -390,17 +390,6 @@ export async function GET(req) {
                         likesCount: { $size: { $ifNull: ["$likes", []] } },
                         matchCount: {
                             $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] }
-                        },
-                        // ⚡️ UPDATED: Compute an Admin Flag to force them to the top
-                        isAdminFlag: {
-                            $cond: [
-                                { $or: [
-                                    { $eq: ["$isAdminPost", true] },
-                                    { $eq: ["$authorId", "4bfe2b53-7591-462f-927e-68eedd7a6447"] }
-                                ]},
-                                1,
-                                0
-                            ]
                         }
                     }
                 },
@@ -435,9 +424,9 @@ export async function GET(req) {
                     }
                 },
                 {
-                    // ⚡️ UPDATED: Added isAdminFlag to the top of the sorting hierarchy
                     $sort: {
-                        isAdminFlag: -1,
+                        // ⚡️ UPDATED: Force explicitly flagged admin posts to the very top, overriding finalScore
+                        isAdminPost: -1, 
                         finalScore: -1,
                         createdAt: -1
                     }
