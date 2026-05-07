@@ -19,7 +19,7 @@ export async function GET() {
                 currentCount: 379,
                 inviteBonus: "50 OC + X2 Streak Boost",
                 eventType: 'referral',
-                promoImage: 'https://oreblogda.com/almost400.png',
+                promoImage: 'https://res.cloudinary.com/donakg9he/image/upload/v1778146287/ChatGPT_Image_May_6_2026_12_13_39_PM_t52c93.png',
                 icon: 'share-variant',
                 themeColor: "#00D1FF", // Neon Blue
                 startsAt: new Date('2026-05-06T00:00:00Z').toISOString(),
