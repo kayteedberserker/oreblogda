@@ -198,6 +198,7 @@ const mobileUserSchema = new mongoose.Schema(
         rank: Number,
       }
     ],
+    coffeeCount: { type: Number, default: 0 },
 
     // --- 🔗 REFERRAL SYSTEM ---
     referralCode: { type: String, unique: true, sparse: true },
