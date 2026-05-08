@@ -262,7 +262,6 @@ export async function PATCH(req, { params }) {
                     { "voters.fingerprint": fingerprint }  // New object
                 ]
             });
-            console.log("hasVoted is: ", hasVoted, selectedOptions);
 
             if (hasVoted) {
                 return addCorsHeaders(NextResponse.json({ message: "Already voted or post missing" }, { status: 400 }));
@@ -613,7 +612,6 @@ export async function GET(req, { params }) {
                 hasVoted: !!voterMatch,
                 userVotedOptions: voterMatch?.selectedOptions || []
             };
-            console.log("pollVoteStatus from single post page is", pollVoteStatus);
 
         }
 
