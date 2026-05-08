@@ -69,7 +69,7 @@ export async function POST(req) {
     const boostExpiry = new Date();
     boostExpiry.setHours(boostExpiry.getHours() + 72);
 
-    // Initial titles for the new user
+    // Initial titles for the new user (Empty by default now)
     const initialUnlockedTitles = [];
 
     if (referredBy && referredBy.trim() !== "") {
@@ -84,9 +84,25 @@ export async function POST(req) {
         referrer.coins = (referrer.coins || 0) + 50;
         referrer.doubleStreakUntil = boostExpiry;
 
-        // Give NEW user the Alpha Lead title if milestone not yet reached
+        // 🏆 ALPHA LEAD TITLE LOGIC: Award to REFERRER if total users < 400
         if (isEligibleForAlpha) {
-          initialUnlockedTitles.push({ name: "Alpha Lead", tier: "LEGENDARY" });
+          const alreadyHasAlpha = referrer.unlockedTitles?.some(t => t.name === "Alpha Lead");
+          if (!alreadyHasAlpha) {
+            const alphaTitle = { name: "Alpha Lead", tier: "LEGENDARY" };
+            referrer.unlockedTitles.push(alphaTitle);
+
+            if (referrer.pushToken) {
+              try {
+                await sendPillParallel(
+                  [referrer.pushToken],
+                  "Legendary Title Unlocked! 🏆",
+                  "You've earned 'Alpha Lead' for expanding the network in its early stages!",
+                  { type: "milestone_unlock" },
+                  { type: 'achievement', targetId: referrer.uid, singleUser: true }
+                );
+              } catch (err) { console.error("Alpha Pill Error:", err); }
+            }
+          }
         }
 
         // 🎖 RECRUITER TITLE LOGIC: Award only after 2 referrals
@@ -178,7 +194,7 @@ export async function POST(req) {
       doubleStreakUntil: boostDate,
       lastActive: new Date(),
       totalPosts: 0,
-      unlockedTitles: initialUnlockedTitles, // Includes Alpha Lead if applicable
+      unlockedTitles: initialUnlockedTitles, 
       securityLevel: 1,
       refreshToken: initialRefreshToken
     });
