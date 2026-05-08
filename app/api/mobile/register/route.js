@@ -88,7 +88,7 @@ export async function POST(req) {
         if (isEligibleForAlpha) {
           const alreadyHasAlpha = referrer.unlockedTitles?.some(t => t.name === "Alpha Lead");
           if (!alreadyHasAlpha) {
-            const alphaTitle = { name: "Alpha Lead", tier: "LEGENDARY" };
+            const alphaTitle = { name: "Alpha Lead", tier: "EPIC" };
             referrer.unlockedTitles.push(alphaTitle);
 
             if (referrer.pushToken) {
@@ -194,7 +194,7 @@ export async function POST(req) {
       doubleStreakUntil: boostDate,
       lastActive: new Date(),
       totalPosts: 0,
-      unlockedTitles: initialUnlockedTitles, 
+      unlockedTitles: initialUnlockedTitles,
       securityLevel: 1,
       refreshToken: initialRefreshToken
     });
