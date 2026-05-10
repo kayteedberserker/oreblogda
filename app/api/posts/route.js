@@ -516,7 +516,6 @@ export async function GET(req) {
                     userVotedOptions: voterMatch?.selectedOptions || []
                 };
             }
-            console.log("Looked for:", aId, "in Map keys:", Object.keys(userMap))
 
             return {
                 ...p,

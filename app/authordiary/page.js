@@ -1,9 +1,9 @@
 "use client";
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
-import { ToastContainer, toast } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { toast } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 const Dashboard = () => {
   const [user, setUser] = useState(null);
@@ -229,6 +229,7 @@ const Dashboard = () => {
             {[
               { label: 'Profile Settings', href: 'authordiary/profile', color: 'blue' },
               { label: 'Post Approval', href: 'authordiary/approvalpage', color: 'red' },
+              { label: 'Sticker Creator', href: 'authordiary/StickerCreator', color: 'green' },
               { label: 'Mobile Dashboard', href: 'authordiary/dashboard', color: 'blue' },
             ].map((link) => (
               <Link

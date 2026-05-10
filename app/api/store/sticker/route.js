@@ -1,54 +1,59 @@
-import { STICKER_CATALOG } from "@/app/constants/stickers";
 import connectDB from "@/app/lib/mongodb";
 import MobileUser from "@/app/models/MobileUserModel";
+import Sticker from "@/app/models/StickerModel";
 import { NextResponse } from "next/server";
-
-// Helper to determine rent price based on rarity
-const getRentPrice = (rarity) => {
-    switch (rarity?.toLowerCase()) {
-        case 'mythic': return 50;
-        case 'legendary': return 30;
-        case 'epic': return 15;
-        case 'rare': return 10;
-        case 'common':
-        default: return 5;
-    }
-};
 
 export async function GET(req) {
     await connectDB();
 
-    const deviceId = req.headers.get("x-user-deviceId");
+    const deviceId = req.headers.get("x-user-deviceId") || req.headers.get("deviceid");
     if (!deviceId) return NextResponse.json({ error: "Missing Device ID" }, { status: 400 });
 
     try {
-        const user = await MobileUser.findOne({ deviceId });
+        const [user, allStickers] = await Promise.all([
+            MobileUser.findOne({ deviceId }),
+            Sticker.find({}).lean()
+        ]);
+
         if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
 
-        // 1. Get IDs from stickers.owned
         const ownedIds = user.stickers?.owned || [];
-
-        // 2. LEGACY BRIDGE: Sync items from inventory array 
-        // (matching your catalog's 'id' field)
         const legacyIds = (user.inventory || [])
-            .filter(item => item.category === 'Sticker' || item.category === 'Badge')
+            .filter(item => item.category === 'Sticker')
             .map(item => item.itemId);
 
         const allOwnedIds = [...new Set([...ownedIds, ...legacyIds])];
+        const ownedStickers = allStickers.filter(s => allOwnedIds.includes(s.stickerId));
 
-        // 3. Map to FULL OBJECTS from your STICKER_CATALOG
-        // This is what gets saved to MMKV on the phone
-        const myFullStickers = STICKER_CATALOG.filter(s => allOwnedIds.includes(s.id));
+        // 🚀 SERVER-SIDE GROUPING: Group all stickers by their Pack ID
+        const packsMap = allStickers.reduce((acc, sticker) => {
+            const pId = sticker.packId || "SYSTEM_DEFAULT";
+
+            if (!acc[pId]) {
+                acc[pId] = {
+                    packId: pId,
+                    coverArt: sticker.url, // Use the first sticker as the pack's icon
+                    totalItems: 0,
+                    items: []
+                };
+            }
+
+            acc[pId].items.push(sticker);
+            acc[pId].totalItems += 1;
+            return acc;
+        }, {});
+
+        const storePacks = Object.values(packsMap);
 
         return NextResponse.json({
-            store: STICKER_CATALOG,
-            owned: myFullStickers,
+            storePacks, // Send the grouped array instead of a flat list
+            owned: ownedStickers,
             balance: user.coins
         }, { status: 200 });
 
     } catch (err) {
-        console.error("Sticker Fetch Error:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        console.error("Sticker Sync Error:", err);
+        return NextResponse.json({ message: "Vault synchronization failed" }, { status: 500 });
     }
 }
 
@@ -61,59 +66,39 @@ export async function POST(req) {
     if (!deviceId) return NextResponse.json({ error: "Missing Device ID" }, { status: 400 });
 
     try {
-        const user = await MobileUser.findOne({ deviceId });
-        const sticker = STICKER_CATALOG.find(s => s.id === stickerId);
+        const [user, sticker] = await Promise.all([
+            MobileUser.findOne({ deviceId }),
+            Sticker.findOne({ stickerId })
+        ]);
 
         if (!user || !sticker) {
-            return NextResponse.json({ error: "User or Sticker not found" }, { status: 404 });
+            return NextResponse.json({ error: "Resource not found" }, { status: 404 });
         }
 
-        const buyPrice = sticker.price;
-        const rentPrice = getRentPrice(sticker.rarity);
-
-        // --- PURCHASE LOGIC ---
         if (action === "buy") {
-            if (user.coins < buyPrice) return NextResponse.json({ error: "Insufficient OC" }, { status: 400 });
-            if (user.stickers?.owned.includes(stickerId)) return NextResponse.json({ error: "Already owned" }, { status: 400 });
+            if (user.coins < sticker.price) return NextResponse.json({ error: "Insufficient OC" }, { status: 400 });
+            if (user.stickers?.owned.includes(stickerId)) {
+                return NextResponse.json({ error: "Asset already registered" }, { status: 400 });
+            }
 
-            // Atomic update: deduct coins and add sticker
-            user.coins -= buyPrice;
-
+            user.coins -= sticker.price;
             if (!user.stickers) user.stickers = { owned: [] };
             user.stickers.owned.push(stickerId);
 
             await user.save();
-            // Return updated balance and full sticker for UI snap
-            return NextResponse.json({
-                success: true,
-                balance: user.coins,
-                newSticker: sticker
-            }, { status: 200 });
+            return NextResponse.json({ success: true, balance: user.coins, newSticker: sticker });
         }
 
-        // --- INSTANT RENT LOGIC ---
         if (action === "rent") {
-            if (!sticker.rentable) return NextResponse.json({ error: "Sticker is not rentable" }, { status: 400 });
-            if (user.coins < rentPrice) return NextResponse.json({ error: "Insufficient OC" }, { status: 400 });
+            if (user.coins < sticker.price) return NextResponse.json({ error: "Insufficient OC" }, { status: 400 });
 
-            user.coins -= rentPrice;
-
-            user.coinTransactionHistory.push({
-                action: `Rented Sticker: ${sticker.name}`,
-                type: 'debit',
-                amount: rentPrice,
-                date: new Date()
-            });
-
+            user.coins -= sticker.price;
             await user.save();
-            return NextResponse.json({
-                success: true,
-                balance: user.coins
-            }, { status: 200 });
+            return NextResponse.json({ success: true, balance: user.coins });
         }
 
     } catch (err) {
-        console.error("Sticker Transaction Error:", err);
-        return NextResponse.json({ message: "Server error" }, { status: 500 });
+        console.error("Transaction Error:", err);
+        return NextResponse.json({ message: "Protocol error during purchase" }, { status: 500 });
     }
 }
