@@ -1,4 +1,5 @@
 "use client";
+import PlayerCard from "@/app/components/PlayerCard";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -8,7 +9,8 @@ import "react-toastify/dist/ReactToastify.css";
 const StickerCreator = () => {
   const [user, setUser] = useState(null);
 
-  // --- Sticker Meta State ---
+  // --- Asset Meta State ---
+  const [assetCategory, setAssetCategory] = useState("sticker"); // ⚡️ ADDED: sticker, background, watermark
   const [stickerId, setStickerId] = useState(""); // Only used manually during Edit mode
   const [type, setType] = useState("free");
   const [tier, setTier] = useState("COMMON");
@@ -18,14 +20,19 @@ const StickerCreator = () => {
   const [author, setAuthor] = useState("");
   const [packId, setPackId] = useState("");
 
+  // --- ⚡️ Watermark Visual Config State ---
+  const [wmRotation, setWmRotation] = useState("-15deg");
+  const [wmOpacity, setWmOpacity] = useState(0.4);
+  const [wmScale, setWmScale] = useState(1);
+
   // --- Management State ---
   const [stickers, setStickers] = useState([]);
   const [editingId, setEditingId] = useState(null);
   const [loadingVault, setLoadingVault] = useState(false);
 
   // --- File & Upload State ---
-  const [files, setFiles] = useState([]); // Changed to handle multiple files
-  const [previews, setPreviews] = useState([]); // Array of previews
+  const [files, setFiles] = useState([]);
+  const [previews, setPreviews] = useState([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
 
@@ -81,10 +88,11 @@ const StickerCreator = () => {
     setPreviews(filePreviews);
   };
 
-  // --- 🛠️ Action: Edit Sticker (Forces Single Mode) ---
+  // --- 🛠️ Action: Edit Asset (Forces Single Mode) ---
   const handleEdit = (sticker) => {
     setEditingId(sticker._id);
     setStickerId(sticker.stickerId);
+    setAssetCategory(sticker.category || "sticker"); // ⚡️ ADDED: Load category
     setType(sticker.type);
     setTier(sticker.tier);
     setPrice(sticker.price);
@@ -92,13 +100,19 @@ const StickerCreator = () => {
     setTags(sticker.tags ? sticker.tags.join(", ") : "");
     setAuthor(sticker.author || "");
     setPackId(sticker.packId || "");
+
+    // ⚡️ ADDED: Load watermark configs if they exist
+    setWmRotation(sticker.visualConfig?.rotation || "-15deg");
+    setWmOpacity(sticker.visualConfig?.opacity || 0.4);
+    setWmScale(sticker.visualConfig?.scale || 1);
+
     setPreviews([{ url: sticker.url, name: "existing_asset" }]);
     setFiles([]);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     toast.info(`Editing Asset: ${sticker.stickerId}`);
   };
 
-  // --- 🗑️ Action: Purge Sticker ---
+  // --- 🗑️ Action: Purge Asset ---
   const handleDelete = async (id) => {
     if (!confirm("Are you sure you want to purge this asset?")) return;
     try {
@@ -131,13 +145,20 @@ const StickerCreator = () => {
         action: editingId ? "update" : "create",
         targetId: editingId,
         stickerId, // Only strictly used during update
+        category: assetCategory, // ⚡️ ADDED: Pass category to backend
         type,
         tier,
         price: Number(price),
         isAnimated,
         tags: tags.split(",").map(tag => tag.trim()).filter(tag => tag !== ""),
         author: author.trim(),
-        packId: packId.trim().toLowerCase().replace(/\s+/g, '_')
+        packId: packId.trim().toLowerCase().replace(/\s+/g, '_'),
+        // ⚡️ ADDED: Pass visual configs only if it's a watermark
+        visualConfig: assetCategory === "watermark" ? {
+          rotation: wmRotation,
+          opacity: Number(wmOpacity),
+          scale: Number(wmScale)
+        } : undefined
       };
 
       const formData = new FormData();
@@ -155,7 +176,7 @@ const StickerCreator = () => {
       const data = await res.json();
 
       if (res.ok && data.success) {
-        toast.success(editingId ? "Asset metadata patched!" : `${files.length} Sticker(s) successfully injected!`);
+        toast.success(editingId ? "Asset metadata patched!" : `${files.length} Asset(s) successfully injected!`);
 
         // Reset Form
         setStickerId("");
@@ -164,15 +185,18 @@ const StickerCreator = () => {
         setPreviews([]);
         setPrice(0);
         setEditingId(null);
-        // Intentionally keeping author and packId for continuous flow
+        // Reset watermark configs to default
+        setWmRotation("-15deg");
+        setWmOpacity(0.4);
+        setWmScale(1);
+        // Intentionally keeping author, category, and packId for continuous flow
         fetchVault();
       } else {
-        toast.error(data.error || "Sticker processing failed.");
+        toast.error(data.error || "Asset processing failed.");
       }
     } catch (err) {
       console.log(err);
-
-      toast.error("Critical error during sticker upload.", err);
+      toast.error("Critical error during asset upload.", err);
     } finally {
       setLoading(false);
       setUploading(false);
@@ -214,15 +238,16 @@ const StickerCreator = () => {
           </div>
         </div>
         <style jsx>{`
-          @keyframes loading {
-            0% { transform: translateX(-100%); }
-            50% { transform: translateX(100%); }
-            100% { transform: translateX(-100%); }
-          }
-        `}</style>
+@keyframes loading {
+0% { transform: translateX(-100%); }
+50% { transform: translateX(100%); }
+100% { transform: translateX(-100%); }
+}
+`}</style>
       </div>
     );
   }
+
   const getTierColor = (t = tier) => {
     switch (t) {
       case "MYTHIC": return "bg-purple-500";
@@ -262,7 +287,7 @@ const StickerCreator = () => {
             {[
               { label: 'Profile Settings', href: '/authordiary/profile', color: 'blue' },
               { label: 'Post Approval', href: '/authordiary/approvalpage', color: 'red' },
-              { label: 'Sticker Creator', href: '/authordiary/StickerCreator', color: 'green' },
+              { label: 'Asset Studio', href: '/authordiary/StickerCreator', color: 'green' }, // ⚡️ Renamed label
               { label: 'Mobile Dashboard', href: '/authordiary/dashboard', color: 'blue' },
             ].map((link) => (
               <Link key={link.label} href={link.href} className="group relative px-6 py-3 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-xl overflow-hidden transition-all hover:scale-105 active:scale-95">
@@ -280,17 +305,34 @@ const StickerCreator = () => {
           <div>
             <div className="flex items-center gap-4 mb-8">
               <h2 className="text-xl font-black uppercase tracking-tighter italic">
-                {editingId ? "Patching Protocol" : "Batch Sticker Factory"}
+                {editingId ? "Patching Protocol" : "Universal Asset Factory"}
               </h2>
               <div className="h-[1px] flex-1 bg-gradient-to-r from-gray-200 dark:from-gray-800 to-transparent" />
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
 
-              {/* Only show Sticker ID input if editing a specific single asset */}
+              {/* ⚡️ ADDED: Asset Category Selector */}
+              <div className="bg-gray-50 dark:bg-gray-900 p-2 rounded-2xl flex gap-2 border-2 border-gray-100 dark:border-gray-800">
+                {["sticker", "background", "watermark"].map((cat) => (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => setAssetCategory(cat)}
+                    className={`flex-1 py-3 px-4 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${assetCategory === cat
+                      ? "bg-blue-600 text-white shadow-lg"
+                      : "text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-800"
+                      }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+
+              {/* Only show Asset ID input if editing a specific single asset */}
               {editingId ? (
                 <div className="relative group">
-                  <label className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2 block ml-1">Unique Sticker ID</label>
+                  <label className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400 mb-2 block ml-1">Unique Asset ID</label>
                   <input
                     type="text"
                     value={stickerId}
@@ -362,9 +404,32 @@ const StickerCreator = () => {
                 </div>
                 <div className="space-y-2">
                   <label className="text-[9px] font-black uppercase tracking-[0.2em] text-gray-400 ml-1">Search Tags</label>
-                  <input type="text" placeholder="anime, laugh..." value={tags} onChange={(e) => setTags(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 p-4 rounded-2xl font-bold outline-none" />
+                  <input type="text" placeholder="anime, epic..." value={tags} onChange={(e) => setTags(e.target.value)} className="w-full bg-gray-50 dark:bg-gray-900 border-2 border-gray-100 dark:border-gray-800 p-4 rounded-2xl font-bold outline-none" />
                 </div>
               </div>
+
+              {/* ⚡️ ADDED: Conditional Watermark Configs */}
+              {assetCategory === "watermark" && (
+                <div className="bg-gray-50 dark:bg-gray-900 p-5 rounded-2xl border-2 border-dashed border-gray-200 dark:border-gray-800 space-y-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-[10px] font-black uppercase tracking-widest text-blue-500">🎨 Watermark Visual Engine</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                      <label className="text-[8px] font-black uppercase tracking-[0.2em] text-gray-400 ml-1">Rotation</label>
+                      <input type="text" placeholder="-15deg" value={wmRotation} onChange={(e) => setWmRotation(e.target.value)} className="w-full bg-white dark:bg-[#0a0a0a] border-2 border-gray-100 dark:border-gray-800 p-3 rounded-xl text-xs font-bold outline-none" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[8px] font-black uppercase tracking-[0.2em] text-gray-400 ml-1">Opacity (0-1)</label>
+                      <input type="number" step="0.1" min="0" max="1" value={wmOpacity} onChange={(e) => setWmOpacity(e.target.value)} className="w-full bg-white dark:bg-[#0a0a0a] border-2 border-gray-100 dark:border-gray-800 p-3 rounded-xl text-xs font-bold outline-none" />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-[8px] font-black uppercase tracking-[0.2em] text-gray-400 ml-1">Scale</label>
+                      <input type="number" step="0.1" value={wmScale} onChange={(e) => setWmScale(e.target.value)} className="w-full bg-white dark:bg-[#0a0a0a] border-2 border-gray-100 dark:border-gray-800 p-3 rounded-xl text-xs font-bold outline-none" />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className={`p-4 rounded-2xl border-2 transition-all ${isAnimated ? 'border-green-500 bg-green-500/5' : 'border-gray-100 dark:border-gray-800'}`}>
                 <label className="flex items-center gap-3 cursor-pointer">
@@ -398,7 +463,7 @@ const StickerCreator = () => {
                   </span>
                 </button>
                 {editingId && (
-                  <button type="button" onClick={() => { setEditingId(null); setPreviews([]); setFiles([]); setStickerId(""); }} className="px-8 py-6 bg-red-500/10 border-2 border-red-500 text-red-500 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-red-500 hover:text-white transition-all">
+                  <button type="button" onClick={() => { setEditingId(null); setPreviews([]); setFiles([]); setStickerId(""); setWmRotation("-15deg"); setWmOpacity(0.4); setWmScale(1); }} className="px-8 py-6 bg-red-500/10 border-2 border-red-500 text-red-500 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-red-500 hover:text-white transition-all">
                     CANCEL
                   </button>
                 )}
@@ -411,20 +476,52 @@ const StickerCreator = () => {
             <p className="text-[9px] font-black uppercase tracking-[0.3em] text-gray-400 mb-8 text-center">Batch Preview Simulation</p>
 
             {previews.length > 0 ? (
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4 w-full bg-gray-100 dark:bg-[#111] p-6 rounded-3xl border-2 border-gray-200 dark:border-gray-800 shadow-2xl max-h-[400px] overflow-y-auto">
-                {previews.map((prev, idx) => (
-                  <div key={idx} className="relative flex flex-col items-center gap-2 p-2 bg-white dark:bg-gray-900 rounded-xl">
-                    <img src={prev.url} className="w-20 h-20 object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.2)]" alt="Preview" />
-                    {!editingId && (
-                      <p className="text-[7px] font-mono text-gray-400 truncate w-full text-center">
-                        {/* Preview what the ID will roughly look like */}
-                        {packId || 'pack'}_{author || 'anon'}_{prev.name.split('.')[0]}
-                      </p>
-                    )}
-                  </div>
-                ))}
-              </div>
+              assetCategory === "sticker" ? (
+                /* 🟩 STANDARD STICKER GRID PREVIEW */
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4 w-full bg-gray-100 dark:bg-[#111] p-6 rounded-3xl border-2 border-gray-200 dark:border-gray-800 shadow-2xl max-h-[600px] overflow-y-auto">
+                  {previews.map((prev, idx) => (
+                    <div key={idx} className="relative flex flex-col items-center justify-center gap-2 p-2 bg-white dark:bg-gray-900 rounded-xl overflow-hidden aspect-square">
+                      <img
+                        src={prev.url}
+                        className="w-20 h-20 object-contain drop-shadow-[0_0_8px_rgba(255,255,255,0.2)]"
+                        alt="Preview"
+                      />
+                      {!editingId && (
+                        <p className="text-[7px] font-mono text-gray-400 truncate w-full text-center absolute bottom-2 z-10 bg-black/50 px-1 rounded">
+                          {packId || 'pack'}_{author || 'anon'}_{prev.name.split('.')[0]}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                /* 🚀 LIVE PLAYER CARD PREVIEW (For Backgrounds & Watermarks) */
+                <div className="w-full flex flex-col items-center gap-12 bg-gray-100 dark:bg-[#111] p-6 rounded-3xl border-2 border-gray-200 dark:border-gray-800 shadow-2xl max-h-[600px] overflow-y-auto overflow-x-hidden">
+                  {previews.map((prev, idx) => (
+                    <div key={idx} className="flex flex-col items-center w-full">
+                      {/* Scaled down slightly to fit well in the sidebar */}
+                      <div className="scale-90 origin-top w-full flex justify-center">
+                        <PlayerCard
+                          username={user?.username || "TEST_SUBJECT"}
+                          backgroundImg={assetCategory === 'background' ? prev.url : null}
+                          watermarkImg={assetCategory === 'watermark' ? prev.url : null}
+                          wmRotation={wmRotation}
+                          wmOpacity={wmOpacity}
+                          wmScale={wmScale}
+                          isDark={true}
+                        />
+                      </div>
+                      {!editingId && (
+                        <p className="text-[10px] font-mono text-gray-500 truncate mt-[-20px] bg-black/50 px-3 py-1 rounded-full z-10">
+                          {packId || 'pack'}_{author || 'anon'}_{prev.name.split('.')[0]}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )
             ) : (
+              /* 🚫 EMPTY STATE */
               <div className="relative w-72 h-72 bg-gray-100 dark:bg-[#111] rounded-3xl flex items-center justify-center overflow-hidden border-2 border-gray-200 dark:border-gray-800 shadow-2xl">
                 <div className="flex flex-col items-center opacity-30">
                   <span className="text-4xl mb-2">🚫</span>
@@ -437,6 +534,9 @@ const StickerCreator = () => {
             {previews.length > 0 && (
               <div className="mt-6 flex flex-col items-center gap-2">
                 <div className="flex gap-2">
+                  <span className={`px-4 py-1.5 bg-gray-800 border border-gray-600 text-white rounded-full text-[10px] font-black tracking-widest uppercase shadow-lg`}>
+                    {assetCategory}
+                  </span>
                   <span className={`px-4 py-1.5 ${getTierColor()} text-white rounded-full text-[10px] font-black tracking-widest uppercase shadow-lg`}>{tier}</span>
                   {type === "rent" && <span className="px-4 py-1.5 bg-yellow-500 text-black rounded-full text-[10px] font-black tracking-widest uppercase shadow-lg">{price} COINS</span>}
                 </div>
@@ -468,9 +568,23 @@ const StickerCreator = () => {
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6">
                     {packStickers.map((sticker) => (
                       <div key={sticker._id} className="group relative bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-2xl p-4 transition-all hover:border-blue-600/50 hover:shadow-lg hover:shadow-blue-500/10">
-                        <div className="aspect-square mb-4 flex items-center justify-center relative">
+                        {/* ⚡️ ADDED: Category Badge */}
+                        <div className="absolute top-2 left-2 z-20">
+                          <span className="text-[7px] font-black uppercase tracking-widest bg-black/60 text-white px-1.5 py-0.5 rounded backdrop-blur-sm">
+                            {sticker.category === 'background' ? 'BG' : sticker.category === 'watermark' ? 'WM' : 'STK'}
+                          </span>
+                        </div>
+                        <div className={`mb-4 flex items-center justify-center relative overflow-hidden rounded-lg ${sticker.category === 'background' ? 'aspect-[9/16]' : 'aspect-square'}`}>
                           <div className={`absolute inset-0 blur-2xl opacity-10 ${getTierColor(sticker.tier)}`} />
-                          <img src={sticker.url} className="w-20 h-20 object-contain relative z-10" alt={sticker.stickerId} />
+                          <img
+                            src={sticker.url}
+                            className={`relative z-10 ${sticker.category === 'background' ? 'w-full h-full object-cover' : 'w-20 h-20 object-contain'}`}
+                            style={sticker.category === 'watermark' ? {
+                              transform: `rotate(${sticker.visualConfig?.rotation || '-15deg'}) scale(${sticker.visualConfig?.scale || 1})`,
+                              opacity: sticker.visualConfig?.opacity || 0.4
+                            } : {}}
+                            alt={sticker.stickerId}
+                          />
                         </div>
                         <div className="text-center">
                           <p className="text-[10px] font-black uppercase truncate mb-1">{sticker.stickerId}</p>
