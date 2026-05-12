@@ -10,7 +10,7 @@ export async function POST(req) {
         const { refreshToken, deviceId } = await req.json();
 
         if (!refreshToken) {
-            return NextResponse.json({ message: "NEURAL_LINK_EMPTY: Missing Token" }, { status: 400 });
+            return NextResponse.json({ message: "NEURAL_LINK_EMPTY: Missing Token" }, { status: 440 });
         }
 
         // 1. Verify the Refresh Token signature
