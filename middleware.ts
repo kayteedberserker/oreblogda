@@ -24,7 +24,6 @@ export async function middleware(req: NextRequest) {
   // 🛡️ THE SYSTEM TOGGLE
   // If true: Test the new Token/JWT logic.
   // If false: Standard public access (no token check).
-  const isDebugMode = req.headers.get('x-the-system-debug') === 'true';
 
   const response = NextResponse.next();
 
@@ -62,7 +61,7 @@ export async function middleware(req: NextRequest) {
       const isPublicAction = PUBLIC_API_ROUTES.some(route => pathname.startsWith(route));
       const isGetRequest = method === "GET";
       
-      if (isDebugMode && !isPublicAction && !isGetRequest) {
+      if (!isPublicAction && !isGetRequest) {
         const authHeader = req.headers.get('authorization');
         const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
         const clientDeviceId = req.headers.get('x-user-deviceId');
@@ -70,7 +69,7 @@ export async function middleware(req: NextRequest) {
         if (!token) {
           return new NextResponse(
             JSON.stringify({ success: false, message: "ENCRYPTION_KEY_MISSING: Authentication Required." }),
-            { status: 401, headers: { 'content-type': 'application/json' } }
+            { status: 455, headers: { 'content-type': 'application/json' } }
           );
         }
 

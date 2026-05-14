@@ -10,7 +10,7 @@ export async function POST(req) {
         const { uid, pin, email } = await req.json();
 
         // 1. Validation
-        if (!uid || !pin || pin.length !== 6) {
+        if (!uid || ((!pin || pin.length !== 6) && !email)) {
             return NextResponse.json({
                 message: "Invalid Encryption Protocol. 6-digit PIN required."
             }, { status: 400 });
