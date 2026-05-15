@@ -23,7 +23,7 @@ export async function GET() {
                 icon: 'share-variant',
                 themeColor: "#00D1FF", // Neon Blue
                 startsAt: new Date('2026-05-06T00:00:00Z').toISOString(),
-                endsAt: new Date('2026-05-13T23:59:59Z').toISOString(),
+                endsAt: new Date('2026-05-23T23:59:59Z').toISOString(),
             },
             // 🏅 1. The Legacy Claim (Coming Soon)
             // {
