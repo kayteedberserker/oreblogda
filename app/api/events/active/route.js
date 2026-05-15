@@ -9,53 +9,19 @@ export async function GET() {
         // ⚡️ Raw Event Configurations
         const rawEvents = [
             // 🚀 0. THE PRE-EVENT: Referral Countdown (Active NOW)
+            // // 🧠 2. The Lore Trivia (Coming Soon)
             {
-                id: 'referral_countdown_400',
-                type: "milestone_countdown",
-                title: 'The Final Push',
-                description: 'We are almost there. The Great Library unlocks at 400 users. Share your unique link to accelerate the countdown and claim your invite bonus.',
-                targetGoal: 400,
-                // Current stats would be fetched from your DB in a real scenario
-                currentCount: 379,
-                inviteBonus: "50 OC + X2 Streak Boost",
-                eventType: 'referral',
-                promoImage: 'https://res.cloudinary.com/donakg9he/image/upload/v1778146287/ChatGPT_Image_May_6_2026_12_13_39_PM_t52c93.png',
-                icon: 'share-variant',
-                themeColor: "#00D1FF", // Neon Blue
-                startsAt: new Date('2026-05-06T00:00:00Z').toISOString(),
+                id: 'trivia_lore_check',
+                type: "quiz",
+                title: 'The Meaning of the System',
+                description: 'Prove your knowledge of THE SYSTEM to unlock 500 OC.',
+                eventType: 'quiz',
+                promoImage: 'https://res.cloudinary.com/donakg9he/image/upload/v1778879732/ChatGPT_Image_May_6_2026_12_13_46_PM_yb2isc.png',
+                icon: 'help-circle',
+                themeColor: '#8b5cf6',
+                startsAt: new Date('2026-05-16T07:00:00Z').toISOString(),
                 endsAt: new Date('2026-05-23T23:59:59Z').toISOString(),
             },
-            // 🏅 1. The Legacy Claim (Coming Soon)
-            // {
-            //     id: 'claim_alpha_operative',
-            //     type: "claim",
-            //     title: 'The Alpha Operative',
-            //     description: 'Exclusive "First 400" Title claim. Unlocks once the System hits 400 capacity.',
-            //     amount: 0,
-            //     rewardType: 'title',
-            //     rewardValue: 'Alpha Operative',
-            //     eventType: 'achievement',
-            //     icon: 'medal',
-            //     themeColor: '#fbbf24',
-            //     // Starts exactly when you expect to hit 400
-            //     startsAt: new Date('2026-05-07T12:00:00Z').toISOString(), 
-            //     endsAt: new Date('2026-05-14T23:59:59Z').toISOString(),
-            // },
-            // // 🧠 2. The Lore Trivia (Coming Soon)
-            // {
-            //     id: 'trivia_lore_check',
-            //     type: "trivia",
-            //     title: 'The Meaning of the System',
-            //     description: 'Prove your knowledge of O l e b l o g d a to unlock 200 OC.',
-            //     maxReward: 200,
-            //     hintPenalty: 20,
-            //     baseReward: 100,
-            //     eventType: 'challenge',
-            //     icon: 'help-circle',
-            //     themeColor: '#8b5cf6',
-            //     startsAt: new Date('2026-05-07T12:00:00Z').toISOString(),
-            //     endsAt: new Date('2026-05-14T23:59:59Z').toISOString(),
-            // },
             //  // 🎡 3. The Founder’s Cache (Coming Soon)
             //  {
             //     id: 'gacha_400_cache',
