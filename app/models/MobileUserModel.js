@@ -10,6 +10,7 @@ const InventoryItemSchema = new mongoose.Schema({
     type: String,
     default: 'Common'
   },
+  url: { type: String, default: null }, // NEW: Direct URL for image-based items
   visualConfig: {
     svgCode: { type: String },
     lottieUrl: { type: String },
@@ -18,6 +19,8 @@ const InventoryItemSchema = new mongoose.Schema({
     animationType: { type: String },
     opacity: { type: Number },
     zoom: { type: Number },
+    scale: { type: Number },
+    rotation: { type: String },
     offsetY: { type: Number },
     duration: { type: Number },
     snakeLength: { type: Number },
