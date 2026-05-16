@@ -64,9 +64,10 @@ export async function GET(request) {
                 question: TODAY_QUIZ.question,
                 category: TODAY_QUIZ.category,
                 difficulty: TODAY_QUIZ.difficulty
-                // Don't send the answer or hints yet
+                // Don't send the answer or full hints yet
             },
             hintsUsed: userProgress?.hintsUsed || 0,
+            hints: userProgress?.hintsUsed ? TODAY_QUIZ.hints.slice(0, userProgress.hintsUsed) : [],
             attemptsLeft: userProgress?.attemptsLeft || 3,
             completed,
             unlockedTitle: completed ? TITLE_REWARD : null
