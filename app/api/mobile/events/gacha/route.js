@@ -299,7 +299,7 @@ const GACHA_POOLS = {
             category: 'AVATAR_VFX',
             rarity: 'Legendary',
             baseDropRate: 1,
-            exchangePrice: 500, // ⚡️ High weight
+            exchangePrice: 400, // ⚡️ High weight
             visualConfig: { lottieUrl: 'https://oreblogda.com/lottie/wave_vfx.json', primaryColor: "#a855f7", zoom: 0.9, }
         },
         {
