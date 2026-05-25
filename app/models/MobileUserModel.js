@@ -10,6 +10,7 @@ const InventoryItemSchema = new mongoose.Schema({
     type: String,
     default: 'Common'
   },
+  hypeType: { type: String, default: null }, // NEW: For hype-related items
   url: { type: String, default: null }, // NEW: Direct URL for image-based items
   visualConfig: {
     svgCode: { type: String },
@@ -26,6 +27,8 @@ const InventoryItemSchema = new mongoose.Schema({
     snakeLength: { type: Number },
     isAnimated: { type: Boolean, default: false }
   },
+  itemCount: { type: Number, default: 1 }, // For stackable items like Hype
+  isConsumable: { type: Boolean, default: false },
   isEquipped: { type: Boolean, default: false },
   acquiredAt: { type: Date, default: Date.now },
   expiresAt: { type: Date, default: null },
@@ -112,6 +115,7 @@ const mobileUserSchema = new mongoose.Schema(
     lifetimeCoinsSpent: { type: Number, default: 0 },
     totalLikes: { type: Number, default: 0 },
     totalPosts: { type: Number, default: 0 },
+    tokens: { type: Number, default: 0 },
     receivedCommentsCount: { type: Number, default: 0 },
     lifetimeCommentsCount: { type: Number, default: 0 },
     totalShares: { type: Number, default: 0 },
@@ -165,7 +169,9 @@ const mobileUserSchema = new mongoose.Schema(
     },
     unlockedTitles: [{ name: String, tier: String }],
     equippedTitle: { name: String, tier: String },
-
+    // Add these inside your mobileUserSchema fields:
+    totalHypePointsGiven: { type: Number, default: 0 },
+    totalHypePointsReceived: { type: Number, default: 0 },
     // --- 💰 COIN SYSTEM ---
     coins: { type: Number, default: 0 },
     lastClaimedDate: { type: Date, default: null },

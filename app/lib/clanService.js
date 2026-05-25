@@ -80,6 +80,7 @@ export async function awardClanPoints(post, actionPoints, type = null) {
     if (type === 'view') updateQuery.$inc['stats.views'] = 5;
     if (type === 'comment') updateQuery.$inc['stats.comments'] = 1;
     if (type === 'share') updateQuery.$inc['stats.shares'] = 1;
+    if (type === 'hype') updateQuery.$inc['stats.hypes'] = 1; // ⚡️ ADDED: Track clan lifetime hypes stat
 
     // Clean up empty $inc if necessary
     if (Object.keys(updateQuery.$inc).length === 0) delete updateQuery.$inc;

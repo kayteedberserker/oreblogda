@@ -25,8 +25,9 @@ export async function updateWarProgress(clanTag, actionPoints, type) {
     const isPointsMatch = activeWar.warType === "POINTS" || activeWar.warType === "ALL";
     const isLikesMatch = (type === 'like' && activeWar.warType === "LIKES") || activeWar.warType === "ALL";
     const isCommentsMatch = (type === 'comment' && activeWar.warType === "COMMENTS") || activeWar.warType === "ALL";
+    const isHypesMatch = (type === 'hype' && activeWar.warType === "HYPES") || activeWar.warType === "ALL"; // ⚡️ ADDED: Hype match checker
 
-    if (isPointsMatch || isLikesMatch || isCommentsMatch) {
+    if (isPointsMatch || isLikesMatch || isCommentsMatch || isHypesMatch) {
         const isChallenger = activeWar.challengerTag === clanTag;
         const updateField = isChallenger ? 'currentProgress.challengerScore' : 'currentProgress.defenderScore';
 
@@ -41,6 +42,7 @@ export async function updateWarProgress(clanTag, actionPoints, type) {
         const clanStatsUpdate = {};
         if (type === 'like') clanStatsUpdate['stats.warLikes'] = 1;
         if (type === 'comment') clanStatsUpdate['stats.warComments'] = 1;
+        if (type === 'hype') clanStatsUpdate['stats.warHypes'] = 1; // ⚡️ ADDED: Track war hypes cumulative stats
 
         if (Object.keys(clanStatsUpdate).length > 0) {
             await Clan.updateOne({ tag: clanTag }, { $inc: clanStatsUpdate });
@@ -95,9 +97,7 @@ export async function updateWarProgress(clanTag, actionPoints, type) {
     }
 }
 
-/**
- * Handles logic for ending a war, distributing points, and notifying all members.
- */
+
 async function completeWar(war) {
     const { challengerScore, defenderScore } = war.currentProgress;
     const stake = war.prizePool;

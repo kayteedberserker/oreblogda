@@ -112,6 +112,16 @@ const postSchema = new mongoose.Schema(
     /* ---------- INTERACTIONS ---------- */
     likes: [likeSchema],
     likeCount: { type: Number, default: 0 },
+    // ⚡️ HYPE SYSTEM FIELDS
+    hypePoints: {
+      type: Number,
+      default: 0,
+      index: true // Useful if you want to sort posts by "Most Hyped"
+    },
+    hypeCount: {
+      type: Number,
+      default: 0,
+    },
     comments: [commentSchema],
     shares: { type: Number, default: 0 },
 

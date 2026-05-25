@@ -32,7 +32,7 @@ const ClanWarSchema = new mongoose.Schema({
     // War Configuration
     warType: {
         type: String,
-        enum: ["POINTS", "LIKES", "COMMENTS", "ALL"],
+        enum: ["POINTS", "HYPES", "LIKES", "COMMENTS", "ALL"],
         default: "POINTS"
     },
     isBountyWar: {
@@ -64,11 +64,13 @@ const ClanWarSchema = new mongoose.Schema({
         challenger: {
             points: { type: Number, default: 0 },
             likes: { type: Number, default: 0 },
+            hypes: { type: Number, default: 0 },
             comments: { type: Number, default: 0 }
         },
         defender: {
             points: { type: Number, default: 0 },
             likes: { type: Number, default: 0 },
+            hypes: { type: Number, default: 0 },
             comments: { type: Number, default: 0 }
         }
     },

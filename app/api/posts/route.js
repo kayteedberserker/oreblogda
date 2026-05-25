@@ -288,6 +288,16 @@ function removeEmptyLines(text) {
     return text.split('\n').filter(line => line.trim() !== '').join('\n');
 }
 
+// Server-side helper to resolve Clan display rank titles based on total points
+function resolveClanDisplayRank(points = 0) {
+    if (points >= 300000) return "The Akatsuki";
+    if (points >= 100000) return "The Espada";
+    if (points >= 50000) return "Phantom Troupe";
+    if (points >= 20000) return "Upper Moon";
+    if (points >= 5000) return "Squad 13";
+    return "Wandering Ronin";
+}
+
 export async function GET(req) {
     await connectDB();
     try {
@@ -314,8 +324,10 @@ export async function GET(req) {
 
         const targetAuthor = author || authorId;
 
+        // ⚡️ CONFIGURATION: Set point requirement to filter out casual single-hype posts from trending status
+        const TRENDING_THRESHOLD = 1000;
+
         let query = {};
-        let isAdmin = false;
 
         if (targetAuthor) {
             // Check if it's an ID or a Username
@@ -362,13 +374,14 @@ export async function GET(req) {
             const CONFIG = {
                 likeWeight: 2.0,
                 commentWeight: 4.0,
+                hypeBaseWeight: 35.0, // ⚡️ UPDATED: High base weight ensures initial hypes are vastly more valuable than likes/comments
                 freshnessBoost: 20,
-                isAdminBoost: isAdmin ? 100 : 0,
                 freshnessWindow: 3,
                 gravityPower: 1.2,
                 prefBonus: 15,
                 clanBonus: 50,
-                localBonus: 25
+                localBonus: 25,
+                trendingThreshold: TRENDING_THRESHOLD
             };
 
             const now = new Date();
@@ -384,6 +397,13 @@ export async function GET(req) {
                         },
                         commentsCount: { $size: { $ifNull: ["$comments", []] } },
                         likesCount: { $size: { $ifNull: ["$likes", []] } },
+                        hypePointsCount: {
+                            $cond: {
+                                if: { $eq: [{ $type: { $ifNull: ["$hypePoints", 0] } }, "array"] },
+                                then: { $size: { $ifNull: ["$hypePoints", []] } },
+                                else: { $ifNull: ["$hypePoints", 0] }
+                            }
+                        },
                         matchCount: {
                             $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] }
                         }
@@ -394,7 +414,14 @@ export async function GET(req) {
                         engagementScore: {
                             $add: [
                                 { $multiply: [{ $ifNull: ["$likesCount", 0] }, CONFIG.likeWeight] },
-                                { $multiply: ["$commentsCount", CONFIG.commentWeight] }
+                                { $multiply: ["$commentsCount", CONFIG.commentWeight] },
+                                // ⚡️ UPDATED: Uses $sqrt for dynamic diminishing returns. High total hypes scale gracefully, preventing feed clouding.
+                                {
+                                    $multiply: [
+                                        { $sqrt: { $ifNull: ["$hypePointsCount", 0] } },
+                                        CONFIG.hypeBaseWeight
+                                    ]
+                                }
                             ]
                         },
                         relevanceBonus: {
@@ -485,8 +512,14 @@ export async function GET(req) {
                 }).lean();
 
                 clans.forEach(c => {
-                    if (c.tag) clanMap[c.tag] = c;
-                    if (c._id) clanMap[c._id.toString()] = c;
+                    // ⚡️ RESOLVE CLAN DISPLAY RANK ON THE BULK ENTRIES
+                    const enrichedClan = {
+                        ...c,
+                        displayRank: resolveClanDisplayRank(c.totalPoints || 0)
+                    };
+
+                    if (c.tag) clanMap[c.tag] = enrichedClan;
+                    if (c._id) clanMap[c._id.toString()] = enrichedClan;
                 });
             }
         } catch (popErr) {
@@ -517,6 +550,11 @@ export async function GET(req) {
                 };
             }
 
+            const finalHypeCount = p.hypePointsCount ?? (Array.isArray(p.hypePoints) ? p.hypePoints.length : (p.hypePoints || 0));
+
+            // ⚡️ UPDATED: Evaluates trending status using the global ecosystem-friendly benchmark
+            const isTrending = finalHypeCount >= TRENDING_THRESHOLD;
+
             return {
                 ...p,
                 _id: p._id.toString(),
@@ -525,6 +563,8 @@ export async function GET(req) {
                 formattedViews: typeof formatViewsServer === 'function' ? formatViewsServer(p.viewsCount ?? p.views ?? 0) : (p.viewsCount || 0),
                 likesCount: p.likesCount ?? (p.likes?.length || 0),
                 commentsCount: p.commentsCount ?? (p.comments?.length || 0),
+                hypePointsCount: finalHypeCount,
+                isTrending,
                 discussionCount: typeof calculateDiscussionCount === 'function' ? calculateDiscussionCount(p.comments || []) : 0,
                 hasLiked,
                 hasViewed,
@@ -532,7 +572,6 @@ export async function GET(req) {
                     ...p.poll,
                     ...pollVoteStatus
                 } : p.poll,
-                // ⚡️ LOOKUP: Matches the stringified aId to the userMap key
                 authorData: userMap[aId] || null,
                 clanData: clanMap[cTag] || null
             };
@@ -823,14 +862,14 @@ export async function POST(req) {
                                 type: "open_post",
                                 postId: newPost._id.toString(),
                                 clanTag: clanId,
-                                screen: `clan_${clanId}` // Used by sendPillParallel to generate the link
+                                screen: `/post/${newPost._id.toString()}` // Used by sendPillParallel to generate the link
                             },
                             {
                                 type: 'clan_post',
                                 targetAudience: 'clan',
                                 targetId: clanId,
                                 priority: 3,
-                                link: `clan_${clanId}`,
+                                link: `/post/${newPost._id.toString()}`,
                                 expiresInHours: 6
                             }
                         );

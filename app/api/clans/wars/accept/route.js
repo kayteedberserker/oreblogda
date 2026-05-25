@@ -52,16 +52,19 @@ export async function POST(req) {
         defender.isInWar = true;
         defender.activeWarId = war.warId;
 
+        // ⚡️ UPDATED: Added hype snapshot tracking into initialStats mapping
         war.initialStats = {
             challenger: {
                 points: challenger.totalPoints || 0,
                 likes: challenger.stats?.likes || 0,
-                comments: challenger.stats?.comments || 0
+                comments: challenger.stats?.comments || 0,
+                hypes: challenger.stats?.hypes || 0 // Added tracking for starting hype counts
             },
             defender: {
                 points: defender.totalPoints || 0,
                 likes: defender.stats?.likes || 0,
-                comments: defender.stats?.comments || 0
+                comments: defender.stats?.comments || 0,
+                hypes: defender.stats?.hypes || 0 // Added tracking for starting hype counts
             }
         };
 

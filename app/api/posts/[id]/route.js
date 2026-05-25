@@ -511,6 +511,16 @@ export async function PATCH(req, { params }) {
     }
 }
 
+// Server-side helper to resolve Clan display rank titles based on total points
+function resolveClanDisplayRank(points = 0) {
+    if (points >= 300000) return "The Akatsuki";
+    if (points >= 100000) return "The Espada";
+    if (points >= 50000) return "Phantom Troupe";
+    if (points >= 20000) return "Upper Moon";
+    if (points >= 5000) return "Squad 13";
+    return "Wandering Ronin";
+}
+
 // ----------------------
 // GET: Fetch single post (Enriched for PostCard)
 // ----------------------
@@ -523,6 +533,9 @@ export async function GET(req, { params }) {
 
         // Get deviceId from headers for hasLiked check
         const deviceId = req.headers.get("x-user-deviceId") || "";
+
+        // ⚡️ CONFIGURATION: Set global baseline point requirement for trending status evaluation
+        const TRENDING_THRESHOLD = 1000;
 
         // 1. Fetch the post
         let post;
@@ -568,10 +581,12 @@ export async function GET(req, { params }) {
                                 displayRank: rankInfo.rankName,
                                 auraVisuals: auraInfo,
                                 equippedGlow: inv.find(i => (i.category === 'GLOW' || i.category === 'NAME_GLOW') && i.isEquipped) || null,
-                                equippedBadges: inv.filter(i => i.category === 'BADGE' && i.isEquipped).slice(0, 3) || []
+                                equippedBadges: inv.filter(i => i.category === 'BADGE' && i.isEquipped).slice(0, 3) || [],
+                                equippedTitle: u.equippedTitle || null // ⚡️ ADDED: Synchronized field to map properly to frontend TitleTag components
                             };
                         }
-                    })
+                    }
+                    )
             );
         }
 
@@ -579,7 +594,13 @@ export async function GET(req, { params }) {
             promises.push(
                 Clan.findOne({ $or: [{ tag: clanTag }] }).lean()
                     .then(c => {
-                        if (c) clanData = c;
+                        if (c) {
+                            // ⚡️ RESOLVE CLAN DISPLAY RANK VIA POINT THRESHOLDS
+                            clanData = {
+                                ...c,
+                                displayRank: resolveClanDisplayRank(c.totalPoints || 0)
+                            };
+                        }
                     })
             );
         }
@@ -589,21 +610,23 @@ export async function GET(req, { params }) {
 
         // Clean message for the feed excerpt
         const feedMessage = post.message
-            .replace(/s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs, "$1$2$3$4$5$6$8$10")
-            .replace(/\n+/g, ' ')
-            .trim();
+            ? post.message
+                .replace(/s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs, "$1$2$3$4$5$6$8$10")
+                .replace(/\n+/g, ' ')
+                .trim()
+            : "";
 
         // 3. Package and return
         // ⚡️ CHECK IF USER HAS LIKED THIS POST
         const postLikes = post.likes || [];
-        const hasLiked = deviceId ? postLikes.some(like => like?.fingerprint == deviceId) : false;
+        const hasLiked = deviceId ? postLikes.some(like => like?.fingerprint == deviceId || like === deviceId) : false;
 
         // Compute hasViewed & poll vote status
         const hasViewed = post.viewsFingerprints?.includes(deviceId) || false;
 
         let pollVoteStatus = null;
 
-        if (post.poll && post.voters.length > 0) {
+        if (post.poll && post.voters?.length > 0) {
             const voterMatch = post.voters.find(v =>
                 v.fingerprint === deviceId || v === deviceId  // Legacy string support
             );
@@ -612,8 +635,11 @@ export async function GET(req, { params }) {
                 hasVoted: !!voterMatch,
                 userVotedOptions: voterMatch?.selectedOptions || []
             };
-
         }
+
+        // ⚡️ ADDED: Compute structured dynamic Hype information 
+        const finalHypeCount = Array.isArray(post.hypePoints) ? post.hypePoints.length : (post.hypePoints || 0);
+        const isTrending = finalHypeCount >= TRENDING_THRESHOLD;
 
         const responseData = {
             ...post,
@@ -622,8 +648,10 @@ export async function GET(req, { params }) {
             clanData,
             feedExcerpt: feedMessage.length > 150 ? feedMessage.slice(0, 150) + "..." : feedMessage,
             formattedViews: formatViewsServer(post.viewsCount ?? post.views ?? 0),
-            likesCount: post.likeCount ?? (post.likes?.length || 0),
+            likesCount: post.likesCount ?? post.likeCount ?? (post.likes?.length || 0),
             commentsCount: post.comments?.length || 0,
+            hypePointsCount: finalHypeCount,
+            isTrending,
             discussionCount: calculateDiscussionCount(post.comments || []),
             hasLiked,
             hasViewed,

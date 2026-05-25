@@ -29,9 +29,6 @@ export async function POST(req) {
         if (!user || user.refreshToken !== refreshToken || user.deviceId !== deviceId) {
             // This is critical: If the token doesn't match what we have in DB, 
             // someone might be trying a Replay Attack.
-            console.log("Token verification failed for user:", decoded.uid);
-            console.log("Expected deviceId:", user.deviceId);
-            console.log("Received deviceId:", deviceId);
 
             return NextResponse.json({ message: "SESSION_COMPROMISED: Neural Link Severed" }, { status: 405 });
         }

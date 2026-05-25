@@ -25,15 +25,15 @@ const InventoryItemSchema = new mongoose.Schema({
         required: true
     },
     visualConfig: {
-        svgCode: { type: String }, 
+        svgCode: { type: String },
         primaryColor: { type: String },
-        secondaryColor: { type: String, default: null }, 
+        secondaryColor: { type: String, default: null },
         animationType: {
             type: String,
             default: "singleSnake"
         },
-        duration: { type: Number, default: 3000 }, 
-        snakeLength: { type: Number, default: 120 }, 
+        duration: { type: Number, default: 3000 },
+        snakeLength: { type: Number, default: 120 },
         isAnimated: { type: Boolean, default: false }
     },
     isEquipped: { type: Boolean, default: false },
@@ -58,19 +58,20 @@ const ClanSchema = new mongoose.Schema({
         likes: { type: Number, default: 0 },
         shares: { type: Number, default: 0 },
         comments: { type: Number, default: 0 },
-        totalPosts: { type: Number, default: 0 }, 
+        totalPosts: { type: Number, default: 0 },
         warLikes: { type: Number, default: 0 },
         warComments: { type: Number, default: 0 },
+        warHypes: { type: Number, default: 0 },
     },
     totalPoints: { type: Number, default: 0 },
     totalPurchasedCoins: { type: Number, default: 0 },
     spendablePoints: { type: Number, default: 0 },
     lockedPoints: { type: Number, default: 0 },
-    activeMultiplier: { type: Number, default: 0 }, 
+    activeMultiplier: { type: Number, default: 0 },
     multiplierExpiresAt: { type: Date, default: null },
-    rank: { type: Number, default: 1 }, 
+    rank: { type: Number, default: 1 },
     isRecruiting: { type: Boolean, default: true },
-    maxSlots: { type: Number, default: 5 }, 
+    maxSlots: { type: Number, default: 5 },
     joinRequests: [{
         userId: { type: mongoose.Schema.Types.ObjectId, ref: 'MobileUser' },
         username: String,
@@ -91,7 +92,7 @@ const ClanSchema = new mongoose.Schema({
     isInWar: { type: Boolean, default: false },
     activeWarId: {
         type: String,
-        default: null, 
+        default: null,
         index: true
     },
     hasBounty: { type: Boolean, default: false },
@@ -103,17 +104,19 @@ const ClanSchema = new mongoose.Schema({
     },
     bountyExpiry: { type: Date },
     // Inventory & Customization
-    specialInventory: [InventoryItemSchema], 
+    specialInventory: [InventoryItemSchema],
     activeCustomizations: {
         frame: { type: String, default: null },
         theme: { type: String, default: null },
         effect: { type: String, default: null },
-        verifiedBadgeXml: { type: String, default: null }, 
-        verifiedTier: { type: String, default: 'none' }   
+        verifiedBadgeXml: { type: String, default: null },
+        verifiedTier: { type: String, default: 'none' }
     },
-    verifiedUntil: { type: Date, default: null }, 
-    purchasedPacks: [{ type: String }], 
-    consecutiveWeeksNoDerank: { type: Number, default: 0 }, 
+    verifiedUntil: { type: Date, default: null },
+    purchasedPacks: [{ type: String }],
+    // Add this inside your ClanSchema fields:
+    totalHypePointsReceived: { type: Number, default: 0 },
+    consecutiveWeeksNoDerank: { type: Number, default: 0 },
     lastActive: { type: Date, default: Date.now },
     badges: [String],
 }, { timestamps: true });
