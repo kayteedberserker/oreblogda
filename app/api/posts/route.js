@@ -374,12 +374,12 @@ export async function GET(req) {
             const CONFIG = {
                 likeWeight: 2.0,
                 commentWeight: 4.0,
-                hypeBaseWeight: 35.0, // ⚡️ UPDATED: High base weight ensures initial hypes are vastly more valuable than likes/comments
+                hypeBaseWeight: 10.0, // ⚡️ UPDATED: High base weight ensures initial hypes are vastly more valuable than likes/comments
                 freshnessBoost: 20,
                 freshnessWindow: 3,
                 gravityPower: 1.2,
                 prefBonus: 15,
-                clanBonus: 50,
+                clanBonus: 40,
                 localBonus: 25,
                 trendingThreshold: TRENDING_THRESHOLD
             };

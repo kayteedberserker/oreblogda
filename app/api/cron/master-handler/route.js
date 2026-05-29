@@ -160,17 +160,17 @@ async function dailyAllocation() {
     const now = new Date();
 
     for (const clan of clans) {
-        let allowance = 20;
+        let allowance = 0;
 
         const isVerified = clan.verifiedUntil && new Date(clan.verifiedUntil) > now;
 
         if (isVerified) {
-            allowance = 40;
+            allowance = 10;
         }
         else if (clan.weeklyPointHistory && clan.weeklyPointHistory.length > 0) {
             const lastHistoryEntry = clan.weeklyPointHistory[clan.weeklyPointHistory.length - 1];
             if (lastHistoryEntry.rankAtTime > 0 && lastHistoryEntry.rankAtTime <= 10) {
-                allowance = 30;
+                allowance = 15;
             }
         }
 
