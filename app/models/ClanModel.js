@@ -1,5 +1,4 @@
 import mongoose from 'mongoose';
-import MobileUser from './MobileUserModel';
 
 // --- 💬 NEW: CLAN MESSAGE SCHEMA ---
 const ClanMessageSchema = new mongoose.Schema({
@@ -118,6 +117,8 @@ const ClanSchema = new mongoose.Schema({
     totalHypePointsReceived: { type: Number, default: 0 },
     consecutiveWeeksNoDerank: { type: Number, default: 0 },
     lastActive: { type: Date, default: Date.now },
+    // 🛡️ NEW VERIFICATION FIELD FOR COLLABS LOGINS
+    verifiedClan: { type: Boolean, default: false },
     badges: [String],
 }, { timestamps: true });
 // Index for the War/Bounty system

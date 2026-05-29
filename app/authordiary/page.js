@@ -136,8 +136,8 @@ const Dashboard = () => {
   };
   if (!user) {
     {/* [ ⌛ ] SYSTEM INITIALIZING...
-   [ ████████░░ ] 80% - ESTABLISHING ENCRYPTED LINK
-   [ ✅ ] RENDER COMPLETE 
+[ ████████░░ ] 80% - ESTABLISHING ENCRYPTED LINK
+[ ✅ ] RENDER COMPLETE 
 */}
 
     return (
@@ -196,12 +196,12 @@ const Dashboard = () => {
 
         {/* TAILWIND CUSTOM ANIMATION CONFIG (Add to your global CSS if needed) */}
         <style jsx>{`
-      @keyframes loading {
-        0% { transform: translateX(-100%); }
-        50% { transform: translateX(100%); }
-        100% { transform: translateX(-100%); }
-      }
-    `}</style>
+@keyframes loading {
+0% { transform: translateX(-100%); }
+50% { transform: translateX(100%); }
+100% { transform: translateX(-100%); }
+}
+`}</style>
       </div>
     );
   }

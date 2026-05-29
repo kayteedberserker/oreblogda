@@ -1,6 +1,9 @@
 import { sendPillParallel } from '@/app/lib/messagePillService';
 import connectDB from '@/app/lib/mongodb';
 import { sendPushNotification } from '@/app/lib/pushNotifications';
+import ClanFollower from '@/app/models/ClanFollower';
+import Clan from '@/app/models/ClanModel';
+import ClanTopup from '@/app/models/ClanTopup';
 import MobileUser from '@/app/models/MobileUserModel';
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer'; // Assuming you have this imported for your emails
@@ -57,6 +60,7 @@ export async function GET(req) {
         return NextResponse.json({
             success: true,
             balance: user.coins || 0,
+            tokens: user.tokens || 0,
             clanBalance: user.clanCoins || 0,
             inventory: user.inventory || [],
             doubleStreakUntil: user.doubleStreakUntil,
@@ -369,6 +373,49 @@ export async function POST(req) {
             updatedUser.peakLevel = calculatePeakLevel(updatedUser.totalPurchasedCoins);
             await updatedUser.save();
 
+            // ⚡️ SHARP FIX: Handle multiple clans, check verified statuses, apply store cut, and notify leaders
+            try {
+                const activeMemberships = await ClanFollower.find({ userId: updatedUser._id });
+
+                for (const membership of activeMemberships) {
+                    // Check if this explicit clan tag actually exists and is verified
+                    const clan = await Clan.findOne({ tag: membership.clanTag });
+
+                    if (clan && clan.verifiedClan) {
+                        // Log explicit ledger record for this specific verified clan association
+                        await ClanTopup.create({
+                            userId: updatedUser._id,
+                            clanTag: clan.tag,
+                            amount: amount
+                        });
+
+                        // Financial Splitting Logic: Deduct 30% App Store cut first, then calculate 20% of the net remaining amount
+                        const netCoins = amount * 0.7;
+                        const finalLeaderShare = Math.floor(netCoins * 0.2);
+
+                        // Look up the leader to push instant real-time financial pills
+                        const leaderUser = await MobileUser.findById(clan.leader);
+                        if (leaderUser && leaderUser.pushToken) {
+                            await sendPillParallel(
+                                [leaderUser.pushToken],
+                                "Clan Revenue Dispatched! 💰",
+                                `Clan member @${updatedUser.username || 'A follower'} purchased ${amount} Coins! Your 20% share (after 30% store cut) is +${finalLeaderShare} Coins.`,
+                                { screen: "CollabsDashboard", clanTag: clan.tag },
+                                {
+                                    type: "clan_points",
+                                    targetId: leaderUser._id.toString(),
+                                    targetAudience: "user",
+                                    singleUser: true,
+                                    priority: 3
+                                }
+                            );
+                        }
+                    }
+                }
+            } catch (clanLogErr) {
+                console.error("Failed handling multi-clan verification/notification ledger loop:", clanLogErr);
+            }
+
             // 🏆 Check Titles
             await checkTitleUnlocks(updatedUser, "totalPurchasedCoins", updatedUser.totalPurchasedCoins);
 
@@ -385,12 +432,12 @@ export async function POST(req) {
                     bcc: ["kayteedberserker@gmail.com"],
                     subject: `💰 New Coin Purchase Alert!`,
                     html: `
-                        <h2>New In-App Purchase!</h2>
-                        <p><strong>User:</strong> ${updatedUser.username || 'Unknown User'} (Device ID: ${deviceId})</p>
-                        <p><strong>Package Type:</strong> ${type}</p>
-                        <p><strong>Amount Gained:</strong> ${amount} ${purchasedCurrency}</p>
-                        <p><strong>New Peak Level:</strong> ${updatedUser.peakLevel}</p>
-                    `
+<h2>New In-App Purchase!</h2>
+<p><strong>User:</strong> ${updatedUser.username || 'Unknown User'} (Device ID: ${deviceId})</p>
+<p><strong>Package Type:</strong> ${type}</p>
+<p><strong>Amount Gained:</strong> ${amount} ${purchasedCurrency}</p>
+<p><strong>New Peak Level:</strong> ${updatedUser.peakLevel}</p>
+`
                 };
                 await transporter.sendMail(mailOptions);
             } catch (emailErr) {
@@ -408,28 +455,83 @@ export async function POST(req) {
 
         // --- ACTION: CLAIM ---
         if (action === 'claim') {
-            const amount = OC_VALUES[type];
-            if (!amount) return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
+            console.log(`Processing claim for user ${user.username} with claim type: ${type}`);
+            // 1. Handle Event claims separately (Non-daily login claims)
+            if (type !== 'daily_login' && type !== 'daily_login_7') {
+                const amount = OC_VALUES[type];
+                if (!amount) return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
 
-            if (type === 'daily_login' || type === 'daily_login_7') {
-                const today = new Date().setHours(0, 0, 0, 0);
-                if (user.lastClaimedDate && new Date(user.lastClaimedDate).setHours(0, 0, 0, 0) === today) {
-                    return NextResponse.json({ error: 'Already claimed today' }, { status: 400 });
-                }
-
-                user.lastClaimedDate = new Date();
-                user.consecutiveStreak = (user.consecutiveStreak >= 7) ? 1 : (user.consecutiveStreak || 0) + 1;
-            } else {
                 if (!user.claimedEvents) user.claimedEvents = [];
                 if (user.claimedEvents.some(event => event.eventId === type)) {
                     return NextResponse.json({ error: 'Reward already claimed.' }, { status: 400 });
                 }
                 user.claimedEvents.push({ eventId: type });
+                user.coins = (user.coins || 0) + amount;
+
+                await user.save();
+                return NextResponse.json({ success: true, newBalance: user.coins });
             }
 
-            user.coins = (user.coins || 0) + amount;
+            // 2. Handle Scheduled Daily Login Reward Engine
+            const today = new Date().setHours(0, 0, 0, 0);
+            if (user.lastClaimedDate && new Date(user.lastClaimedDate).setHours(0, 0, 0, 0) === today) {
+                return NextResponse.json({ error: 'Already claimed today' }, { status: 400 });
+            }
+
+            user.lastClaimedDate = new Date();
+            // Server-side continuous rotation layout logic
+            user.consecutiveStreak = (user.consecutiveStreak >= 7) ? 1 : (user.consecutiveStreak || 0) + 1;
+
+            // Helper function to inject the strict FREE Hype item structure
+            const pushFreeHype = (usr) => {
+                if (!usr.inventory) usr.inventory = [];
+
+                // Check if the user already has a 'hype_free' item in their inventory
+                const existingHype = usr.inventory.find(item => item.itemId === 'hype_free');
+
+                if (existingHype) {
+                    // If it exists, simply increment the itemCount
+                    existingHype.itemCount = (existingHype.itemCount || 1) + 1;
+                } else {
+                    // If it doesn't exist, create it with itemCount set to 1
+                    const newFreeHypeProduct = {
+                        itemId: `hype_free`,
+                        name: `Free Hype`,
+                        category: 'HYPE',
+                        rarity: 'RARE',
+                        hypeType: 'FREE',
+                        visualConfig: {
+                            primaryColor: '#22c55e',
+                            isAnimated: false
+                        },
+                        itemCount: 1,
+                        acquiredAt: new Date(),
+                        expiresAt: null,
+                        isConsumable: true
+                    };
+                    usr.inventory.push(newFreeHypeProduct);
+                }
+            };
+
+            // 3. Process rewards purely by looking up the calculated consecutive streak day
+            const currentDay = user.consecutiveStreak;
+
+            if (currentDay === 7) {
+                // Day 7 grants BOTH 10 OC and 1 FREE Hype item
+                user.coins = (user.coins || 0) + 10;
+                pushFreeHype(user);
+            }
+            else {
+                user.coins = (user.coins || 0) + 5;
+            }
+
             await user.save();
-            return NextResponse.json({ success: true, newBalance: user.coins });
+            return NextResponse.json({
+                success: true,
+                newBalance: user.coins,
+                inventory: user.inventory,
+                consecutiveStreak: user.consecutiveStreak
+            });
         }
 
         // --- ACTION: SPEND ---

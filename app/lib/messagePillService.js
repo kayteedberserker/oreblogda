@@ -81,13 +81,13 @@ export async function createMessagePill({
 }
 
 /**
- * Sends push + parallel MessagePill for user/clan sync
- * @param {string[]} tokens - Expo tokens (determines audience)
- * @param {string} title - Push title  
- * @param {string} body - Pill text base
- * @param {object} data - Push data (screen/postId)
- * @param {object} pillContext - {type, targetId, link, singleUser?}
- */
+* Sends push + parallel MessagePill for user/clan sync
+* @param {string[]} tokens - Expo tokens (determines audience)
+* @param {string} title - Push title  
+* @param {string} body - Pill text base
+* @param {object} data - Push data (screen/postId)
+* @param {object} pillContext - {type, targetId, link, singleUser?}
+*/
 
 export async function sendPillParallel(tokens, title, body, data = {}, pillContext = {}) {
     if (!tokens || tokens.length === 0) return;

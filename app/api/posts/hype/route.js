@@ -42,12 +42,18 @@ export async function POST(req) {
         const post = await Post.findById(postId);
         if (!user || !post) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
+        // 🛡️ ANTI-SELF-HYPE GUARD CLAUSE
+        // Compares the hyping user's ID with the author's stringified ID attached to the post.
+        if (post.authorId && post.authorId.toString() === user._id.toString()) {
+            return NextResponse.json({ error: 'You cannot hype your own post!' }, { status: 400 });
+        }
+
         // ⚡️ FINE-TUNED MULTI-TRACK METRICS SYSTEM
         const PRODUCTS = {
-            FREE: { cost: 0, points: 50, tokens: 0, giverAura: 2, receiverAura: 5, clanPoints: 5 },
-            STANDARD: { cost: 20, points: 100, tokens: 0.01, giverAura: 10, receiverAura: 15, clanPoints: 25 },
-            SUPER: { cost: 100, points: 600, tokens: 0.06, giverAura: 40, receiverAura: 50, clanPoints: 70 },
-            MEGA: { cost: 400, points: 3000, tokens: 0.30, giverAura: 150, receiverAura: 200, clanPoints: 300 }
+            FREE: { cost: 0, points: 50, tokens: 0, giverAura: 0, receiverAura: 5, clanPoints: 5 },
+            STANDARD: { cost: 20, points: 100, tokens: 0, giverAura: 5, receiverAura: 15, clanPoints: 25 },
+            SUPER: { cost: 100, points: 600, tokens: 0, giverAura: 10, receiverAura: 50, clanPoints: 70 },
+            MEGA: { cost: 400, points: 3000, tokens: 0, giverAura: 40, receiverAura: 200, clanPoints: 300 }
         };
 
         const item = PRODUCTS[hypeType];
@@ -103,9 +109,6 @@ export async function POST(req) {
         const clanTag = post.clanId || (post.category?.startsWith("Clan:") ? post.category.split(":")[2] : null);
         const clanDoc = clanTag ? await Clan.findOne({ tag: clanTag }) : null;
 
-        // Check if the user is hyping their own post
-        const isSelfHype = author && author._id.toString() === user._id.toString();
-
         let newAuthorTitle = null;
         if (author) {
             author.tokens += item.tokens;
@@ -127,8 +130,8 @@ export async function POST(req) {
                 }
             }
 
-            // Suppress notifications if users hype their own content
-            if (author.pushToken && !isSelfHype) {
+            // Fire push notification alert safely
+            if (author.pushToken) {
                 await sendPillParallel(
                     [author.pushToken],
                     `New Hype on Post: ${post?.title?.slice(0, 20)}`,
@@ -185,30 +188,20 @@ export async function POST(req) {
         // ====================================================================
         // ⚡️ ANTI-EXPLOIT AURA VERIFICATION ENGINE
         // ====================================================================
-        if (isSelfHype) {
-            // Self Hype scenario: User only gets the receiverAura award once
-            const auraResult = await awardAura(user._id, item.receiverAura, 'hyped');
-            if (auraResult) {
-                user.aura = auraResult.user.aura;
-                user.weeklyAura = auraResult.user.weeklyAura;
-                user.currentRankLevel = auraResult.user.currentRankLevel;
-            }
-        } else {
-            // Standard scenario: Both profiles are distinct entities
-            const giverAuraResult = await awardAura(user._id, item.giverAura, 'hyper');
-            if (giverAuraResult) {
-                user.aura = giverAuraResult.user.aura;
-                user.weeklyAura = giverAuraResult.user.weeklyAura;
-                user.currentRankLevel = giverAuraResult.user.currentRankLevel;
-            }
+        // Standard scenario: Both profiles are distinct entities (Self-Hype blocked above)
+        const giverAuraResult = await awardAura(user._id, item.giverAura, 'hyper');
+        if (giverAuraResult) {
+            user.aura = giverAuraResult.user.aura;
+            user.weeklyAura = giverAuraResult.user.weeklyAura;
+            user.currentRankLevel = giverAuraResult.user.currentRankLevel;
+        }
 
-            if (author) {
-                const receiverAuraResult = await awardAura(author._id, item.receiverAura, 'hyped');
-                if (receiverAuraResult) {
-                    author.aura = receiverAuraResult.user.aura;
-                    author.weeklyAura = receiverAuraResult.user.weeklyAura;
-                    author.currentRankLevel = receiverAuraResult.user.currentRankLevel;
-                }
+        if (author) {
+            const receiverAuraResult = await awardAura(author._id, item.receiverAura, 'hyped');
+            if (receiverAuraResult) {
+                author.aura = receiverAuraResult.user.aura;
+                author.weeklyAura = receiverAuraResult.user.weeklyAura;
+                author.currentRankLevel = receiverAuraResult.user.currentRankLevel;
             }
         }
 
@@ -261,7 +254,7 @@ export async function POST(req) {
         // Fire all mutations together safely
         await Promise.all([
             user.save(),
-            (author && !isSelfHype) ? author.save() : Promise.resolve(),
+            author ? author.save() : Promise.resolve(),
             clanDoc ? clanDoc.save() : Promise.resolve(),
             post.save(),
             ...leaderboardUpdates
