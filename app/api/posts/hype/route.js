@@ -1,4 +1,4 @@
-import { awardAura } from "@/app/lib/auraEngine";
+import { awardAura } from "@/app/lib/auraManager";
 import { awardClanPoints } from "@/app/lib/clanService";
 import { sendPillParallel } from "@/app/lib/messagePillService";
 import connectDB from "@/app/lib/mongodb.js";
