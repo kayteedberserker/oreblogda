@@ -1,6 +1,7 @@
 import { awardAura } from "@/app/lib/auraManager";
 import { verifyToken } from "@/app/lib/auth";
 import { awardClanPoints } from "@/app/lib/clanService";
+import cloudinary from "@/app/lib/cloudinary";
 import { sendPillParallel } from "@/app/lib/messagePillService";
 import connectDB from "@/app/lib/mongodb";
 import { sendMultiplePushNotifications, sendPushNotification } from "@/app/lib/pushNotifications";
