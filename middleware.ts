@@ -102,13 +102,13 @@ return preflightResponse;
 // B. IDENTIFY SOURCES
 const isSearchEngine = /Googlebot|AdsBot-Google|Bingbot|DuckDuckBot|YandexBot/i.test(userAgent);
 const isCronJob = userAgent.includes("vercel-cron");
-const isCloudinaryWebHook = userAgent.includes("Cloudinary");
+const isCloudinaryWebhookRoute = pathname === "/api/webhooks/cloudinary";
 const referer = req.headers.get('referer');
 const origin = req.headers.get('origin');
 const isInternal = (referer?.includes(MY_DOMAIN)) || (origin?.includes(MY_DOMAIN)) || (referer?.includes(MY_DEV_DOMAIN)) || (origin?.includes(MY_DEV_DOMAIN));
 
 // C. APP PROTECTION LAYER
-if (!isSearchEngine && !isInternal && !isCronJob && !isCloudinaryWebHook) {
+if (!isSearchEngine && !isInternal && !isCronJob && !isCloudinaryWebhookRoute) {
 const clientSecret = req.headers.get('x-oreblogda-secret');
 
 // 1. Basic App Secret Check (Always Active)
