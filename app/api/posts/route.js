@@ -1,7 +1,6 @@
 import { awardAura } from "@/app/lib/auraManager";
 import { verifyToken } from "@/app/lib/auth";
 import { awardClanPoints } from "@/app/lib/clanService";
-import cloudinary from "@/app/lib/cloudinary";
 import { sendPillParallel } from "@/app/lib/messagePillService";
 import connectDB from "@/app/lib/mongodb";
 import { sendMultiplePushNotifications, sendPushNotification } from "@/app/lib/pushNotifications";
@@ -12,6 +11,7 @@ import Newsletter from "@/app/models/Newsletter";
 import Post from "@/app/models/PostModel";
 import userModel from "@/app/models/UserModel";
 import { GoogleGenAI } from "@google/genai";
+import { v2 as cloudinary } from "cloudinary";
 import geoip from "geoip-lite";
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
@@ -742,8 +742,25 @@ export async function POST(req) {
         // 🛣️ PATH A: New client build initializing background media upload operations
         if (mediaPending) {
             const timestamp = Math.round(new Date().getTime() / 1000);
+
+            // 🌐 Dynamically extract the exact server domain base route
+            const host = req.headers.get("host") || "localhost:3000";
+            const protocol = host.includes("localhost") ? "http" : "https";
+            const activeServerBase = `${protocol}://${host}`;
+
+            const contextString = `postId=${newPost._id.toString()}`;
+            const notificationUrl = `${activeServerBase}/api/webhooks/cloudinary`;
+
+            // 🛡️ All parameters sent to Cloudinary MUST be signed together
+            const paramsToSign = {
+                timestamp,
+                folder: "posts",
+                context: contextString,
+                notification_url: notificationUrl
+            };
+
             const signature = cloudinary.utils.api_sign_request(
-                { timestamp, folder: "posts" },
+                paramsToSign,
                 process.env.CLOUDINARY_API_SECRET
             );
 
@@ -753,6 +770,9 @@ export async function POST(req) {
                 signData: {
                     signature,
                     timestamp,
+                    folder: "posts",
+                    context: contextString,
+                    notificationUrl: notificationUrl,
                     apiKey: process.env.CLOUDINARY_API_KEY,
                     cloudName: process.env.CLOUDINARY_CLOUD_NAME,
                 }
