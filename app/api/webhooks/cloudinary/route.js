@@ -1,6 +1,6 @@
+import { finalizeAndPublishPost } from "@/app/api/posts/route"; // Adjust path to target your post route file
 import connectDB from "@/app/lib/mongodb";
 import Post from "@/app/models/PostModel";
-import { finalizeAndPublishPost } from "@/app/posts/route"; // Adjust path to target your post route file
 import { NextResponse } from "next/server";
 
 export async function POST(req) {
