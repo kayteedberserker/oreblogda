@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 
 /* =====================================================
-   1. COMMENT SCHEMA (Infinite nesting, web + mobile)
+1. COMMENT SCHEMA (Infinite nesting, web + mobile)
 ===================================================== */
 
 const commentSchema = new mongoose.Schema({
@@ -29,7 +29,7 @@ commentSchema.add({
 });
 
 /* =====================================================
-   2. LIKE SCHEMA (Supports old + new formats)
+2. LIKE SCHEMA (Supports old + new formats)
 ===================================================== */
 
 const likeSchema = new mongoose.Schema(
@@ -47,7 +47,7 @@ const likeSchema = new mongoose.Schema(
 );
 
 /* =====================================================
-   3. POLL SCHEMAS
+3. POLL SCHEMAS
 ===================================================== */
 
 const pollOptionSchema = new mongoose.Schema({
@@ -61,7 +61,7 @@ const pollSchema = new mongoose.Schema({
 });
 
 /* =====================================================
-   4. VIEW ANALYTICS SCHEMA
+4. VIEW ANALYTICS SCHEMA
 ===================================================== */
 
 const viewDataSchema = new mongoose.Schema({
@@ -75,16 +75,17 @@ const viewDataSchema = new mongoose.Schema({
 });
 
 /* =====================================================
-   5. NEW: MEDIA ITEM SCHEMA
+5. NEW: MEDIA ITEM SCHEMA
 ===================================================== */
 
 const mediaItemSchema = new mongoose.Schema({
   url: { type: String, required: true },
-  type: { type: String, default: "image" }
+  type: { type: String, default: "image" },
+  public_id: { type: String, default: null } // 🌟 Added to track Cloudinary assets safely
 }, { _id: false });
 
 /* =====================================================
-   6. MAIN POST SCHEMA
+6. MAIN POST SCHEMA
 ===================================================== */
 
 const postSchema = new mongoose.Schema(
@@ -147,6 +148,12 @@ const postSchema = new mongoose.Schema(
       index: true
     },
 
+    // 🌟 ADD THIS FIELD TO YOUR META BLOCK
+    totalFilesExpected: {
+      type: Number,
+      default: 0
+    },
+
     category: {
       type: String,
       default: "News"
@@ -165,7 +172,8 @@ const postSchema = new mongoose.Schema(
 
     status: {
       type: String,
-      enum: ["pending", "approved", "rejected"],
+      // 🌟 Added "pending_media" to the allowed options list
+      enum: ["pending", "approved", "rejected", "pending_media"],
       default: "approved"
     },
 
@@ -185,7 +193,7 @@ const postSchema = new mongoose.Schema(
 );
 
 /* =====================================================
-   7. MIDDLEWARE: Sync status and multi-media compatibility
+7. MIDDLEWARE: Sync status and multi-media compatibility
 ===================================================== */
 
 postSchema.pre('save', function (next) {
@@ -193,19 +201,20 @@ postSchema.pre('save', function (next) {
     this.statusChangedAt = new Date();
   }
 
+  // Only auto-map indices if media items actually exist or status isn't awaiting files
   if (this.media && this.media.length > 0) {
     this.mediaUrl = this.media[0].url;
     this.mediaType = this.media[0].type;
   }
   else if (this.mediaUrl && (!this.media || this.media.length === 0)) {
-    this.media = [{ url: this.mediaUrl, type: this.mediaType || "image" }];
+    this.media = [{ url: this.mediaUrl, type: this.mediaType || "image", public_id: null }];
   }
 
   next();
 });
 
 /* =====================================================
-   8. HOT RELOAD SAFE EXPORT
+8. HOT RELOAD SAFE EXPORT
 ===================================================== */
 
 if (process.env.NODE_ENV === "development") {
