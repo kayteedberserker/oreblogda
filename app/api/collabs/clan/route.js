@@ -34,7 +34,7 @@ export async function GET(request) {
 
         // Verify that the target clan is actually a valid, officially verified ledger network tier
         const activeClanVerification = await Clan.findOne({ tag: clanTag });
-        const isVerified = activeClanVerification ? activeClanVerification.isVerified : false;
+        const isVerified = activeClanVerification ? activeClanVerification.verifiedClan : false;
 
         // ⚡️ Pull and aggregate real-time clan-specific topups
         const aggregatedTopups = await ClanTopup.aggregate([

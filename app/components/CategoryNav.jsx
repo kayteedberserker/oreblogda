@@ -1,8 +1,8 @@
 "use client";
 
+import { motion } from "framer-motion";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion } from "framer-motion";
 
 const categories = ["News", "Memes", "Videos/Edits", "Polls", "Review", "Gaming"];
 
@@ -58,19 +58,19 @@ export default function CategoryNav() {
                 {isActive && (
                   <span className="absolute top-1 right-1 w-1 h-1 bg-white rounded-full animate-ping" />
                 )}
-                
+
                 {displayName}
 
                 {/* Tactical Corner Brackets (Visible on Hover/Active) */}
                 <div className={`absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none border-blue-400/50 ${isActive ? 'opacity-100' : ''}`}>
-                   <div className="absolute top-0 left-0 w-1 h-1 border-t border-l border-blue-400" />
-                   <div className="absolute bottom-0 right-0 w-1 h-1 border-b border-r border-blue-400" />
+                  <div className="absolute top-0 left-0 w-1 h-1 border-t border-l border-blue-400" />
+                  <div className="absolute bottom-0 right-0 w-1 h-1 border-b border-r border-blue-400" />
                 </div>
               </motion.div>
-              
+
               {/* Subtle underline for active state */}
               {isActive && (
-                <div 
+                <div
                   layoutId="cat-active"
                   className="absolute -bottom-1 left-2 right-2 h-0.5 bg-blue-600 rounded-full"
                 />
@@ -83,13 +83,13 @@ export default function CategoryNav() {
       {/* Breadcrumb / Status Line */}
       <div className="flex justify-between items-center mt-2 px-2">
         <div className="flex items-center gap-2">
-           <div className="h-[1px] w-8 bg-blue-600/50" />
-           <span className="text-[8px] font-mono uppercase tracking-[0.3em] text-gray-500 dark:text-blue-400/60">
-             Sector_Map // {pathname.split('/').pop() || 'Root'}
-           </span>
+          <div className="h-[1px] w-8 bg-blue-600/50" />
+          <span className="text-[8px] font-mono uppercase tracking-[0.3em] text-gray-500 dark:text-blue-400/60">
+            Sector_Map // {pathname.split('/').pop() || 'Root'}
+          </span>
         </div>
         <div className="hidden sm:block text-[8px] font-mono text-gray-400 uppercase tracking-tighter italic">
-           Access_Point: Dynamic_Feed_v2
+          Access_Point: Dynamic_Feed_v2
         </div>
       </div>
     </div>
