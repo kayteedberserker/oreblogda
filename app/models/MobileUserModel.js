@@ -122,7 +122,7 @@ const mobileUserSchema = new mongoose.Schema(
     totalViews: { type: Number, default: 0 },
     peakLevel: { type: Number, default: 0 },
     totalRejectedPost: { type: Number, default: 0 },
-    consecutiveStreak: { type: Number, default: 0 },
+    consecutiveStreak: { type: Number, default: 1 },
     refreshToken: { type: String },
     country: { type: String, default: 'Unknown' },
     lastActive: { type: Date, default: Date.now },
