@@ -347,23 +347,51 @@ export async function GET(req) {
             query.category = { $regex: category, $options: "i" };
         }
 
+        let total = 0;
+
+        // ⚡️ UPDATED: Time Window Logic with Fallback checks
         if (last24Hours) {
             const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
             query.createdAt = { $gte: yesterday };
+            total = await Post.countDocuments(query);
         } else if (!targetAuthor) {
-            const TIME_LIMIT_DAYS = 30;
-            const cutoffDate = new Date(Date.now() - TIME_LIMIT_DAYS * 24 * 60 * 60 * 1000);
-            query.createdAt = { $gte: cutoffDate };
+            // Step-wise fallback: 30 days, 60 days, 6 months, 1 year, 10 years (all-time)
+            const timeWindows = [30, 60, 180, 365, 3650];
+
+            for (const days of timeWindows) {
+                const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+                query.createdAt = { $gte: cutoffDate };
+                total = await Post.countDocuments(query);
+
+                // If posts are found in this window, break the loop and use this query
+                if (total > 0) break;
+            }
+        } else {
+            total = await Post.countDocuments(query);
         }
 
         let followedClanTags = [];
+        let viewerClanTags = []; // Tags of clans the user is an actual member/leader of
+
         if (viewerId && !targetAuthor) {
+            // ⚡️ FOLLOWERS: Fetch clans the user follows
             const follows = await ClanFollower.find({ userId: viewerId }).select("clanTag").lean();
             followedClanTags = follows.map(f => f.clanTag);
+
+            // Fetch the user's actual clan memberships
+            const memberships = await Clan.find({
+                $or: [
+                    { leader: viewerId },
+                    { viceLeader: viewerId },
+                    { members: viewerId }
+                ]
+            }).select("tag _id").lean();
+
+            // Map both the tag and the stringified ID in case the post references either
+            viewerClanTags = memberships.map(c => c.tag).concat(memberships.map(c => c._id.toString()));
         }
 
         let posts;
-        const total = await Post.countDocuments(query);
 
         if (targetAuthor) {
             posts = await Post.find(query)
@@ -380,8 +408,16 @@ export async function GET(req) {
                 freshnessWindow: 3,
                 gravityPower: 1.2,
                 prefBonus: 15,
-                clanBonus: 40,
+                clanBonus: 20,
                 localBonus: 25,
+
+                // ⚡️ NEW: Clan Badge & Verification Weights
+                tierBasicWeight: 4,
+                tierEpicWeight: 7,
+                tierLegendaryWeight: 10,
+                tierFollowerMultiplier: 1.5, // ⚡️ UPDATED: Enhances badge bonus if the user follows the clan
+                partnerClanBonus: 20,      // Massive boost for verified app partners (applies to followers)
+
                 trendingThreshold: TRENDING_THRESHOLD
             };
 
@@ -391,6 +427,36 @@ export async function GET(req) {
                 { $match: query },
                 { $sort: { isAdminPost: -1, createdAt: -1 } },
                 { $limit: 1000 },
+
+                // ⚡️ NEW: Lookup Clan data dynamically to assess Verification & Badges
+                {
+                    $lookup: {
+                        from: "clans",
+                        let: { postClanId: "$clanId" },
+                        pipeline: [
+                            {
+                                $match: {
+                                    $expr: {
+                                        $or: [
+                                            { $eq: ["$tag", "$$postClanId"] },
+                                            { $eq: [{ $toString: "$_id" }, "$$postClanId"] }
+                                        ]
+                                    }
+                                }
+                            },
+                            {
+                                $project: {
+                                    verifiedClan: 1,
+                                    "activeCustomizations.verifiedTier": 1,
+                                    verifiedUntil: 1
+                                }
+                            }
+                        ],
+                        as: "clanInfo"
+                    }
+                },
+                { $unwind: { path: "$clanInfo", preserveNullAndEmptyArrays: true } },
+
                 {
                     $addFields: {
                         ageInHours: {
@@ -407,11 +473,49 @@ export async function GET(req) {
                         },
                         matchCount: {
                             $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] }
+                        },
+                        // ⚡️ UPDATED: Check if user follows the clan (checking both ID and Tag for safety)
+                        isViewerFollowingClan: {
+                            $or: [
+                                { $in: ["$clanId", followedClanTags] },
+                                { $in: ["$clanTag", followedClanTags] }
+                            ]
+                        },
+                        hasValidBadge: {
+                            $and: [
+                                { $ne: ["$clanInfo.verifiedUntil", null] },
+                                { $gt: ["$clanInfo.verifiedUntil", now] }
+                            ]
                         }
                     }
                 },
                 {
                     $addFields: {
+                        // ⚡️ NEW: Calculate Tier Bonuses based on badge
+                        clanTierBonus: {
+                            $cond: [
+                                "$hasValidBadge",
+                                {
+                                    $switch: {
+                                        branches: [
+                                            { case: { $eq: ["$clanInfo.activeCustomizations.verifiedTier", "legendary"] }, then: CONFIG.tierLegendaryWeight },
+                                            { case: { $eq: ["$clanInfo.activeCustomizations.verifiedTier", "epic"] }, then: CONFIG.tierEpicWeight },
+                                            { case: { $eq: ["$clanInfo.activeCustomizations.verifiedTier", "basic"] }, then: CONFIG.tierBasicWeight }
+                                        ],
+                                        default: 0
+                                    }
+                                },
+                                0
+                            ]
+                        },
+                        // ⚡️ UPDATED: Apply verified app partner bonus if user FOLLOWS that clan
+                        partnerClanBonusVal: {
+                            $cond: [
+                                { $and: ["$isViewerFollowingClan", { $eq: ["$clanInfo.verifiedClan", true] }] },
+                                CONFIG.partnerClanBonus,
+                                0
+                            ]
+                        },
                         engagementScore: {
                             $add: [
                                 { $multiply: [{ $ifNull: ["$likesCount", 0] }, CONFIG.likeWeight] },
@@ -424,12 +528,26 @@ export async function GET(req) {
                                     ]
                                 }
                             ]
-                        },
+                        }
+                    }
+                },
+                {
+                    $addFields: {
                         relevanceBonus: {
                             $add: [
                                 { $multiply: ["$matchCount", CONFIG.prefBonus] },
-                                { $cond: [{ $in: ["$clanId", followedClanTags] }, CONFIG.clanBonus, 0] },
-                                { $cond: [{ $eq: ["$country", userCountry] }, CONFIG.localBonus, 0] }
+                                { $cond: ["$isViewerFollowingClan", CONFIG.clanBonus, 0] },
+                                { $cond: [{ $eq: ["$country", userCountry] }, CONFIG.localBonus, 0] },
+                                // ⚡️ UPDATED: Add Clan Badge Bonus (Multiplied if viewer FOLLOWS the clan)
+                                {
+                                    $cond: [
+                                        "$isViewerFollowingClan",
+                                        { $multiply: ["$clanTierBonus", CONFIG.tierFollowerMultiplier] },
+                                        "$clanTierBonus"
+                                    ]
+                                },
+                                // ⚡️ NEW: Add the Partner Bonus 
+                                "$partnerClanBonusVal"
                             ]
                         },
                         noveltyScore: {
@@ -558,6 +676,13 @@ export async function GET(req) {
 
             return {
                 ...p,
+                // Clean up any pipeline-injected fields so they don't leak into frontend if unneeded
+                clanInfo: undefined,
+                isViewerFollowingClan: undefined,
+                hasValidBadge: undefined,
+                clanTierBonus: undefined,
+                partnerClanBonusVal: undefined,
+
                 _id: p._id.toString(),
                 message: typeof normalizePostContent === 'function' ? normalizePostContent(p.message) : p.message,
                 feedExcerpt: feedMessage.length > 150 ? feedMessage.slice(0, 150) + "..." : feedMessage,
