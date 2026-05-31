@@ -44,7 +44,7 @@ export async function POST(req) {
 
         // 🛡️ ANTI-SELF-HYPE GUARD CLAUSE
         // Compares the hyping user's ID with the author's stringified ID attached to the post.
-        if (post.authorId && post.authorId.toString() === user._id.toString()) {
+        if (post.authorUserId && post.authorUserId.toString() === user._id.toString()) {
             return NextResponse.json({ error: 'You cannot hype your own post!' }, { status: 400 });
         }
 

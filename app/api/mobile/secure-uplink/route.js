@@ -38,8 +38,16 @@ export async function POST(req) {
                 user.securityLevel = 3;
             }
         } else {
+            // New PIN Initialization: If the account has no PIN, a valid 6-digit PIN MUST be provided.
+            if (!pin || pin.length !== 6) {
+                return NextResponse.json({
+                    message: "INITIALIZATION_FAILED: A valid 6-digit PIN is required to establish your profile before adding an email."
+                }, { status: 400 });
+            }
+
             user.pin = pin;
             user.securityLevel = 2;
+
             if (email && email.trim() !== "") {
                 user.email = email.toLowerCase().trim();
                 user.securityLevel = 3;
