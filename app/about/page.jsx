@@ -1,63 +1,63 @@
 "use client";
-import React from "react";
 import { motion } from "framer-motion";
 // export const metadata = {
-// 	title: "About Oreblogda – Anime, Gaming & Pop Culture Hub",
-// 	description:
-// 		"Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture. Episode breakdowns, game updates, and fan-first content.",
+//  title: "About Oreblogda – Anime, Gaming & Pop Culture Hub",
+//  description:
+//    "Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture. Episode breakdowns, game updates, and fan-first content.",
 
-// 	keywords:
-// 		"about oreblogda, anime blog, gaming blog, anime news, gaming updates, pop culture, oreblogda",
+//  keywords:
+//    "about oreblogda, anime blog, gaming blog, anime news, gaming updates, pop culture, oreblogda",
 
-// 	authors: [
-// 		{ name: "Kaytee", url: "https://oreblogda.com" }
-// 	],
+//  authors: [
+//    { name: "Kaytee", url: "https://oreblogda.com" }
+//  ],
 
-// 	creator: "Kaytee",
+//  creator: "Kaytee",
 
-// 	robots: "index, follow",
+//  robots: "index, follow",
 
-// 	openGraph: {
-// 		title: "About Oreblogda – Anime, Gaming & Pop Culture Hub",
-// 		description:
-// 			"Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture.",
-// 		url: "https://oreblogda.com/about",
-// 		siteName: "Oreblogda",
-// 		images: [
-// 			{
-// 				url: "https://oreblogda.com/ogimage.png",
-// 				width: 1200,
-// 				height: 630,
-// 				alt: "About Oreblogda",
-// 			},
-// 		],
-// 		type: "website",
-// 	},
+//  openGraph: {
+//    title: "About Oreblogda – Anime, Gaming & Pop Culture Hub",
+//    description:
+//      "Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture.",
+//    url: "https://oreblogda.com/about",
+//    siteName: "Oreblogda",
+//    images: [
+//      {
+//        url: "https://oreblogda.com/ogimage.png",
+//        width: 1200,
+//        height: 630,
+//        alt: "About Oreblogda",
+//      },
+//    ],
+//    type: "website",
+//  },
 
-// 	twitter: {
-// 		card: "summary_large_image",
-// 		title: "About Oreblogda – Anime, Gaming & Pop Culture Hub",
-// 		description:
-// 			"Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture.",
-// 		images: ["https://oreblogda.com/ogimage.png"],
-// 		creator: "@oreblogda",
-// 	},
+//  twitter: {
+//    card: "summary_large_image",
+//    title: "About Oreblogda – Anime, Gaming & Pop Culture Hub",
+//    description:
+//      "Learn more about Oreblogda — your chill corner for anime, gaming, and pop culture.",
+//    images: ["https://oreblogda.com/ogimage.png"],
+//    creator: "@oreblogda",
+//  },
 
-// 	alternates: {
-// 		canonical: "https://oreblogda.com/about",
-// 	},
+//  alternates: {
+//    canonical: "https://oreblogda.com/about",
+//  },
 // };
 
 
 const AboutPage = () => {
   return (
     <div className="min-h-screen flex items-center justify-center px-6 py-20 relative overflow-hidden">
-      
+
       {/* --- BACKGROUND ATMOSPHERE --- */}
       <div className="absolute top-20 right-[-5%] w-96 h-96 bg-blue-600/10 rounded-full blur-[140px] animate-pulse pointer-events-none" />
       <div className="absolute bottom-20 left-[-5%] w-96 h-96 bg-indigo-600/10 rounded-full blur-[140px] animate-pulse pointer-events-none" />
 
-      <div 
+      {/* FIXED: Changed to motion.div so animation props work properly */}
+      <motion.div
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7 }}
@@ -69,7 +69,7 @@ const AboutPage = () => {
             <div className="h-1.5 w-1.5 bg-blue-600 rounded-full animate-ping" />
             <span className="text-[10px] font-black uppercase tracking-[0.5em] text-blue-600">Core_Manifest_v4.0</span>
           </div>
-          
+
           <h1 className="text-5xl md:text-6xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white">
             About <span className="text-blue-600 underline decoration-blue-600/20 underline-offset-8">Oreblogda</span>
           </h1>
@@ -82,36 +82,33 @@ const AboutPage = () => {
 
         {/* --- CONTENT GRID --- */}
         <div className="space-y-12 text-center md:text-left">
-          
-          {/* Section 01: The Chill Corner */}
+
+          {/* Section 01: Welcome to the Platform */}
           <div className="grid md:grid-cols-[100px_1fr] gap-4 items-start">
             <span className="hidden md:block text-xs font-black text-blue-600/40 font-mono mt-2 tracking-tighter">DATA_01</span>
             <div>
               <p className="text-lg md:text-xl font-bold leading-relaxed text-gray-800 dark:text-gray-200">
-                Welcome to <span className="text-blue-600 italic">Oreblogda</span> — your chill corner for everything anime, gaming, and pop culture. 
-                From episode breakdowns to game updates, we cover what fans actually care about.
+                Welcome to <span className="text-blue-600 italic">Oreblogda</span> — no longer just a standard blog, but a full next-gen web platform engineered for anime, gaming, and nerd culture fanatics. We built the architecture; now you own the content.
               </p>
             </div>
           </div>
 
-          {/* Section 02: The Mission */}
+          {/* Section 02: User Generated Content (The Mission) */}
           <div className="grid md:grid-cols-[100px_1fr] gap-4 items-start">
             <span className="hidden md:block text-xs font-black text-blue-600/40 font-mono mt-2 tracking-tighter">DATA_02</span>
             <div className="p-6 bg-blue-600/5 border-l-2 border-blue-600 rounded-r-2xl">
               <p className="text-md leading-relaxed text-gray-700 dark:text-gray-300 italic">
-                Whether you’re grinding ranked matches, exploring open worlds, or hyped for the next anime drop — you’re in the right place. 
-                Our goal is simple: <span className="font-black uppercase text-blue-600 dark:text-blue-400">Keep things fun, honest, and worth your scroll.</span>
+                Whether you want to broadcast major anime updates, dump your fresh memes, run competitive polls, or share epic fanart, the stage is entirely yours. Our system processes user-generated posts instantly, giving every voice in the scene a home. Our goal is simple: <span className="font-black uppercase text-blue-600 dark:text-blue-400">Pure creator freedom, zero fluff, and total worth your scroll.</span>
               </p>
             </div>
           </div>
 
-          {/* Section 03: Fans First */}
+          {/* Section 03: Interactive Features */}
           <div className="grid md:grid-cols-[100px_1fr] gap-4 items-start">
             <span className="hidden md:block text-xs font-black text-blue-600/40 font-mono mt-2 tracking-tighter">DATA_03</span>
             <div>
               <p className="text-lg leading-relaxed text-gray-700 dark:text-gray-300">
-                We’re fans first — writers second. So grab your controller 🕹️, queue the next episode 🍿, and join the Oreblogda community. 
-                Stay updated, stay competitive, and never miss a drop.
+                With real-time AI moderation, multi-media capabilities, automated context tracking, and custom clan systems, you are in total control of the vibe. Drop your thoughts, personalize your interest feed, and experience an interactive arena built by fans, for fans. Secure your node, spin up a post 🕹️, and drop into the feed 🍿.
               </p>
             </div>
           </div>
@@ -120,16 +117,16 @@ const AboutPage = () => {
 
         {/* --- FOOTER STATUS --- */}
         <div className="mt-16 pt-8 border-t border-gray-100 dark:border-gray-800 flex flex-col md:flex-row justify-between items-center gap-4">
-           <div className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-green-500 rounded-full" />
-              <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-gray-400">System_Status: Optimal</span>
-           </div>
-           <div className="flex gap-6">
-              <div className="text-[9px] font-mono text-gray-500 uppercase">Sector: Lagos_Nigeria</div>
-              <div className="text-[9px] font-mono text-gray-500 uppercase">Node: Global_Fanbase</div>
-           </div>
+          <div className="flex items-center gap-2">
+            <div className="w-2 h-2 bg-green-500 rounded-full" />
+            <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-gray-400">System_Status: Optimal</span>
+          </div>
+          <div className="flex gap-6">
+            <div className="text-[9px] font-mono text-gray-500 uppercase">Sector: Lagos_Nigeria</div>
+            <div className="text-[9px] font-mono text-gray-500 uppercase">Node: Global_Fanbase</div>
+          </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Decorative Floating Elements */}
       <div className="absolute top-1/4 right-10 text-[60px] font-black text-blue-500/5 select-none pointer-events-none italic">
