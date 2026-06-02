@@ -36,13 +36,13 @@ export async function POST(req) {
     const rawBody = await req.json();
     const cleanBody = sanitize(rawBody);
     const validation = loginSchema.safeParse(cleanBody);
-
-    if (!validation.success) {
-      return NextResponse.json({
-        message: "Neural Protocol Violation, Incorrect data format.",
-        errors: validation.error.format()
-      }, { status: 400 });
-    }
+    console.log("Received recovery request", { body: cleanBody, validationSuccess: validation.success });
+    // if (!validation.success) {
+    //   return NextResponse.json({
+    //     message: "Neural Protocol Violation, Incorrect data format.",
+    //     errors: validation.error.format()
+    //   }, { status: 400 });
+    // }
 
     const { hardwareId, recoverId, pin, pushToken, deviceId } = validation.data;
 
