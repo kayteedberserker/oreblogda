@@ -112,7 +112,7 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
 
         // Correct method call for @google/genai
         const response = await ai.models.generateContent({
-            model: "gemini-3.5-flash",
+            model: "gemini-2.5-flash-lite",
             contents: contents
         });
 
