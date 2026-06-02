@@ -7,13 +7,13 @@ import sanitize from "mongo-sanitize";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-// Let Zod handle the trimming so we don't have to do it manually later
+// ✅ FIXED: Added .nullable() to optional fields to allow explicit null values from the client payload
 const loginSchema = z.object({
   recoverId: z.string().min(3).trim(),
   hardwareId: z.string().min(5),
-  deviceId: z.string().optional(),
-  pin: z.string().optional(),
-  pushToken: z.string().optional(),
+  deviceId: z.string().optional().nullable(),
+  pin: z.string().optional().nullable(),
+  pushToken: z.string().optional().nullable(),
 });
 
 const generateSecureSuffix = () => {
@@ -37,12 +37,14 @@ export async function POST(req) {
     const cleanBody = sanitize(rawBody);
     const validation = loginSchema.safeParse(cleanBody);
     console.log("Received recovery request", { body: cleanBody, validationSuccess: validation.success });
-    // if (!validation.success) {
-    //   return NextResponse.json({
-    //     message: "Neural Protocol Violation, Incorrect data format.",
-    //     errors: validation.error.format()
-    //   }, { status: 400 });
-    // }
+
+    // ✅ UNCOMMENTED & RESTORED: Safeguards the server from crashing if validation fails
+    if (!validation.success) {
+      return NextResponse.json({
+        message: "Neural Protocol Violation, Incorrect data format.",
+        errors: validation.error.format()
+      }, { status: 400 });
+    }
 
     const { hardwareId, recoverId, pin, pushToken, deviceId } = validation.data;
 
