@@ -83,7 +83,7 @@ const ACTION_TYPES = {
 export const ACHIEVEMENTS = [
     // --- POWER CATEGORY (Ranks & Aura) ---
     { id: 'p_1', cat: 'POWER', name: 'Limit Break', goal: 1, type: 'rank_up', label: 'Rank up for the first time' },
-    { id: 'p_2', cat: 'POWER', name: 'Elite Operative', goal: 1, type: 'rank', value: 'B', label: 'Reach B-Rank' },
+    { id: 'p_2', cat: 'POWER', name: 'Elite Player', goal: 1, type: 'rank', value: 'B', label: 'Reach B-Rank' },
     { id: 'p_3', cat: 'POWER', name: 'S-Rank Legend', goal: 1, type: 'rank', value: 'S', label: 'Become a Legend' },
     { id: 'p_4', cat: 'POWER', name: 'Monarch Ascension', goal: 1, type: 'rank', value: 'Monarch', label: 'Hit the Absolute Ceiling' },
     { id: 'p_5', cat: 'POWER', name: 'Aura Initialized', goal: 500, type: 'aura', label: 'Accumulate 500 Aura' },

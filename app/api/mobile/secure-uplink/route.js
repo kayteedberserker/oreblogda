@@ -20,7 +20,7 @@ export async function POST(req) {
         const user = await MobileUser.findOne({ uid }).select("+pin");
         if (!user) {
             return NextResponse.json({
-                message: "Operative not found in Neural Network."
+                message: "Player not found in Neural Network."
             }, { status: 404 });
         }
 
@@ -83,7 +83,7 @@ export async function POST(req) {
         console.error("Security Interface Error:", err);
         if (err.code === 11000) {
             return NextResponse.json({
-                message: "This email is already linked to another operative."
+                message: "This email is already linked to another player."
             }, { status: 400 });
         }
         return NextResponse.json({

@@ -973,6 +973,19 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
         }
     }
 
+    // 🛠️ DEDUPLICATION GUARD: Filter out any duplicates in the media array before saving
+    if (post.media && post.media.length > 0) {
+        const uniqueUrls = new Set();
+        post.media = post.media.filter(item => {
+            if (!item || !item.url) return false;
+            if (uniqueUrls.has(item.url)) {
+                return false; // Skip duplicate video/image
+            }
+            uniqueUrls.add(item.url);
+            return true;
+        });
+    }
+
     post.status = finalStatus;
     post.rejectionReason = rejectionReason || null;
     post.expiresAt = expiresAt || null;

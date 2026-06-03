@@ -10,7 +10,7 @@ export async function POST(req) {
         if (!uid || !purchaseId) return NextResponse.json({ message: "Invalid Purchase." }, { status: 414 });
         // 1. Verify user exists
         const user = await MobileUser.findOne({ uid });
-        if (!user) return NextResponse.json({ message: "Operative not found." }, { status: 404 });
+        if (!user) return NextResponse.json({ message: "Player not found." }, { status: 404 });
 
         // 2. Increment coffee count
         user.coffeeCount = (user.coffeeCount || 0) + 1;

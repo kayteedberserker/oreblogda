@@ -89,7 +89,7 @@ export async function POST(req) {
                 console.log(`BROADCAST TO ALL: [${payload.title}] ${payload.message}. Sent to ${tokensArray.length} users.`);
                 return NextResponse.json({
                     success: true,
-                    message: `Broadcast initiated successfully to ${tokensArray.length} operatives.`
+                    message: `Broadcast initiated successfully to ${tokensArray.length} players.`
                 });
 
             case 'GIVE_OC':

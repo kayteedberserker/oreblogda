@@ -19,7 +19,7 @@ export async function POST(req) {
         const user = await MobileUser.findOne({ uid }).select("+pin");
         if (!user) {
             return NextResponse.json({
-                message: "Operative not found in Neural Network."
+                message: "Player not found in Neural Network."
             }, { status: 404 });
         }
 

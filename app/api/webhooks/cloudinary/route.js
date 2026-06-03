@@ -23,7 +23,7 @@ export async function POST(req) {
         // Apply transformations depending on resource class
         let transformedUrl = secureUrl;
         if (resourceType === "video") {
-            transformedUrl = secureUrl.replace("/upload/", "/upload/c_limit,w_720,br_1.5m,q_auto,vc_auto/");
+            transformedUrl = secureUrl.replace("/upload/", "/upload/c_limit,w_720,q_auto,vc_auto/");
         } else {
             transformedUrl = secureUrl.replace("/upload/", "/upload/c_limit,w_1080,f_auto,q_auto/");
         }
@@ -34,9 +34,14 @@ export async function POST(req) {
             public_id: publicId
         };
 
-        // Atomically append asset references to the collection record
-        const updatedPost = await Post.findByIdAndUpdate(
-            postId,
+        // 🛡️ IDEMPOTENCY / DEDUPLICATION GUARD
+        // Find the post, but ONLY update it if this specific asset isn't already inside the media array.
+        // This prevents double-pushed webhook race conditions or retries from duplicating assets.
+        let updatedPost = await Post.findOneAndUpdate(
+            {
+                _id: postId,
+                "media.public_id": { $ne: publicId }
+            },
             {
                 $push: { media: newMediaAsset },
                 // Set primary pointers if they haven't been configured yet
@@ -45,8 +50,14 @@ export async function POST(req) {
             { new: true }
         );
 
+        // If updatedPost is null, it means either the post doesn't exist, OR it was already added 
+        // by a previous/duplicate webhook delivery. We fetch the post anyway to check its progression status.
         if (!updatedPost) {
-            return NextResponse.json({ message: "Post context not found" }, { status: 404 });
+            updatedPost = await Post.findById(postId);
+            if (!updatedPost) {
+                return NextResponse.json({ message: "Post context not found" }, { status: 404 });
+            }
+            console.log(`[Webhook] Duplicate asset block triggered for item: ${publicId}. Processing state verification.`);
         }
 
         // Evaluate if the background transaction stack is fully settled

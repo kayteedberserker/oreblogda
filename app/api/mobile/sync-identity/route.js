@@ -28,7 +28,7 @@ export async function POST(req) {
         let user = await MobileUser.findOne({ deviceId });
 
         if (!user) {
-            return NextResponse.json({ success: false, message: "Operative not found in archives." }, { status: 404 });
+            return NextResponse.json({ success: false, message: "Player not found in archives." }, { status: 404 });
         }
 
         // ⚡️ 2. IDENTITY GATE: Verify the user has a real alias
@@ -38,7 +38,7 @@ export async function POST(req) {
         if (!currentName || invalidNames.includes(currentName.toLowerCase()) || currentName.length < 3) {
             return NextResponse.json({
                 success: false,
-                message: "Incomplete identity. A valid Operative Alias (3+ characters) is required to generate a UID.",
+                message: "Incomplete identity. A valid Player Alias (3+ characters) is required to generate a UID.",
                 requiresSetup: true // ⚡️ You can use this flag on the frontend to force them to the Profile Setup screen
             }, { status: 400 });
         }

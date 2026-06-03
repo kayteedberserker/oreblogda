@@ -49,7 +49,7 @@ export async function POST(req) {
 
     if (existingAccounts.length >= 3) {
       return NextResponse.json({
-        message: "SECURITY_PROTOCOL: Device limit reached. Maximum 3 operatives allowed per device."
+        message: "SECURITY_PROTOCOL: Device limit reached. Maximum 3 players allowed per device."
       }, { status: 403 });
     }
 

@@ -8,7 +8,7 @@ export async function POST(req) {
         const { deviceId } = await req.json();
 
         if (!deviceId) {
-            return NextResponse.json({ message: "Missing operative ID." }, { status: 400 });
+            return NextResponse.json({ message: "Missing Player ID." }, { status: 400 });
         }
 
 

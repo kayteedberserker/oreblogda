@@ -81,7 +81,7 @@ const getAuraVisuals = (rank) => {
 		case 8: return { color: '#64748b', label: 'ESPADA 3', emoji: '⚔️' };
 		case 9: return { color: '#475569', label: 'ESPADA 4', emoji: '⚔️' };
 		case 10: return { color: '#334155', label: 'ESPADA 5', emoji: '⚔️' };
-		default: return { color: '#1e293b', label: 'OPERATIVE', emoji: '🎯' };
+		default: return { color: '#1e293b', label: 'PLAYER', emoji: '🎯' };
 	}
 };
 
