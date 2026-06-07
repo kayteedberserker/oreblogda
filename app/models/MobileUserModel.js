@@ -156,6 +156,12 @@ const mobileUserSchema = new mongoose.Schema(
       favCharacter: { type: String, default: "" },
     },
 
+    // --- 🧠 DYNAMIC ALGORITHM (AFFINITY SYSTEM) ---
+    // Using Maps to store key-value pairs (e.g., { "Jujutsu Kaisen": 45, "Action": 10 })
+    affinityScores: { type: Map, of: Number, default: {} },
+    authorAffinity: { type: Map, of: Number, default: {} },
+    countryAffinity: { type: Map, of: Number, default: {} },
+
     // --- 🎒 USER INVENTORY (Frames/Badges Only) ---
     inventory: [InventoryItemSchema],
     stickers: {

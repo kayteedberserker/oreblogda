@@ -41,21 +41,6 @@ const AUTHOR_CATALOG = {
 			}
 		},
 		{
-			category: 'WATERMARK',
-			id: 'blazing_watermark',
-			price: 500, // Slightly more expensive since it's an animation
-			currency: 'OC',
-			name: 'Blazing Soul Aura - 3 days',
-			expiresInDays: 3,
-			rarity: "Legendary",
-			visualConfig: {
-				// We replace svgCode with lottieUrl
-				lottieUrl: 'https://oreblogda.com/lottie/fire_vfx_wm.json',
-				primaryColor: '#FF4500', // Orange-Red for the fallback glow
-				isAnimated: true
-			}
-		},
-		{
 			category: 'GLOW',
 			id: 'yonko_glow_item',
 			price: 300,
@@ -68,23 +53,6 @@ const AUTHOR_CATALOG = {
 				primaryColor: '#ef4444',
 				isAnimated: true,
 				animationType: "sweep"
-			}
-		},
-		{
-			category: 'AVATAR_VFX',
-			id: 'blazing_soul_vfx',
-			price: 400, // Slightly more expensive since it's an animation
-			currency: 'OC',
-			name: 'Blazing Soul Aura - 3 days',
-			expiresInDays: 3,
-			rarity: "Legendary",
-			visualConfig: {
-				// We replace svgCode with lottieUrl
-				lottieUrl: 'https://oreblogda.com/lottie/fire_vfx_wm.json',
-				primaryColor: '#FF4500', // Orange-Red for the fallback glow
-				isAnimated: true,
-				zoom: 0.85,
-				offsetY: -12,
 			}
 		},
 	],

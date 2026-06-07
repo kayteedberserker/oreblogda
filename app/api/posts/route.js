@@ -62,13 +62,6 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
 
             INPUT:
             Title: "${title}" | Message: "${message}" | Category: "${category}"
-
-            OUTPUT: Return ONLY JSON: 
-            {
-                "action": "approve" | "reject" | "flag", 
-                "reason": "...",
-                "interests": ["Tag1", "Tag2", "AnimeName", "CharacterName"] 
-            }
         `;
 
         // The new SDK uses a flatter 'contents' structure
@@ -83,6 +76,16 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
                 let mediaRes = null;
                 for (let i = 0; i < 3; i++) {
                     try {
+                        // ⚡️ NEW: Use a HEAD request to check file size before downloading to prevent memory crashes
+                        const headRes = await fetch(mediaUrl, { method: 'HEAD' });
+                        const contentLength = headRes.headers.get('content-length');
+                        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB limit for buffer
+
+                        if (contentLength && parseInt(contentLength) > MAX_FILE_SIZE) {
+                            console.warn("Media too large for AI processing buffer, skipping media attachment.");
+                            break; // Skip fetching the heavy file, AI will just use the text
+                        }
+
                         mediaRes = await fetch(mediaUrl);
                         if (mediaRes.ok) break;
                     } catch (e) {
@@ -110,16 +113,32 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
         // Push the parts into the contents array
         contents.push({ role: 'user', parts: userParts });
 
-        // Correct method call for @google/genai
+        // ⚡️ NEW: Enforce strict JSON output via Schema to remove the need for regex parsing
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash-lite",
-            contents: contents
+            contents: contents,
+            config: {
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: "OBJECT",
+                    properties: {
+                        action: {
+                            type: "STRING",
+                            description: "Must be exactly 'approve', 'reject', or 'flag'"
+                        },
+                        reason: { type: "STRING" },
+                        interests: {
+                            type: "ARRAY",
+                            items: { type: "STRING" }
+                        }
+                    },
+                    required: ["action", "reason", "interests"]
+                }
+            }
         });
 
-        const responseText = response.text; // Direct .text access in this SDK
-
-        const cleanJson = responseText.replace(/```json|```/g, "").trim();
-        const parsedResult = JSON.parse(cleanJson);
+        // We can now safely parse directly because the API guarantees standard JSON format
+        const parsedResult = JSON.parse(response.text);
 
         if (!parsedResult.interests) parsedResult.interests = [];
         return parsedResult;
@@ -328,6 +347,24 @@ export async function GET(req) {
         // ⚡️ CONFIGURATION: Set point requirement to filter out casual single-hype posts from trending status
         const TRENDING_THRESHOLD = 1000;
 
+        // 🧠 FETCH DYNAMIC USER AFFINITY
+        let safeAffinity = {};
+        let safeAuthorAffinity = {};
+        let safeCountryAffinity = {};
+
+        if (deviceId && !targetAuthor) {
+            // We use .lean() to ensure Mongoose Maps are returned as standard JSON objects
+            const userProfile = await MobileUser.findOne({ deviceId })
+                .select("affinityScores authorAffinity countryAffinity")
+                .lean();
+
+            if (userProfile) {
+                safeAffinity = userProfile.affinityScores || {};
+                safeAuthorAffinity = userProfile.authorAffinity || {};
+                safeCountryAffinity = userProfile.countryAffinity || {};
+            }
+        }
+
         let query = {};
 
         if (targetAuthor) {
@@ -403,19 +440,24 @@ export async function GET(req) {
             const CONFIG = {
                 likeWeight: 2.0,
                 commentWeight: 4.0,
-                hypeBaseWeight: 10.0, // ⚡️ UPDATED: High base weight ensures initial hypes are vastly more valuable than likes/comments
+                hypeBaseWeight: 10.0,
+                hypeDecayRate: 0.15, // ⚡️ NEW: How fast hype loses its algorithmic power over time
+
                 freshnessBoost: 20,
                 freshnessWindow: 3,
                 gravityPower: 1.2,
-                prefBonus: 15,
-                clanBonus: 20,
-                localBonus: 25,
+
+                // 🧠 EXPLORATION PHASE: Static preferences vastly reduced so dynamic affinity takes the lead
+                staticPrefBonus: 3,  // Down from 15
+                staticLocalBonus: 4, // Down from 25
+                clanBonus: 20,       // Kept high to maintain community loyalty
+                affinityMultiplier: 1.0,
 
                 // ⚡️ NEW: Clan Badge & Verification Weights
                 tierBasicWeight: 4,
                 tierEpicWeight: 7,
                 tierLegendaryWeight: 10,
-                tierFollowerMultiplier: 1.5, // ⚡️ UPDATED: Enhances badge bonus if the user follows the clan
+                tierFollowerMultiplier: 1.5, // Enhances badge bonus if the user follows the clan
                 partnerClanBonus: 20,      // Massive boost for verified app partners (applies to followers)
 
                 trendingThreshold: TRENDING_THRESHOLD
@@ -474,7 +516,6 @@ export async function GET(req) {
                         matchCount: {
                             $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] }
                         },
-                        // ⚡️ UPDATED: Check if user follows the clan (checking both ID and Tag for safety)
                         isViewerFollowingClan: {
                             $or: [
                                 { $in: ["$clanId", followedClanTags] },
@@ -491,7 +532,58 @@ export async function GET(req) {
                 },
                 {
                     $addFields: {
-                        // ⚡️ NEW: Calculate Tier Bonuses based on badge
+                        // 🧠 1. DYNAMIC TAG AFFINITY
+                        tagAffinityTotal: {
+                            $sum: {
+                                $map: {
+                                    input: { $ifNull: ["$interests", []] },
+                                    as: "tag",
+                                    in: {
+                                        $let: {
+                                            vars: {
+                                                dynamicScore: { $ifNull: [{ $getField: { field: "$$tag", input: { $literal: safeAffinity } } }, 0] },
+                                                isStaticMatch: { $in: ["$$tag", userInterests] }
+                                            },
+                                            in: {
+                                                $cond: [
+                                                    { $gt: ["$$dynamicScore", 0] },
+                                                    "$$dynamicScore", // Prioritize organic affinity
+                                                    { $cond: ["$$isStaticMatch", CONFIG.staticPrefBonus, 0] } // Fallback to reduced static pref
+                                                ]
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        // 🧠 2. DYNAMIC AUTHOR AFFINITY
+                        authorAffinityScore: {
+                            $ifNull: [{ $getField: { field: { $toString: { $ifNull: ["$authorUserId", "$authorId"] } }, input: { $literal: safeAuthorAffinity } } }, 0]
+                        },
+                        // 🧠 3. DYNAMIC COUNTRY AFFINITY
+                        countryAffinityScore: {
+                            $let: {
+                                vars: {
+                                    dynCountry: { $ifNull: [{ $getField: { field: { $ifNull: ["$country", "Global"] }, input: { $literal: safeCountryAffinity } } }, 0] },
+                                    isStaticCountry: { $eq: ["$country", userCountry] }
+                                },
+                                in: {
+                                    $cond: [
+                                        { $gt: ["$$dynCountry", 0] },
+                                        "$$dynCountry",
+                                        { $cond: ["$$isStaticCountry", CONFIG.staticLocalBonus, 0] }
+                                    ]
+                                }
+                            }
+                        },
+                        // ⚡️ HYPE DECAY ENGINE: Old posts lose hype weight aggressively
+                        decayedHypeWeight: {
+                            $divide: [
+                                CONFIG.hypeBaseWeight,
+                                { $max: [1, { $multiply: ["$ageInHours", CONFIG.hypeDecayRate] }] }
+                            ]
+                        },
+
                         clanTierBonus: {
                             $cond: [
                                 "$hasValidBadge",
@@ -508,37 +600,36 @@ export async function GET(req) {
                                 0
                             ]
                         },
-                        // ⚡️ UPDATED: Apply verified app partner bonus if user FOLLOWS that clan
                         partnerClanBonusVal: {
                             $cond: [
                                 { $and: ["$isViewerFollowingClan", { $eq: ["$clanInfo.verifiedClan", true] }] },
                                 CONFIG.partnerClanBonus,
                                 0
                             ]
-                        },
-                        engagementScore: {
-                            $add: [
-                                { $multiply: [{ $ifNull: ["$likesCount", 0] }, CONFIG.likeWeight] },
-                                { $multiply: ["$commentsCount", CONFIG.commentWeight] },
-                                // ⚡️ UPDATED: Uses $sqrt for dynamic diminishing returns. High total hypes scale gracefully, preventing feed clouding.
-                                {
-                                    $multiply: [
-                                        { $sqrt: { $ifNull: ["$hypePointsCount", 0] } },
-                                        CONFIG.hypeBaseWeight
-                                    ]
-                                }
-                            ]
                         }
                     }
                 },
                 {
                     $addFields: {
+                        engagementScore: {
+                            $add: [
+                                { $multiply: [{ $ifNull: ["$likesCount", 0] }, CONFIG.likeWeight] },
+                                { $multiply: ["$commentsCount", CONFIG.commentWeight] },
+                                // ⚡️ Apply the newly decayed Hype Weight
+                                {
+                                    $multiply: [
+                                        { $sqrt: { $ifNull: ["$hypePointsCount", 0] } },
+                                        "$decayedHypeWeight"
+                                    ]
+                                }
+                            ]
+                        },
                         relevanceBonus: {
                             $add: [
-                                { $multiply: ["$matchCount", CONFIG.prefBonus] },
+                                { $multiply: ["$tagAffinityTotal", CONFIG.affinityMultiplier] },
+                                { $multiply: ["$authorAffinityScore", CONFIG.affinityMultiplier] },
+                                { $multiply: ["$countryAffinityScore", CONFIG.affinityMultiplier] },
                                 { $cond: ["$isViewerFollowingClan", CONFIG.clanBonus, 0] },
-                                { $cond: [{ $eq: ["$country", userCountry] }, CONFIG.localBonus, 0] },
-                                // ⚡️ UPDATED: Add Clan Badge Bonus (Multiplied if viewer FOLLOWS the clan)
                                 {
                                     $cond: [
                                         "$isViewerFollowingClan",
@@ -546,7 +637,6 @@ export async function GET(req) {
                                         "$clanTierBonus"
                                     ]
                                 },
-                                // ⚡️ NEW: Add the Partner Bonus 
                                 "$partnerClanBonusVal"
                             ]
                         },
@@ -583,7 +673,6 @@ export async function GET(req) {
         let clanMap = {};
 
         try {
-            // ⚡️ FIXED: Stringify IDs before the Set to ensure true de-duplication
             const uniqueAuthorIds = [...new Set(posts.map(p => (p.authorUserId || p.authorId)?.toString()).filter(Boolean))];
             const uniqueClanTags = [...new Set(posts.map(p => (p.clanTag || p.clanId)?.toString()).filter(Boolean))];
 
@@ -593,7 +682,6 @@ export async function GET(req) {
                 users.forEach(u => {
                     const userIdStr = u._id.toString();
 
-                    // ⚡️ SAFETY CHECK: Ensure these helpers exist or provide fallbacks
                     const rankInfo = typeof resolveUserRankServer === 'function'
                         ? resolveUserRankServer(u.currentRankLevel || 1)
                         : { rankName: "Rookie" };
@@ -631,7 +719,6 @@ export async function GET(req) {
                 }).lean();
 
                 clans.forEach(c => {
-                    // ⚡️ RESOLVE CLAN DISPLAY RANK ON THE BULK ENTRIES
                     const enrichedClan = {
                         ...c,
                         displayRank: resolveClanDisplayRank(c.totalPoints || 0)
@@ -649,7 +736,6 @@ export async function GET(req) {
             const aId = (p.authorUserId || p.authorId)?.toString();
             const cTag = (p.clanTag || p.clanId)?.toString();
 
-            // Clean message for the feed excerpt
             const rawMessage = p.message || "";
             const feedMessage = rawMessage
                 .replace(/s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs, "$1$2$3$4$5$6$8$10")
@@ -671,12 +757,10 @@ export async function GET(req) {
 
             const finalHypeCount = p.hypePointsCount ?? (Array.isArray(p.hypePoints) ? p.hypePoints.length : (p.hypePoints || 0));
 
-            // ⚡️ UPDATED: Evaluates trending status using the global ecosystem-friendly benchmark
             const isTrending = finalHypeCount >= TRENDING_THRESHOLD;
 
             return {
                 ...p,
-                // Clean up any pipeline-injected fields so they don't leak into frontend if unneeded
                 clanInfo: undefined,
                 isViewerFollowingClan: undefined,
                 hasValidBadge: undefined,

@@ -286,6 +286,9 @@ export async function PATCH(req, { params }) {
                 return addCorsHeaders(NextResponse.json({ message: "Post not found" }, { status: 404 }));
             }
 
+            // 🧠 AFFINITY: +5 for Voting
+            await updateUserAffinityByFingerprint(fingerprint, updatedPost, 5);
+
             // ✨ AURA LOGIC: +5 for Voting
             if (updatedPost.authorId !== fingerprint) {
                 const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
@@ -346,6 +349,9 @@ export async function PATCH(req, { params }) {
             if (!updatedPost) {
                 return addCorsHeaders(NextResponse.json({ message: "Already liked" }, { status: 400 }));
             }
+
+            // 🧠 AFFINITY: +10 for Liking
+            await updateUserAffinityByFingerprint(fingerprint, updatedPost, 10);
 
             // ✨ AURA & CLAN LOGIC
             if (updatedPost.authorId !== fingerprint) {
@@ -417,9 +423,14 @@ export async function PATCH(req, { params }) {
         if (action === "share") {
             const updatedPost = await Post.findByIdAndUpdate(id, { $inc: { shares: 1 } }, { new: true });
 
+            // 🧠 AFFINITY: +15 for Sharing (Huge signal they like this content)
+            if (updatedPost) {
+                await updateUserAffinityByFingerprint(fingerprint, updatedPost, 15);
+            }
+
             // ✨ AURA LOGIC: +3 for Sharing
             if (updatedPost && updatedPost.authorId !== fingerprint) {
-                // ⚡️ INCREMENT STATS: Incrementing author's total global likes
+                // ⚡️ INCREMENT STATS: Incrementing author's total global shares
                 const author = await MobileUser.findOneAndUpdate(
                     { deviceId: updatedPost.authorId },
                     { $inc: { totalShares: 1 } },
@@ -475,7 +486,10 @@ export async function PATCH(req, { params }) {
                 );
 
                 if (updatedPost) {
-                    // ⚡️ INCREMENT STATS: Incrementing author's total global likes
+                    // 🧠 AFFINITY: +1 for purely scrolling past/viewing
+                    await updateUserAffinityByFingerprint(fingerprint, updatedPost, 1);
+
+                    // ⚡️ INCREMENT STATS: Incrementing author's total global views
                     const author = await MobileUser.findOneAndUpdate(
                         { deviceId: updatedPost.authorId },
                         { $inc: { totalViews: 1 } },
@@ -501,6 +515,37 @@ export async function PATCH(req, { params }) {
             // Return the post if already viewed or bot
             const post = await Post.findById(id);
             return addCorsHeaders(NextResponse.json(post, { status: 200 }));
+        }
+
+        // --- 5. WATCH COMPLETE LOGIC (NEW) ---
+        // Fire this action from your frontend when a video finishes playing
+        if (action === "watch_complete") {
+            const post = await Post.findById(id);
+            if (post && fingerprint && !isBot) {
+                // 🧠 AFFINITY: +8 for watching a video all the way through
+                await updateUserAffinityByFingerprint(fingerprint, post, 8);
+            }
+            return addCorsHeaders(NextResponse.json({ message: "Watch logged" }, { status: 200 }));
+        }
+
+        // 🧠 NEW: SKIP LOGIC (Minor Penalty)
+        if (action === "skip") {
+            const post = await Post.findById(id);
+            if (post && fingerprint && !isBot) {
+                // Minor penalty for skipping without engaging
+                await updateUserAffinityByFingerprint(fingerprint, post, -2);
+            }
+            return addCorsHeaders(NextResponse.json({ message: "Skip logged" }, { status: 200 }));
+        }
+
+        // 🧠 NEW: NOT INTERESTED LOGIC (Major Penalty)
+        if (action === "not_interested") {
+            const post = await Post.findById(id);
+            if (post && fingerprint && !isBot) {
+                // Heavy penalty to drastically reduce this tag/author priority
+                await updateUserAffinityByFingerprint(fingerprint, post, -50);
+            }
+            return addCorsHeaders(NextResponse.json({ message: "Preference updated" }, { status: 200 }));
         }
 
         return addCorsHeaders(NextResponse.json({ message: "Invalid action" }, { status: 400 }));
@@ -666,5 +711,47 @@ export async function GET(req, { params }) {
     } catch (err) {
         console.error("Single Post Fetch Error:", err);
         return addCorsHeaders(NextResponse.json({ message: "Server error", error: err.message }, { status: 500 }));
+    }
+}
+
+async function updateUserAffinityByFingerprint(fingerprint, post, weight) {
+    if (!fingerprint || !post) return;
+    try {
+        const incUpdates = {};
+
+        // 🧠 SCALE THE WEIGHTS
+        // Tags have the highest signal (100% of weight)
+        // Authors have medium signal (50% of weight)
+        // Country has the lowest signal (25% of weight)
+        const tagWeight = weight;
+        const authorWeight = Math.round(weight * 0.5);
+        const countryWeight = Math.round(weight * 0.25);
+
+        // 1. Anime/Gaming Tags Affinity
+        if (post.interests && Array.isArray(post.interests)) {
+            post.interests.forEach(tag => {
+                if (tag) incUpdates[`affinityScores.${tag}`] = tagWeight;
+            });
+        }
+
+        // 2. Author Affinity
+        const targetAuthor = post.authorUserId ? post.authorUserId.toString() : post.authorId;
+        if (targetAuthor && targetAuthor !== fingerprint) {
+            incUpdates[`authorAffinity.${targetAuthor}`] = authorWeight;
+        }
+
+        // 3. Country Affinity
+        if (post.country && post.country !== "Global" && post.country !== "Unknown") {
+            incUpdates[`countryAffinity.${post.country}`] = countryWeight;
+        }
+
+        if (Object.keys(incUpdates).length > 0) {
+            await MobileUser.findOneAndUpdate(
+                { deviceId: fingerprint },
+                { $inc: incUpdates }
+            );
+        }
+    } catch (err) {
+        console.error("Affinity Update Error:", err);
     }
 }

@@ -198,6 +198,9 @@ export async function POST(req, { params }) {
     const post = await Post.findOne(searchFilter);
     if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
 
+    // 🧠 AFFINITY: +15 for Commenting (High effort interaction)
+    await updateUserAffinityByFingerprint(fingerprint, post, 15);
+
     // Truncate post title for notifications (Max 20 chars)
     const displayTitle = post.title?.length > 20
       ? `${post.title.substring(0, 20)}...`
@@ -423,5 +426,43 @@ export async function POST(req, { params }) {
   } catch (err) {
     console.error("POST error:", err);
     return NextResponse.json({ message: "Error", error: err.message }, { status: 500 });
+  }
+}
+
+
+// 🧠 NEW: Dynamic Affinity Helper
+async function updateUserAffinityByFingerprint(fingerprint, post, weight) {
+  if (!fingerprint || !post) return;
+  try {
+    const incUpdates = {};
+
+    // 1. Anime/Gaming Tags Affinity
+    if (post.interests && Array.isArray(post.interests)) {
+      post.interests.forEach(tag => {
+        if (tag) incUpdates[`affinityScores.${tag}`] = weight;
+      });
+    }
+
+    // 2. Author Affinity (Track whose posts they engage with most)
+    const targetAuthor = post.authorUserId ? post.authorUserId.toString() : post.authorId;
+    // Don't boost affinity for their own posts
+    if (targetAuthor && targetAuthor !== fingerprint) {
+      incUpdates[`authorAffinity.${targetAuthor}`] = weight;
+    }
+
+    // 3. Country Affinity (Track geographic preferences)
+    if (post.country && post.country !== "Global" && post.country !== "Unknown") {
+      incUpdates[`countryAffinity.${post.country}`] = weight;
+    }
+
+    // Execute background update if there is data to increment
+    if (Object.keys(incUpdates).length > 0) {
+      await MobileUser.findOneAndUpdate(
+        { deviceId: fingerprint },
+        { $inc: incUpdates }
+      );
+    }
+  } catch (err) {
+    console.error("Affinity Update Error:", err);
   }
 }
