@@ -436,37 +436,73 @@ export async function POST(req, { params }) {
 
 // 🧠 NEW: Dynamic Affinity Helper
 async function updateUserAffinityByFingerprint(fingerprint, post, weight) {
-  if (!fingerprint || !post) return;
+  if (!fingerprint || !post) {
+    console.log("⚠️ Affinity Update Aborted: Missing fingerprint or post data.");
+    return;
+  }
+
   try {
+    console.log(`\n======================================`);
+    console.log(`🧠 STARTING AFFINITY UPDATE FOR: ${fingerprint}`);
+    console.log(`Base Action Weight: ${weight}`);
+    console.log(`Post ID: ${post._id || 'Unknown'}`);
+    console.log(`======================================`);
+
     const incUpdates = {};
 
+    // 🧠 SCALE THE WEIGHTS
+    const tagWeight = weight;
+    const authorWeight = Math.round(weight * 0.5);
+    const countryWeight = Math.round(weight * 0.25);
+
     // 1. Anime/Gaming Tags Affinity
-    if (post.interests && Array.isArray(post.interests)) {
+    if (post.interests && Array.isArray(post.interests) && post.interests.length > 0) {
+      console.log(`🏷️ Raw Tags found: ${post.interests.join(", ")}`);
       post.interests.forEach(tag => {
-        if (tag) incUpdates[`affinityScores.${tag}`] = weight;
+        if (tag) {
+          // ⚡️ NEW: Force lowercase and trim spaces
+          const cleanTag = tag.trim().toLowerCase();
+          incUpdates[`affinityScores.${cleanTag}`] = tagWeight;
+          console.log(`   -> Added Clean Tag [${cleanTag}]: ${tagWeight}`);
+        }
       });
+    } else {
+      console.log(`🏷️ No valid tags found on post.`);
     }
 
-    // 2. Author Affinity (Track whose posts they engage with most)
+    // 2. Author Affinity
     const targetAuthor = post.authorUserId ? post.authorUserId.toString() : post.authorId;
-    // Don't boost affinity for their own posts
     if (targetAuthor && targetAuthor !== fingerprint) {
-      incUpdates[`authorAffinity.${targetAuthor}`] = weight;
+      incUpdates[`authorAffinity.${targetAuthor}`] = authorWeight;
+      console.log(`👤 Author found [${targetAuthor}]: ${authorWeight}`);
+    } else {
+      console.log(`👤 Author skipped (Missing or Viewer is the Author).`);
     }
 
-    // 3. Country Affinity (Track geographic preferences)
+    // 3. Country Affinity
     if (post.country && post.country !== "Global" && post.country !== "Unknown") {
-      incUpdates[`countryAffinity.${post.country}`] = weight;
+      incUpdates[`countryAffinity.${post.country}`] = countryWeight;
+      console.log(`🌍 Country found [${post.country}]: ${countryWeight}`);
+    } else {
+      console.log(`🌍 Country skipped (Global or Unknown).`);
     }
 
-    // Execute background update if there is data to increment
     if (Object.keys(incUpdates).length > 0) {
+      console.log(`\n🚀 FINAL DB PAYLOAD:`);
+      console.log(JSON.stringify({ $inc: incUpdates }, null, 2));
+
       await MobileUser.findOneAndUpdate(
         { deviceId: fingerprint },
         { $inc: incUpdates }
       );
+
+      console.log(`✅ Affinity Update Successfully Saved to Database!`);
+    } else {
+      console.log(`\n⏭️ No valid updates to process. Skipping DB call.`);
     }
+    console.log(`======================================\n`);
+
   } catch (err) {
-    console.error("Affinity Update Error:", err);
+    console.error("❌ Affinity Update Error:", err);
   }
 }

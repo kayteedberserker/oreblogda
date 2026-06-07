@@ -185,7 +185,7 @@ detail: isExpired ? "Your neural link requires refreshing." : "Please re-authent
 }
 }
 
-// Build standard downstream path with our securely altered request headers
+// Build standard downstream path with our securely altered request headers 
 const apiResponse = NextResponse.next({
 request: {
 headers: requestHeaders,

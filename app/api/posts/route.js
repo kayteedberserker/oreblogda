@@ -58,7 +58,14 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
                (e.g., If "Itachi" is mentioned, add "Naruto". If "Rengoku" is mentioned, add "Demon Slayer". If "Gojo" is mentioned, add "JJK").
             3. Identify the Genre/Theme based on the "vibe" and characters.
             4. Use these lists for primary tags: ANIME: ${VALID_ANIMES.join(", ")}, GENRES: ${VALID_GENRES.join(", ")}
-            5. CHARACTER TAGGING: Extract specific character names from title or given image (e.g., "Madara", "Luffy", "Zoro"). This is CRITICAL for user personalization.
+            
+            // ⚡️ NEW: ENTITY RESOLUTION & FORMATTING RULES
+            5. CHARACTER CANONICALIZATION: If you identify a character, you MUST output their full, official canonical name, regardless of what they are called in the post. 
+               - If the post says "Sasuke" or "sasuke", you output "sasuke uchiha".
+               - If the post says "Luffy" or "Straw Hat", you output "monkey d. luffy".
+               - If the post says "Gojo", you output "satoru gojo".
+            6. SEPARATE ENTITIES: If a specific character is found, you MUST output BOTH the character's full canonical name AND the root franchise/anime name as two separate tags in the array.
+            7. LOWERCASE ENFORCEMENT: All tags inside the 'interests' array MUST be strictly lowercase to ensure database consistency.
 
             INPUT:
             Title: "${title}" | Message: "${message}" | Category: "${category}"
@@ -76,14 +83,13 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
                 let mediaRes = null;
                 for (let i = 0; i < 3; i++) {
                     try {
-                        // ⚡️ NEW: Use a HEAD request to check file size before downloading to prevent memory crashes
                         const headRes = await fetch(mediaUrl, { method: 'HEAD' });
                         const contentLength = headRes.headers.get('content-length');
                         const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB limit for buffer
 
                         if (contentLength && parseInt(contentLength) > MAX_FILE_SIZE) {
                             console.warn("Media too large for AI processing buffer, skipping media attachment.");
-                            break; // Skip fetching the heavy file, AI will just use the text
+                            break;
                         }
 
                         mediaRes = await fetch(mediaUrl);
@@ -113,7 +119,7 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
         // Push the parts into the contents array
         contents.push({ role: 'user', parts: userParts });
 
-        // ⚡️ NEW: Enforce strict JSON output via Schema to remove the need for regex parsing
+        // Enforce strict JSON output via Schema
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash-lite",
             contents: contents,
@@ -129,7 +135,8 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
                         reason: { type: "STRING" },
                         interests: {
                             type: "ARRAY",
-                            items: { type: "STRING" }
+                            items: { type: "STRING" },
+                            description: "Array of strictly lowercase tags including canonical character names and genres."
                         }
                     },
                     required: ["action", "reason", "interests"]

@@ -1,5 +1,4 @@
 import connectDB from "@/app/lib/mongodb"; // Adjust to your DB connection path
-import MobileUser from "@/app/models/MobileUserModel";
 import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 
@@ -9,27 +8,27 @@ export async function GET(req) {
         const { searchParams } = new URL(req.url);
         const page = parseInt(searchParams.get("page")) || 1;
         const limit = parseInt(searchParams.get("limit")) || 10;
-        const startingId = searchParams.get("startingId"); // The video we clicked on
+        const startingId = searchParams.get("startingId");
         const viewerId = searchParams.get("viewerId");
 
         const deviceId = req.headers.get("x-user-deviceId") || "";
         const userCountry = req.headers.get("x-user-country") || "Global";
-        const favAnimes = req.headers.get("x-user-animes")?.split(",").map(s => s.trim()).filter(Boolean) || [];
-        const favGenres = req.headers.get("x-user-genres")?.split(",").map(s => s.trim()).filter(Boolean) || [];
-        const favCharacter = req.headers.get("x-user-character") || "";
+
+        // ⚡️ NEW: Force all incoming static preferences to lowercase immediately
+        const favAnimes = req.headers.get("x-user-animes")?.split(",").map(s => s.trim().toLowerCase()).filter(Boolean) || [];
+        const favGenres = req.headers.get("x-user-genres")?.split(",").map(s => s.trim().toLowerCase()).filter(Boolean) || [];
+        const favCharacter = req.headers.get("x-user-character")?.trim().toLowerCase() || "";
 
         const userInterests = [...favAnimes, ...favGenres];
         if (favCharacter) userInterests.push(favCharacter);
 
         const skip = (page - 1) * limit;
 
-        // Base query: Approved posts that contain at least one video in their media array
         let query = {
             status: "approved",
             "media.type": "video"
         };
 
-        // Exclude the starting post so we don't show the exact same video they just clicked
         if (startingId && mongoose.Types.ObjectId.isValid(startingId)) {
             query._id = { $ne: new mongoose.Types.ObjectId(startingId) };
         }
@@ -40,7 +39,7 @@ export async function GET(req) {
         let safeCountryAffinity = {};
 
         if (deviceId) {
-            const userProfile = await MobileUser.findOne({ deviceId })
+            const userProfile = await mongoose.models.MobileUsers.findOne({ deviceId })
                 .select("affinityScores authorAffinity countryAffinity")
                 .lean();
 
@@ -69,22 +68,20 @@ export async function GET(req) {
             viewerClanTags = memberships.map(c => c.tag).concat(memberships.map(c => c._id.toString()));
         }
 
-        // ⚡️ HEAVY PREFERENCE CONFIGURATION FOR VIDEO FEED
         const CONFIG = {
             likeWeight: 2.0,
             commentWeight: 4.0,
             hypeBaseWeight: 10.0,
-            hypeDecayRate: 0.15, // ⚡️ Fast decay so old viral videos drop off naturally
+            hypeDecayRate: 0.15,
 
             freshnessBoost: 20,
             freshnessWindow: 3,
             gravityPower: 1.2,
 
-            // 🧠 EXPLORE VS EXPLOIT: Reduced static bonuses, increased dynamic multipliers
             staticPrefBonus: 3,
             staticLocalBonus: 4,
             clanBonus: 15,
-            affinityMultiplier: 1.5, // ⚡️ Videos need to react aggressively to dynamic affinity
+            affinityMultiplier: 1.5,
 
             tierBasicWeight: 4,
             tierEpicWeight: 7,
@@ -96,16 +93,10 @@ export async function GET(req) {
         const now = new Date();
 
         const pipeline = [
-            // 1. Initial filter to grab posts that have at least one video
             { $match: query },
-
-            // 2. ⚡️ UNWIND: Split the media array so every item (image or video) becomes its own document
             { $unwind: { path: "$media", includeArrayIndex: "mediaIndex" } },
-
-            // 3. ⚡️ FILTER: Instantly drop any unwound documents that are images/gifs, leaving ONLY videos
             { $match: { "media.type": "video" } },
 
-            // 4. Lookup Clan Data for verified badges
             {
                 $lookup: {
                     from: "clans",
@@ -149,8 +140,20 @@ export async function GET(req) {
                             else: { $ifNull: ["$hypePoints", 0] }
                         }
                     },
+                    // ⚡️ NEW: Lowercase the post's interests dynamically so `$setIntersection` can match the lowercased headers
                     matchCount: {
-                        $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] }
+                        $size: {
+                            $setIntersection: [
+                                {
+                                    $map: {
+                                        input: { $ifNull: ["$interests", []] },
+                                        as: "t",
+                                        in: { $toLower: { $trim: { input: "$$t" } } }
+                                    }
+                                },
+                                userInterests
+                            ]
+                        }
                     },
                     isViewerFollowingClan: {
                         $or: [
@@ -175,30 +178,36 @@ export async function GET(req) {
                         $sum: {
                             $map: {
                                 input: { $ifNull: ["$interests", []] },
-                                as: "tag",
+                                as: "rawTag",
                                 in: {
+                                    // ⚡️ NEW: Normalize the tag to lowercase before checking the dictionary
                                     $let: {
                                         vars: {
-                                            dynamicScore: { $ifNull: [{ $getField: { field: "$$tag", input: { $literal: safeAffinity } } }, 0] },
-                                            isStaticMatch: { $in: ["$$tag", userInterests] }
+                                            cleanTag: { $toLower: { $trim: { input: "$$rawTag" } } }
                                         },
                                         in: {
-                                            $cond: [
-                                                { $gt: ["$$dynamicScore", 0] },
-                                                "$$dynamicScore", // Use organic score if they have one
-                                                { $cond: ["$$isStaticMatch", CONFIG.staticPrefBonus, 0] } // Fallback to lower static score
-                                            ]
+                                            $let: {
+                                                vars: {
+                                                    dynamicScore: { $ifNull: [{ $getField: { field: "$$cleanTag", input: { $literal: safeAffinity } } }, 0] },
+                                                    isStaticMatch: { $in: ["$$cleanTag", userInterests] }
+                                                },
+                                                in: {
+                                                    $cond: [
+                                                        { $gt: ["$$dynamicScore", 0] },
+                                                        "$$dynamicScore",
+                                                        { $cond: ["$$isStaticMatch", CONFIG.staticPrefBonus, 0] }
+                                                    ]
+                                                }
+                                            }
                                         }
                                     }
                                 }
                             }
                         }
                     },
-                    // 🧠 Author Affinity
                     authorAffinityScore: {
                         $ifNull: [{ $getField: { field: { $toString: { $ifNull: ["$authorUserId", "$authorId"] } }, input: { $literal: safeAuthorAffinity } } }, 0]
                     },
-                    // 🧠 Country Affinity
                     countryAffinityScore: {
                         $let: {
                             vars: {
@@ -214,7 +223,6 @@ export async function GET(req) {
                             }
                         }
                     },
-                    // ⚡️ Hype Decay Engine
                     decayedHypeWeight: {
                         $divide: [
                             CONFIG.hypeBaseWeight,
@@ -282,8 +290,6 @@ export async function GET(req) {
                     }
                 }
             },
-
-            // 7. Calculate Final Algorithmic Score
             {
                 $addFields: {
                     finalScore: {
@@ -294,8 +300,6 @@ export async function GET(req) {
                     }
                 }
             },
-
-            // 8. Sort and Paginate at the VIDEO level (not the post level)
             {
                 $sort: {
                     isAdminPost: -1,
@@ -317,7 +321,7 @@ export async function GET(req) {
             const uniqueClanTags = [...new Set(posts.map(p => (p.clanTag || p.clanId)?.toString()).filter(Boolean))];
 
             if (uniqueAuthorIds.length > 0) {
-                const users = await MobileUser.find({ _id: { $in: uniqueAuthorIds } }).lean();
+                const users = await mongoose.models.MobileUsers.find({ _id: { $in: uniqueAuthorIds } }).lean();
                 users.forEach(u => {
                     const userIdStr = u._id.toString();
                     userMap[userIdStr] = {
@@ -346,7 +350,6 @@ export async function GET(req) {
             console.error("Bulk Population Error:", popErr);
         }
 
-        // 9. Format output for the frontend Lightbox
         const serializedPosts = posts.map((p) => {
             const aId = (p.authorUserId || p.authorId)?.toString();
             const cTag = (p.clanTag || p.clanId)?.toString();
@@ -363,9 +366,9 @@ export async function GET(req) {
             const finalHypeCount = p.hypePointsCount ?? (Array.isArray(p.hypePoints) ? p.hypePoints.length : (p.hypePoints || 0));
 
             return {
-                _id: p._id.toString(), // Used by frontend for like/comment actions (targets the parent post)
-                videoId: `${p._id.toString()}_${p.mediaIndex}`, // ⚡️ Synthetic unique ID for React's FlatList keyExtractor
-                mediaUrl: p.media.url, // ⚡️ Maps the unwound video URL directly to mediaUrl
+                _id: p._id.toString(),
+                videoId: `${p._id.toString()}_${p.mediaIndex}`,
+                mediaUrl: p.media.url,
                 title: p.title,
                 authorUserId: p.authorUserId || p.authorId,
                 content: feedMessage.length > 150 ? feedMessage.slice(0, 150) + "..." : feedMessage,
