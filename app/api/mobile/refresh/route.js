@@ -24,12 +24,8 @@ export async function POST(req) {
 
         // 2. Find user in MongoDB and verify token + deviceId match
         const user = await MobileUser.findOne({ uid: decoded.uid });
-        console.log("This user refreshToken is: ", refreshToken, " but its supposed to be? ", user.refreshToken);
 
         if (!user || user.refreshToken !== refreshToken || user.deviceId !== deviceId) {
-            // This is critical: If the token doesn't match what we have in DB, 
-            // someone might be trying a Replay Attack.
-
             return NextResponse.json({ message: "SESSION_COMPROMISED: Neural Link Severed" }, { status: 405 });
         }
 
@@ -46,9 +42,12 @@ export async function POST(req) {
             { expiresIn: "90d" }
         );
 
-        // 4. Update MongoDB with the NEW Refresh Token (Invalidates the old one)
-        user.refreshToken = newRefreshToken;
-        await user.save();
+        // 4. Update MongoDB with the NEW Refresh Token (Bypassing save() hooks)
+        // This prevents triggering pre-save validation on affinityScores/stats
+        await MobileUser.updateOne(
+            { uid: user.uid },
+            { $set: { refreshToken: newRefreshToken } }
+        );
 
         return NextResponse.json({
             accessToken: newAccessToken,
