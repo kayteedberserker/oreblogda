@@ -1,9 +1,9 @@
 /**
- * Sends a single push notification with Grouping support
+ * Sends a single push notification with Grouping & Rich Media (Image) support
  * @param {string} pushToken - The recipient's Expo push token
  * @param {string} title - The notification title
  * @param {string} message - The notification body
- * @param {object} data - Extra data (screen, post ID, etc.)
+ * @param {object} data - Extra data (screen, postId, 🌟 mediaUrl)
  * @param {string} groupId - (Optional) Use a unique ID (like post ID) to group notifications together
  */
 export async function sendPushNotification(pushToken, title, message, data = {}, groupId = null) {
@@ -18,13 +18,13 @@ export async function sendPushNotification(pushToken, title, message, data = {},
     title: title,
     body: message,
     data: {
-      ...data,
-      groupId: groupId, // put it inside data
+      ...data, // 🌟 If data contains { mediaUrl: "https..." }, it gets passed securely here!
+      groupId: groupId,
     },
     // 🛡️ GROUPING LOGIC
     // iOS: Groups by threadId
     threadIdentifier: groupId || 'default_group',
-    // Android: Setting mutableContent allows the system to be smarter about updates
+    // 🌟 Android & iOS Rich Media: mutableContent=true allows OS to download images before display
     mutableContent: true,
   };
 
@@ -48,7 +48,7 @@ export async function sendPushNotification(pushToken, title, message, data = {},
 }
 
 /**
- * Sends notifications to multiple tokens with Grouping support
+ * Sends notifications to multiple tokens with Grouping & Rich Media support
  */
 export async function sendMultiplePushNotifications(tokens, title, message, data = {}, groupId = null) {
   const validTokens = tokens.filter(t => t && t.startsWith('ExponentPushToken'));
@@ -71,10 +71,13 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
       sound: "default",
       title: title,
       body: message,
-      data: data,
+      data: {
+        ...data, // 🌟 Passes mediaUrl if provided
+        groupId: groupId, // 🌟 FIX: Moved this INSIDE the data object so frontend frontend can read `data?.groupId`
+      },
       // 🛡️ GROUPING LOGIC
       threadId: groupId || 'broadcast_group',
-      groupId: groupId,
+      // 🌟 Rich Media Support
       mutableContent: true,
     }));
 
@@ -89,7 +92,7 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
         body: JSON.stringify(messages),
       });
       const result = await response.json();
-      console.log(result)
+      console.log(`✅ Chunk ${index + 1} Push Response:`, result);
       return result;
     } catch (error) {
       console.error(`❌ Chunk ${index + 1} Push Error:`, error);

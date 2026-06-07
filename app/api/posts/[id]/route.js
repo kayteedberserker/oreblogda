@@ -268,13 +268,12 @@ export async function PATCH(req, { params }) {
             }
 
             // Atomically increment votes + store voter object
-            // Build the $inc object correctly
             const incUpdates = {};
             for (const index of selectedOptions) {
                 incUpdates[`poll.options.${index}.votes`] = 1;
             }
             const updatedPost = await Post.findByIdAndUpdate(
-                id, // findByIdAndUpdate takes the ID directly as the first arg
+                id,
                 {
                     $push: { voters: { fingerprint, selectedOptions } },
                     $inc: incUpdates // Use $inc to atomically increment
@@ -302,7 +301,6 @@ export async function PATCH(req, { params }) {
                     const msg = `Someone voted on your post: "${updatedPost.title.substring(0, 15)}..."`;
 
                     if (author.pushToken) {
-                        // 🛡️ FIX: Wrap author.pushToken in an array to prevent .filter error
                         const tokens = [author.pushToken];
 
                         // 🔔 GROUPING ADDED: Uses "vote_<PostID>" so votes stack
@@ -310,7 +308,11 @@ export async function PATCH(req, { params }) {
                             tokens,
                             `New Vote! ✅ on post: "${updatedPost.title.substring(0, 10)}..."`,
                             msg,
-                            { postId: updatedPost._id.toString(), type: "post_detail" },
+                            {
+                                postId: updatedPost._id.toString(),
+                                type: "post_detail",
+                                mediaUrl: updatedPost.mediaUrl // 🌟 INJECTED MEDIA URL FOR RICH NOTIFICATIONS
+                            },
                             {
                                 type: 'post_vote',
                                 targetAudience: 'user',
@@ -379,7 +381,11 @@ export async function PATCH(req, { params }) {
                             tokens,
                             `New Like on post: "${updatedPost.title.substring(0, 10)}..."`,
                             msg,
-                            { postId: updatedPost._id.toString(), type: "post_detail" },
+                            {
+                                postId: updatedPost._id.toString(),
+                                type: "post_detail",
+                                mediaUrl: updatedPost.mediaUrl // 🌟 INJECTED MEDIA URL FOR RICH NOTIFICATIONS
+                            },
                             {
                                 type: 'post_like',
                                 targetAudience: 'user',
@@ -401,7 +407,11 @@ export async function PATCH(req, { params }) {
                                 [author.pushToken],
                                 `Going Viral!"`,
                                 mMsg,
-                                { postId: updatedPost._id.toString(), type: "post_detail" },
+                                {
+                                    postId: updatedPost._id.toString(),
+                                    type: "post_detail",
+                                    mediaUrl: updatedPost.mediaUrl // 🌟 INJECTED MEDIA URL FOR RICH NOTIFICATIONS
+                                },
                                 {
                                     type: 'event',
                                     targetAudience: 'user',
@@ -517,8 +527,7 @@ export async function PATCH(req, { params }) {
             return addCorsHeaders(NextResponse.json(post, { status: 200 }));
         }
 
-        // --- 5. WATCH COMPLETE LOGIC (NEW) ---
-        // Fire this action from your frontend when a video finishes playing
+        // --- 5. WATCH COMPLETE LOGIC ---
         if (action === "watch_complete") {
             const post = await Post.findById(id);
             if (post && fingerprint && !isBot) {

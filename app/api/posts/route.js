@@ -900,7 +900,7 @@ export async function POST(req) {
         // Old builds might send media arrays without a primary mediaUrl. We must parse it safely.
         const primaryMediaUrl = mediaUrl || (media && media.length > 0 ? media[0].url : null);
         const primaryMediaType = mediaType || (media && media.length > 0 ? media[0].type : "image");
-        const finalMediaArray = media || (primaryMediaUrl ? [{ url: primaryMediaUrl, type: primaryMediaType }] : []);
+        const finalMediaArray = media || (primaryMediaUrl ? [{ url: primaryMediaUrl, type: primaryMediaType, order: 0 }] : []);
 
         // 4. Generate Slugs (Unchanged logic)
         const newMessage = removeEmptyLines(normalizePostContent(message));
@@ -957,26 +957,26 @@ export async function POST(req) {
             const protocol = host.includes("localhost") ? "http" : "https";
             const activeServerBase = `${protocol}://${host}`;
 
-            const contextString = `postId=${newPost._id.toString()}`;
             const notificationUrl = `${activeServerBase}/api/webhooks/cloudinary`;
 
-            // 🛡️ All parameters sent to Cloudinary MUST be signed together
-            const paramsToSign = {
-                timestamp,
-                folder: "posts",
-                context: contextString,
-                notification_url: notificationUrl
-            };
+            // 🌟 Generate an array of signatures to cover each exact file index
+            const signDataArray = [];
+            for (let i = 0; i < totalFiles; i++) {
+                const contextString = `postId=${newPost._id.toString()}|fileIndex=${i}`;
 
-            const signature = cloudinary.utils.api_sign_request(
-                paramsToSign,
-                process.env.CLOUDINARY_API_SECRET
-            );
+                const paramsToSign = {
+                    timestamp,
+                    folder: "posts",
+                    context: contextString,
+                    notification_url: notificationUrl
+                };
 
-            return addCorsHeaders(NextResponse.json({
-                message: "Post initialized. Awaiting media assets.",
-                post: newPost,
-                signData: {
+                const signature = cloudinary.utils.api_sign_request(
+                    paramsToSign,
+                    process.env.CLOUDINARY_API_SECRET
+                );
+
+                signDataArray.push({
                     signature,
                     timestamp,
                     folder: "posts",
@@ -984,7 +984,13 @@ export async function POST(req) {
                     notificationUrl: notificationUrl,
                     apiKey: process.env.CLOUDINARY_API_KEY,
                     cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-                }
+                });
+            }
+
+            return addCorsHeaders(NextResponse.json({
+                message: "Post initialized. Awaiting media assets.",
+                post: newPost,
+                signData: signDataArray // 🌟 Now passing an array to the client
             }, { status: 201 }));
         }
 
@@ -1057,8 +1063,11 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
         }
     }
 
-    // 🛠️ DEDUPLICATION GUARD: Filter out any duplicates in the media array before saving
+    // 🛠️ DEDUPLICATION GUARD & ARRAY RE-ORDERING
     if (post.media && post.media.length > 0) {
+        // 🌟 Ensure files are sorted perfectly back to original selection order
+        post.media.sort((a, b) => (a.order || 0) - (b.order || 0));
+
         const uniqueUrls = new Set();
         post.media = post.media.filter(item => {
             if (!item || !item.url) return false;
@@ -1143,6 +1152,8 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
                     });
                 }
             } catch (err) { console.error("Newsletter fault:", err); }
+
+            // ⚠️ Note: Make sure your `notifyAllMobileUsersAboutPost` function ALSO pulls `post.mediaUrl` to send global rich notifications
             try { await notifyAllMobileUsersAboutPost(post, userDoc?.username); } catch (err) { }
         }
 
@@ -1157,8 +1168,21 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
                         tokens,
                         `${clan?.name || post.clanId} Transmission 🚩`,
                         `${userDoc?.username || 'Someone'} posted: ${post.title}`,
-                        { type: "open_post", postId: post._id.toString(), clanTag: post.clanId, screen: `/post/${post._id.toString()}` },
-                        { type: 'clan_post', targetAudience: 'clan', targetId: post.clanId, priority: 3, link: `/post/${post._id.toString()}`, expiresInHours: 6 }
+                        {
+                            type: "open_post",
+                            postId: post._id.toString(),
+                            clanTag: post.clanId,
+                            screen: `/post/${post._id.toString()}`,
+                            mediaUrl: post.mediaUrl // 🌟 INJECTED MEDIA URL FOR CLAN PUSH
+                        },
+                        {
+                            type: 'clan_post',
+                            targetAudience: 'clan',
+                            targetId: post.clanId,
+                            priority: 3,
+                            link: `/post/${post._id.toString()}`,
+                            expiresInHours: 6
+                        }
                     );
                 }
             } catch (err) { console.error("Clan alert fault:", err); }
@@ -1168,7 +1192,17 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
     if (finalStatus === "pending") {
         const adminTokens = ["ExponentPushToken[TkR7ucI2anWi3XJrALGr4T]"];
         for (const token of adminTokens) {
-            try { await sendPushNotification(token, "New post!", "A post is awaiting your approval.", { postId: post._id.toString() }); } catch (pErr) { }
+            try {
+                await sendPushNotification(
+                    token,
+                    "New post!",
+                    "A post is awaiting your approval.",
+                    {
+                        postId: post._id.toString(),
+                        mediaUrl: post.mediaUrl // 🌟 INJECTED MEDIA URL FOR ADMIN PUSH
+                    }
+                );
+            } catch (pErr) { }
         }
         try {
             const transporter = nodemailer.createTransport({ service: "gmail", auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS } });
@@ -1188,8 +1222,23 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
                 [userDoc.pushToken],
                 "Post Rejected ⚠️",
                 `Your post "${post.title.slice(0, 20)}..." was not approved. Reason: ${rejectionReason}`,
-                { type: "open_diary", status: "rejected", reason: rejectionReason, postId: post._id.toString(), screen: "/authordiary" },
-                { type: 'post_rejection', targetAudience: 'user', link: "/authordiary", targetId: userDoc._id.toString(), singleUser: true, priority: 10, expiresInHours: 12 }
+                {
+                    type: "open_diary",
+                    status: "rejected",
+                    reason: rejectionReason,
+                    postId: post._id.toString(),
+                    screen: "/authordiary",
+                    mediaUrl: post.mediaUrl // 🌟 INJECTED MEDIA URL FOR REJECTION PUSH
+                },
+                {
+                    type: 'post_rejection',
+                    targetAudience: 'user',
+                    link: "/authordiary",
+                    targetId: userDoc._id.toString(),
+                    singleUser: true,
+                    priority: 10,
+                    expiresInHours: 12
+                }
             );
         } catch (err) { console.error("Rejection notice fault:", err); }
     }

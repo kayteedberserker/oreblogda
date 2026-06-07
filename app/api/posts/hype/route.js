@@ -50,10 +50,10 @@ export async function POST(req) {
 
         // ⚡️ FINE-TUNED MULTI-TRACK METRICS SYSTEM
         const PRODUCTS = {
-            FREE: { cost: 0, points: 50, tokens: 0, giverAura: 0, receiverAura: 5, clanPoints: 5 },
-            STANDARD: { cost: 20, points: 100, tokens: 0, giverAura: 5, receiverAura: 15, clanPoints: 25 },
-            SUPER: { cost: 100, points: 600, tokens: 0, giverAura: 10, receiverAura: 50, clanPoints: 70 },
-            MEGA: { cost: 400, points: 3000, tokens: 0, giverAura: 40, receiverAura: 200, clanPoints: 300 }
+            FREE: { cost: 0, points: 10, tokens: 0, giverAura: 0, receiverAura: 5, clanPoints: 5 },
+            STANDARD: { cost: 50, points: 50, tokens: 0, giverAura: 5, receiverAura: 15, clanPoints: 25 },
+            SUPER: { cost: 200, points: 250, tokens: 0, giverAura: 10, receiverAura: 50, clanPoints: 70 },
+            MEGA: { cost: 500, points: 700, tokens: 0, giverAura: 40, receiverAura: 150, clanPoints: 200 }
         };
 
         const item = PRODUCTS[hypeType];
@@ -130,14 +130,25 @@ export async function POST(req) {
                 }
             }
 
-            // Fire push notification alert safely
+            // 🌟 Fire push notification alert safely WITH RICH MEDIA AND DEEP LINK
             if (author.pushToken) {
                 await sendPillParallel(
                     [author.pushToken],
                     `New Hype on Post: ${post?.title?.slice(0, 20)}`,
                     `${user.username || 'Someone'} just hyped your post with a ${hypeType} hype!`,
-                    { type: "achievement" },
-                    { type: 'achievement', targetId: author._id.toString(), singleUser: true, priority: 3 }
+                    {
+                        type: "open_post",
+                        postId: post._id.toString(),
+                        screen: `/post/${post._id.toString()}`,
+                        mediaUrl: post.mediaUrl // 🌟 INJECTED POST IMAGE THUMBNAIL
+                    },
+                    {
+                        type: 'achievement',
+                        targetId: author._id.toString(),
+                        singleUser: true,
+                        priority: 3,
+                        link: `/post/${post._id.toString()}` // 🌟 Ensures the in-app marquee also links to the post
+                    }
                 );
             }
         }

@@ -366,6 +366,7 @@ export async function POST(req, { params }) {
       const user = await MobileUser.findOne(query);
 
       if (user) {
+        // Create the record in your database
         await Notification.create({
           recipientId: user.deviceId,
           senderName: name,
@@ -374,9 +375,11 @@ export async function POST(req, { params }) {
           message: n.message
         });
 
+        // Send the Rich Notification
         if (user.pushToken) {
           const tokens = [user.pushToken];
           const groupId = `${n.type}_${post._id}`;
+
           await sendPillParallel(
             tokens,
             n.title,
@@ -384,7 +387,8 @@ export async function POST(req, { params }) {
             {
               postId: post._id.toString(),
               type: n.type,
-              commentId: n.commentId?.toString()
+              commentId: n.commentId?.toString(),
+              mediaUrl: post.mediaUrl // 🌟 INJECTED MEDIA URL FOR RICH NOTIFICATIONS
             },
             {
               type: `post_${n.type}`,

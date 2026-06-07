@@ -81,7 +81,8 @@ const viewDataSchema = new mongoose.Schema({
 const mediaItemSchema = new mongoose.Schema({
   url: { type: String, required: true },
   type: { type: String, default: "image" },
-  public_id: { type: String, default: null } // 🌟 Added to track Cloudinary assets safely
+  public_id: { type: String, default: null }, // 🌟 Added to track Cloudinary assets safely
+  order: { type: Number, default: 0 } // 🌟 Added to preserve upload order
 }, { _id: false });
 
 /* =====================================================
@@ -207,7 +208,7 @@ postSchema.pre('save', function (next) {
     this.mediaType = this.media[0].type;
   }
   else if (this.mediaUrl && (!this.media || this.media.length === 0)) {
-    this.media = [{ url: this.mediaUrl, type: this.mediaType || "image", public_id: null }];
+    this.media = [{ url: this.mediaUrl, type: this.mediaType || "image", public_id: null, order: 0 }];
   }
 
   next();

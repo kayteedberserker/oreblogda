@@ -81,14 +81,13 @@ export async function createMessagePill({
 }
 
 /**
-* Sends push + parallel MessagePill for user/clan sync
-* @param {string[]} tokens - Expo tokens (determines audience)
-* @param {string} title - Push title  
-* @param {string} body - Pill text base
-* @param {object} data - Push data (screen/postId)
-* @param {object} pillContext - {type, targetId, link, singleUser?}
-*/
-
+ * Sends push + parallel MessagePill for user/clan sync
+ * @param {string[]} tokens - Expo tokens (determines audience)
+ * @param {string} title - Push title  
+ * @param {string} body - Pill text base
+ * @param {object} data - Push data (screen, postId, 🌟 mediaUrl)
+ * @param {object} pillContext - {type, targetId, link, singleUser?}
+ */
 export async function sendPillParallel(tokens, title, body, data = {}, pillContext = {}) {
     if (!tokens || tokens.length === 0) return;
 
@@ -118,12 +117,13 @@ export async function sendPillParallel(tokens, title, body, data = {}, pillConte
 
     const pillText = body.length > 100 ? `${body.substring(0, 97)}...` : body;
 
-    // Send push first (non-blocking for pill)
+    // 🌟 Push Execution (If data contains { mediaUrl: "..." }, it's securely handed off here)
     const pushPromise = import('@/app/lib/pushNotifications').then(({ sendPushNotification, sendMultiplePushNotifications }) => {
         return tokens.length === 1
-            ? sendPushNotification(tokens[0], title, body, data)
-            : sendMultiplePushNotifications(tokens, title, body, data);
+            ? sendPushNotification(tokens[0], title, body, data, data.postId || data.clanTag) // Injected groupId logic
+            : sendMultiplePushNotifications(tokens, title, body, data, data.postId || data.clanTag);
     });
+
     console.log("generating pill message for: ", type, link, "for ", targetAudience, targetId);
 
     // Parallel pill
