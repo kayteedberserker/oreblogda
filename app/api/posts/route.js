@@ -338,9 +338,11 @@ export async function GET(req) {
 
         const deviceId = req.headers.get("x-user-deviceId") || "";
         const userCountry = req.headers.get("x-user-country") || "Global";
-        const favAnimes = req.headers.get("x-user-animes")?.split(",").map(s => s.trim()).filter(Boolean) || [];
-        const favGenres = req.headers.get("x-user-genres")?.split(",").map(s => s.trim()).filter(Boolean) || [];
-        const favCharacter = req.headers.get("x-user-character") || "";
+
+        // ⚡️ NEW: Force all incoming static preferences to lowercase immediately
+        const favAnimes = req.headers.get("x-user-animes")?.split(",").map(s => s.trim().toLowerCase()).filter(Boolean) || [];
+        const favGenres = req.headers.get("x-user-genres")?.split(",").map(s => s.trim().toLowerCase()).filter(Boolean) || [];
+        const favCharacter = req.headers.get("x-user-character")?.trim().toLowerCase() || "";
 
         const userInterests = [...favAnimes, ...favGenres];
         if (favCharacter) userInterests.push(favCharacter);
@@ -361,7 +363,7 @@ export async function GET(req) {
 
         if (deviceId && !targetAuthor) {
             // We use .lean() to ensure Mongoose Maps are returned as standard JSON objects
-            const userProfile = await MobileUser.findOne({ deviceId })
+            const userProfile = MobileUser.findOne({ deviceId })
                 .select("affinityScores authorAffinity countryAffinity")
                 .lean();
 
@@ -455,9 +457,9 @@ export async function GET(req) {
                 gravityPower: 1.2,
 
                 // 🧠 EXPLORATION PHASE: Static preferences vastly reduced so dynamic affinity takes the lead
-                staticPrefBonus: 3,  // Down from 15
-                staticLocalBonus: 4, // Down from 25
-                clanBonus: 20,       // Kept high to maintain community loyalty
+                staticPrefBonus: 3,
+                staticLocalBonus: 4,
+                clanBonus: 20,
                 affinityMultiplier: 1.0,
 
                 // ⚡️ NEW: Clan Badge & Verification Weights
@@ -520,8 +522,20 @@ export async function GET(req) {
                                 else: { $ifNull: ["$hypePoints", 0] }
                             }
                         },
+                        // ⚡️ NEW: Lowercase the post's interests dynamically so `$setIntersection` can match the lowercased headers
                         matchCount: {
-                            $size: { $setIntersection: [{ $ifNull: ["$interests", []] }, userInterests] }
+                            $size: {
+                                $setIntersection: [
+                                    {
+                                        $map: {
+                                            input: { $ifNull: ["$interests", []] },
+                                            as: "t",
+                                            in: { $toLower: { $trim: { input: "$$t" } } }
+                                        }
+                                    },
+                                    userInterests
+                                ]
+                            }
                         },
                         isViewerFollowingClan: {
                             $or: [
@@ -544,19 +558,26 @@ export async function GET(req) {
                             $sum: {
                                 $map: {
                                     input: { $ifNull: ["$interests", []] },
-                                    as: "tag",
+                                    as: "rawTag",
                                     in: {
                                         $let: {
                                             vars: {
-                                                dynamicScore: { $ifNull: [{ $getField: { field: "$$tag", input: { $literal: safeAffinity } } }, 0] },
-                                                isStaticMatch: { $in: ["$$tag", userInterests] }
+                                                cleanTag: { $toLower: { $trim: { input: "$$rawTag" } } }
                                             },
                                             in: {
-                                                $cond: [
-                                                    { $gt: ["$$dynamicScore", 0] },
-                                                    "$$dynamicScore", // Prioritize organic affinity
-                                                    { $cond: ["$$isStaticMatch", CONFIG.staticPrefBonus, 0] } // Fallback to reduced static pref
-                                                ]
+                                                $let: {
+                                                    vars: {
+                                                        dynamicScore: { $ifNull: [{ $getField: { field: "$$cleanTag", input: { $literal: safeAffinity } } }, 0] },
+                                                        isStaticMatch: { $in: ["$$cleanTag", userInterests] }
+                                                    },
+                                                    in: {
+                                                        $cond: [
+                                                            { $gt: ["$$dynamicScore", 0] },
+                                                            "$$dynamicScore", // Prioritize organic affinity
+                                                            { $cond: ["$$isStaticMatch", CONFIG.staticPrefBonus, 0] } // Fallback to reduced static pref
+                                                        ]
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -680,6 +701,7 @@ export async function GET(req) {
         let clanMap = {};
 
         try {
+            // ⚡️ FIXED: Stringify IDs before the Set to ensure true de-duplication
             const uniqueAuthorIds = [...new Set(posts.map(p => (p.authorUserId || p.authorId)?.toString()).filter(Boolean))];
             const uniqueClanTags = [...new Set(posts.map(p => (p.clanTag || p.clanId)?.toString()).filter(Boolean))];
 
@@ -743,6 +765,7 @@ export async function GET(req) {
             const aId = (p.authorUserId || p.authorId)?.toString();
             const cTag = (p.clanTag || p.clanId)?.toString();
 
+            // Clean message for the feed excerpt
             const rawMessage = p.message || "";
             const feedMessage = rawMessage
                 .replace(/s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs, "$1$2$3$4$5$6$8$10")
@@ -763,7 +786,6 @@ export async function GET(req) {
             }
 
             const finalHypeCount = p.hypePointsCount ?? (Array.isArray(p.hypePoints) ? p.hypePoints.length : (p.hypePoints || 0));
-
             const isTrending = finalHypeCount >= TRENDING_THRESHOLD;
 
             return {

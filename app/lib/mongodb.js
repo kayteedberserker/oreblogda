@@ -30,16 +30,16 @@ export default async function connectDB() {
 
   // 3. Initialize New Connection
   const opts = {
-    bufferCommands: false, 
+    bufferCommands: false,
     /* * LEAN POOL: 4. 
      * This limits THIS SPECIFIC instance. 
      * Note: Vercel may spin up multiple instances (Lambdas) simultaneously.
      */
-    maxPoolSize: 3,       
+    maxPoolSize: 3,
     minPoolSize: 1,
     /* * IDLE CLEANUP: 60 seconds.
      */
-    maxIdleTimeMS: 180000, 
+    maxIdleTimeMS: 180000,
     serverSelectionTimeoutMS: 10000,
     socketTimeoutMS: 20000,
     family: 4
@@ -48,7 +48,9 @@ export default async function connectDB() {
   cached.isLoading = true;
   console.log("📡 Initializing new MongoDB connection (Pool: 4)...");
 
-  cached.promise = mongoose.connect(process.env.MONGODB_URI, opts).then((mongooseInstance) => {
+  cached.promise = mongoose.connect(process.env.MONGODB_URI, {
+    family: 4 // Forces Mongoose to resolve via IPv4 instead of IPv6
+  }, opts).then((mongooseInstance) => {
     console.log("✅ MongoDB connected successfully");
     cached.isLoading = false;
     return mongooseInstance;

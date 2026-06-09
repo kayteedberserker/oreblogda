@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { toast } from "react-toastify";
 
 // --- HELPERS ---
@@ -36,7 +36,38 @@ const getDaysInactive = (lastActive) => {
     return `${days}d ago`;
 };
 
-// ⚡️ UPDATED METRIC CARD
+// ⚡️ OS Logo Helper
+const getPlatformIcon = (platform) => {
+    const p = (platform || "").toLowerCase();
+
+    if (p.includes('ios') || p.includes('apple')) {
+        return (
+            <svg className="w-5 h-5 text-neutral-800 dark:text-neutral-200" viewBox="0 0 170 170" fill="currentColor">
+                <path d="M150.37 130.25c-2.45 5.66-5.35 10.87-8.71 15.66-4.58 6.53-8.33 11.05-11.22 13.56-4.48 4.12-9.28 6.23-14.42 6.35-3.69 0-8.14-1.05-13.32-3.18-5.19-2.12-9.97-3.17-14.34-3.17-4.58 0-9.49 1.05-14.75 3.17-5.26 2.13-9.5 3.24-12.74 3.35-4.37.13-9.13-1.9-14.33-6.08-3.47-2.92-7.38-7.71-11.73-14.37-5.59-8.4-10.05-18.06-13.4-28.97-3.35-10.91-5.02-21.25-5.02-31.02 0-14.86 3.86-26.94 11.59-36.24 7.72-9.3 17.27-14.04 28.64-14.2 5.03 0 10.65 1.5 16.86 4.5 6.21 2.99 10.74 4.5 13.59 4.5 2.12 0 6.13-1.34 12.02-4.04 5.9-2.69 11.53-3.95 16.9-3.79 12.2.56 22.18 5.17 29.93 13.84-11.2 6.83-16.65 16.14-16.35 27.94.3 9.4 3.99 17.3 11.08 23.72 7.09 6.42 15.5 10.03 25.21 10.84-2.24 6.64-5.21 13.4-8.91 20.3zM119.22 30.45c0-6.94-2.52-13.33-7.56-19.16C106.63 5.46 99.8.92 91.17 0c-.11 1.01-.17 1.8-.17 2.36 0 6.62 2.65 12.98 7.96 19.06 5.3 6.09 11.96 10.19 19.98 12.31.11-.8.28-2.07.28-3.28z" />
+            </svg>
+        );
+    }
+
+    if (p.includes('web') || p.includes('windows') || p.includes('mac')) {
+        return <span className="text-lg">🌐</span>;
+    }
+
+    // Default to Android
+    return (
+        <svg className="w-5 h-5 text-green-500" viewBox="0 0 512 650" fill="currentColor">
+            <g id="android-robot">
+                <path d="M178.6,183.1 L151.7,136.5 C149.3,132.3 150.7,126.9 154.9,124.5 C159.1,122.1 164.5,123.5 166.9,127.7 L194,174.6 C212.8,166 233.8,161.2 256,161.2 C278.2,161.2 299.2,166 318,174.6 L345.1,127.7 C347.5,123.5 352.9,122.1 357.1,124.5 C361.3,126.9 362.7,132.3 360.3,136.5 L333.4,183.1 C381.7,209.3 415.1,258.4 417.1,316.1 L94.9,316.1 C96.9,258.4 130.3,209.3 178.6,183.1 Z" />
+                <circle fill="#FFFFFF" cx="194.2" cy="246.6" r="13.2" />
+                <circle fill="#FFFFFF" cx="317.8" cy="246.6" r="13.2" />
+                <path d="M51.9,335.7 C36.5,335.7 24,348.2 24,363.6 L24,472.9 C24,488.3 36.5,500.8 51.9,500.8 C67.3,500.8 79.8,488.3 79.8,472.9 L79.8,363.6 C79.8,348.2 67.3,335.7 51.9,335.7 Z" />
+                <path d="M94.9,335.7 L94.9,510.9 C94.9,523.5 105.1,533.7 117.7,533.7 L171.1,533.7 L171.1,605.1 C171.1,620.5 183.6,633 199,633 C214.4,633 226.9,620.5 226.9,605.1 L226.9,533.7 L285.1,533.7 L285.1,605.1 C285.1,620.5 297.6,633 313,633 C328.4,633 340.9,620.5 340.9,605.1 L340.9,533.7 L394.3,533.7 C406.9,533.7 417.1,523.5 417.1,510.9 L417.1,335.7 L94.9,335.7 Z" />
+                <path d="M460.1,335.7 C444.7,335.7 432.2,348.2 432.2,363.6 L432.2,472.9 C432.2,488.3 444.7,500.8 460.1,500.8 C475.5,500.8 488,488.3 488,472.9 L488,363.6 C488,348.2 475.5,335.7 460.1,335.7 Z" />
+            </g>
+        </svg>
+    );
+};
+
+// ⚡️ METRIC CARD
 const MetricCard = ({ title, value, color, loading, trend, prevValue }) => (
     <div className="bg-white dark:bg-gray-800 p-5 rounded-3xl border border-gray-200 dark:border-gray-700 shadow-sm relative overflow-hidden transition-all hover:shadow-md">
         <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">{title}</p>
@@ -74,7 +105,7 @@ export default function FullAdminDashboard() {
     const [postList, setPostList] = useState([]);
     const [postsPage, setPostsPage] = useState(1);
     const [postsTotalPages, setPostsTotalPages] = useState(1);
-    const [editingPost, setEditingPost] = useState(null);
+    const [editingPost, setEditingPost] = useState(null); // Now controls the inline expansion
 
     // Pill Modal State
     const [showPillModal, setShowPillModal] = useState(false);
@@ -100,8 +131,9 @@ export default function FullAdminDashboard() {
     const [sendingPush, setSendingPush] = useState(false);
     const [taskLoading, setTaskLoading] = useState(false);
 
-    // Selection & Notification State
+    // Selection & Details UI State
     const [selectedUser, setSelectedUser] = useState(null);
+    const [showActivityLog, setShowActivityLog] = useState(false);
     const [pushMessage, setPushMessage] = useState({ title: "", body: "" });
 
     // Filters
@@ -112,31 +144,24 @@ export default function FullAdminDashboard() {
     const [totalPages, setTotalPages] = useState(1);
     const router = useRouter();
 
-    // Dormant periods
     const DORMANT_PERIODS = [2, 5, 7, 14, 30];
 
-    // Fetch dormant counts (multi-day)
     const fetchDormantCounts = useCallback(async () => {
         try {
             const res = await fetch('/api/admin/notifications');
             const data = await res.json();
-            if (res.ok) {
-                setDormantCounts(data.counts || {});
-            }
+            if (res.ok) setDormantCounts(data.counts || {});
         } catch (err) {
             console.error("Dormant counts fetch failed");
         }
     }, []);
 
-    // Fetch dormant users list for selected days
     const fetchDormantUsers = useCallback(async (days) => {
         setDormantLoading(true);
         try {
             const res = await fetch(`/api/admin/notifications?days=${days}`);
             const data = await res.json();
-            if (res.ok) {
-                setSelectedDormantUserIds([]);
-            }
+            if (res.ok) setSelectedDormantUserIds([]);
         } catch (err) {
             toast.error("Failed to fetch dormant users");
         } finally {
@@ -144,7 +169,6 @@ export default function FullAdminDashboard() {
         }
     }, []);
 
-    // Filter dormant users client-side
     useEffect(() => {
         const filtered = dormantUsers.filter(user =>
             user.username?.toLowerCase().includes(searchDormant.toLowerCase()) ||
@@ -154,16 +178,12 @@ export default function FullAdminDashboard() {
         setFilteredDormantUsers(filtered);
     }, [searchDormant, dormantUsers]);
 
-    // Toggle single user selection
     const toggleDormantUser = (userId) => {
         setSelectedDormantUserIds(prev =>
-            prev.includes(userId)
-                ? prev.filter(id => id !== userId)
-                : [...prev, userId]
+            prev.includes(userId) ? prev.filter(id => id !== userId) : [...prev, userId]
         );
     };
 
-    // Select all/none filtered users
     const selectAllDormant = () => {
         const allIds = filteredDormantUsers.map(u => u._id);
         setSelectedDormantUserIds(allIds);
@@ -173,20 +193,17 @@ export default function FullAdminDashboard() {
         setSelectedDormantUserIds([]);
     };
 
-    // Enhanced send with selection support
     const sendBulkPushWithDays = async () => {
         if (!bulkMessage.trim()) return toast.warning("Enter transmission message");
         setSendingPush(true);
         try {
             const payload = {
                 type: "BULK_DORMANT",
-                title: "Oreblogda Update",
+                title: "System Update",
                 message: bulkMessage.trim(),
                 days: selectedDays
             };
-            if (selectedDormantUserIds.length > 0) {
-                payload.userIds = selectedDormantUserIds;
-            }
+            if (selectedDormantUserIds.length > 0) payload.userIds = selectedDormantUserIds;
             const res = await fetch('/api/admin/notifications', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -210,43 +227,15 @@ export default function FullAdminDashboard() {
         }
     };
 
-    // Open dormant modal for specific days
     const openDormantModalForDays = (days) => {
         setSelectedDays(days);
         fetchDormantUsers(days);
         setShowDormantModal(true);
     };
 
-    // Data fetching effects
-    useEffect(() => {
-        const fetchUser = async () => {
-            try {
-                const res = await fetch("/api/auth/me", { credentials: "include" });
-                if (!res.ok) {
-                    router.push("/auth/login");
-                    return;
-                }
-                const data = await res.json();
-                if (data.user.role !== "Admin") {
-                    alert("You are not an admin");
-                    router.push("/");
-                    return;
-                }
-                setUser(data.user);
-            } catch {
-                router.push("/auth/login");
-            }
-        };
-        fetchUser();
-    }, [router]);
-
     useEffect(() => {
         const init = async () => {
-            await Promise.all([
-                fetchDashboardData(true),
-                fetchUsers(true),
-                fetchDormantCounts()
-            ]);
+            await Promise.all([fetchDashboardData(true), fetchUsers(true), fetchDormantCounts()]);
             setInitialLoading(false);
         };
         init();
@@ -283,9 +272,7 @@ export default function FullAdminDashboard() {
     const fetchUsers = async (isInitial = false) => {
         setTableLoading(true);
         try {
-            const res = await fetch(
-                `/api/admin/users?page=${page}&country=${selectedCountry}&activeOnly=${showOnlyActive}`
-            );
+            const res = await fetch(`/api/admin/users?page=${page}&country=${selectedCountry}&activeOnly=${showOnlyActive}`);
             const data = await res.json();
             setUserList(data.users || []);
             setTotalPages(data.pages || 1);
@@ -333,10 +320,30 @@ export default function FullAdminDashboard() {
             setTaskLoading(false);
         }
     };
+    useEffect(() => {
+        const fetchUser = async () => {
+            try {
+                const res = await fetch("/api/auth/me", { credentials: "include" });
+                if (!res.ok) {
+                    router.push("/auth/login");
+                    return;
+                }
+                const data = await res.json();
+                if (data.user.role !== "Admin") {
+                    router.push("/");
+                    return;
+                }
+                setUser(data.user);
+            } catch {
+                router.push("/auth/login");
+            }
+        };
+        fetchUser();
+    }, [router]);
 
-    // Actions (unchanged)
     const handleUserSelect = async (user) => {
         setSelectedUser(user);
+        setShowActivityLog(false); // Reset dropdown on new select
         setUserMetaLoading(true);
         setPushMessage({ title: "", body: "" });
         try {
@@ -398,13 +405,45 @@ export default function FullAdminDashboard() {
         if (result) fetchPosts();
     };
 
+    // ⚡️ GOD-MODE POST EDITOR FUNCTIONS
+    const toggleInlineEdit = (post) => {
+        if (editingPost && editingPost._id === post._id) {
+            setEditingPost(null); // Close if already open
+        } else {
+            setEditingPost(post); // Open inline row
+        }
+    };
+
+    const moveMediaUp = (index) => {
+        if (index === 0) return;
+        const newMedia = [...editingPost.media];
+        [newMedia[index - 1], newMedia[index]] = [newMedia[index], newMedia[index - 1]];
+        setEditingPost({ ...editingPost, media: newMedia });
+    };
+
+    const moveMediaDown = (index) => {
+        if (index === editingPost.media.length - 1) return;
+        const newMedia = [...editingPost.media];
+        [newMedia[index + 1], newMedia[index]] = [newMedia[index], newMedia[index + 1]];
+        setEditingPost({ ...editingPost, media: newMedia });
+    };
+
+    const removeMedia = (index) => {
+        const newMedia = editingPost.media.filter((_, i) => i !== index);
+        setEditingPost({ ...editingPost, media: newMedia });
+    };
+
     const handleSaveEditedPost = async (e) => {
         e.preventDefault();
         const result = await executeAdminTask('EDIT_POST', {
             postId: editingPost._id,
             title: editingPost.title,
             message: editingPost.message,
-            category: editingPost.category
+            category: editingPost.category,
+            isAdminPost: editingPost.isAdminPost,
+            rejectionReason: editingPost.rejectionReason,
+            status: editingPost.status,
+            media: editingPost.media
         });
         if (result) {
             setEditingPost(null);
@@ -430,9 +469,7 @@ export default function FullAdminDashboard() {
     };
 
     if (initialLoading) return (
-        // Loading spinner JSX (unchanged)
         <div className="flex h-screen items-center justify-center bg-white dark:bg-gray-900 overflow-hidden relative">
-            {/* ... loading JSX same as original ... */}
             <div className="flex flex-col items-center z-10">
                 <div className="flex items-center gap-4 mb-8">
                     <div className="flex items-center gap-1.5">
@@ -463,13 +500,6 @@ export default function FullAdminDashboard() {
                     </div>
                 </div>
             </div>
-            <style jsx>{`
-          @keyframes loading {
-            0% { transform: translateX(-100%); }
-            50% { transform: translateX(100%); }
-            100% { transform: translateX(-100%); }
-          }
-        `}</style>
         </div>
     );
 
@@ -487,14 +517,6 @@ export default function FullAdminDashboard() {
                                 <span className="text-[8px] font-black uppercase tracking-widest text-gray-400">System v4.0.2</span>
                             </div>
                         </div>
-                        <div className="md:hidden flex gap-2">
-                            <button onClick={() => openDormantModalForDays(30)} disabled={sendingPush || taskLoading} className="bg-orange-500 text-white p-3 rounded-2xl shadow-lg shadow-orange-500/20 active:scale-95 disabled:opacity-50">
-                                {sendingPush ? <div className="h-5 w-5 border-2 border-white border-t-transparent animate-spin rounded-full"></div> : "🚀"}
-                            </button>
-                            <button onClick={handleBroadcastAll} disabled={taskLoading || sendingPush} className="bg-blue-600 text-white p-3 rounded-2xl shadow-lg shadow-blue-500/20 active:scale-95 disabled:opacity-50">
-                                {taskLoading ? <div className="h-5 w-5 border-2 border-white border-t-transparent animate-spin rounded-full"></div> : "📢"}
-                            </button>
-                        </div>
                     </div>
 
                     <div className="flex flex-col md:flex-row items-start md:items-center gap-4 w-full xl:w-auto">
@@ -507,7 +529,6 @@ export default function FullAdminDashboard() {
                                 <span className="bg-purple-600 text-white p-2 rounded-xl group-hover:bg-white group-hover:text-purple-600 transition-colors">💊</span>
                             </button>
 
-                            {/* NEW: Segmented Dormant Buttons */}
                             <div className="flex bg-orange-500/5 border-2 border-orange-500/20 rounded-2xl p-1">
                                 {DORMANT_PERIODS.map(days => (
                                     <button
@@ -549,11 +570,11 @@ export default function FullAdminDashboard() {
                                     key={r.id}
                                     onClick={() => setRange(r.id)}
                                     className={`px-3 py-2.5 md:py-2 rounded-xl text-[9px] font-black uppercase transition-all
-                                        ${range === r.id
+                    ${range === r.id
                                             ? "bg-blue-600 text-white shadow-md shadow-blue-600/30 active:scale-95"
                                             : "text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 hover:text-gray-600 dark:hover:text-gray-200"
                                         }
-                                    `}
+                  `}
                                 >
                                     {r.label}
                                 </button>
@@ -562,7 +583,6 @@ export default function FullAdminDashboard() {
                     </div>
                 </header>
 
-                {/* Metrics Grid - unchanged */}
                 <div className="grid grid-cols-2 lg:grid-cols-6 gap-4 mb-8">
                     <MetricCard title="Total Users" value={stats?.totalUsers} prevValue={stats?.prevTotalUsers} trend={stats?.usersTrend} color="text-blue-600" loading={statsLoading} />
                     <MetricCard title="App Opens (Total)" value={stats?.totalAppOpens} prevValue={stats?.prevTotalAppOpens} trend={stats?.activityTrend} color="text-purple-500" loading={statsLoading} />
@@ -572,10 +592,6 @@ export default function FullAdminDashboard() {
                     <MetricCard title="Rejected" value={stats?.postStats?.rejected} prevValue={stats?.postStats?.prevRejected} trend={stats?.postStats?.rejectedTrend} color="text-red-500" loading={statsLoading} />
                 </div>
 
-                {/* Rest of dashboard unchanged - activity graph, tabs, tables, modals ... (omitted for brevity, same as original) */}
-                {/* ... include all original JSX for metrics grid, tabs, users/posts tables, selected user panel, editing modal, pill modal ... */}
-
-                {/* ENHANCED DORMANT MODAL */}
                 {showDormantModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
                         <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-6 w-full max-w-4xl max-h-[90vh] border border-orange-200 dark:border-orange-700 shadow-2xl relative overflow-hidden flex flex-col">
@@ -592,7 +608,6 @@ export default function FullAdminDashboard() {
                                 </button>
                             </div>
 
-                            {/* Search & Select Controls */}
                             <div className="flex gap-4 mb-6 p-2 bg-gray-50 dark:bg-gray-800/50 rounded-2xl">
                                 <input
                                     type="text"
@@ -605,7 +620,6 @@ export default function FullAdminDashboard() {
                                 <button onClick={selectNoneDormant} className="px-4 py-3 bg-gray-500 text-white rounded-xl font-black uppercase text-xs hover:bg-gray-600">None</button>
                             </div>
 
-                            {/* Users List */}
                             <div className="flex-1 overflow-auto mb-6 custom-scrollbar">
                                 {dormantLoading ? (
                                     <div className="flex items-center justify-center p-20">
@@ -643,7 +657,6 @@ export default function FullAdminDashboard() {
                                 )}
                             </div>
 
-                            {/* Message & Send */}
                             <div className="border-t border-gray-200 dark:border-gray-700 pt-6 p-2">
                                 <div className="flex items-center justify-between mb-4">
                                     <label className="text-[11px] font-black uppercase text-gray-500 tracking-widest">Transmission Message</label>
@@ -681,27 +694,30 @@ export default function FullAdminDashboard() {
                         </div>
                     </div>
                 )}
-                {/* --- METRICS GRID -- */}
+
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
                     <div className="lg:col-span-2 bg-white dark:bg-gray-800 p-4 md:p-6 rounded-[2rem] md:rounded-[2.5rem] border border-gray-200 dark:border-gray-700 relative overflow-hidden">
                         <div className="flex justify-between items-center mb-8">
                             <h3 className="font-black text-[10px] uppercase tracking-widest text-gray-400 flex items-center gap-2">
                                 <span className="h-2 w-2 rounded-full bg-blue-600 animate-ping"></span>
-                                Activity Flow
+                                Activity Flow (Tri-Metric)
                             </h3>
 
-                            {/* ⚡️ ADDED: A small legend so admins know what the colors mean */}
+                            {/* ⚡️ NEW: Triple Metric Legend */}
                             <div className="hidden md:flex items-center gap-4">
                                 <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-gray-300 dark:bg-gray-600"></div>
-                                    <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Previous</span>
+                                    <div className="w-2 h-2 rounded-full bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.4)]"></div>
+                                    <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Total Pulses</span>
                                 </div>
                                 <div className="flex items-center gap-2">
-                                    <div className="w-2 h-2 rounded-full bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.4)]"></div>
-                                    <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Current</span>
+                                    <div className="w-2 h-2 rounded-full bg-purple-500 shadow-[0_0_8px_rgba(168,85,247,0.4)]"></div>
+                                    <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Unique Operators</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 rounded-full bg-gradient-to-t from-green-500 to-gray-800 border border-gray-600"></div>
+                                    <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Platform (And/iOS)</span>
                                 </div>
                             </div>
-                            <span className="md:hidden text-[8px] font-bold text-gray-400 uppercase tracking-widest italic">Swipe to view →</span>
                         </div>
 
                         {statsLoading && (
@@ -716,16 +732,14 @@ export default function FullAdminDashboard() {
                         <div className="overflow-x-auto pb-4 scrollbar-hide">
                             <div className="flex items-end justify-between h-64 gap-1 md:gap-3 min-w-[600px] md:min-w-full px-2">
                                 {stats?.dailyActivity?.map((data, idx) => {
-                                    // ⚡️ Find the max value between BOTH current and previous arrays to scale the graph correctly
+
+                                    // Scale based purely on the highest 'count' since Unique & Platforms are subsets/equal to Total Count
                                     const maxVal = Math.max(
                                         ...stats.dailyActivity.map(d => d.count),
-                                        ...stats.dailyActivity.map(d => d.prevCount || 0),
                                         1
                                     );
 
-                                    // Calculate heights for both bars
-                                    const currentHeight = (data.count / maxVal) * 140;
-                                    const prevHeight = ((data.prevCount || 0) / maxVal) * 140;
+                                    const platformTotal = (data.iosCount || 0) + (data.androidCount || 0);
 
                                     let displayDate = data._id;
                                     if (!['24h', 'today', 'yesterday'].includes(range)) {
@@ -736,27 +750,46 @@ export default function FullAdminDashboard() {
                                     const shouldShowLabel = stats.dailyActivity.length <= 10 || idx % (stats.dailyActivity.length > 24 ? 4 : 1) === 0;
 
                                     return (
-                                        <div key={idx} className="flex-1 flex flex-col items-center group relative">
-                                            {/* ⚡️ Tooltip for hovering over the bars to see exact numbers */}
-                                            <div className="absolute -top-10 opacity-0 group-hover:opacity-100 transition-opacity bg-black/80 text-white text-[8px] font-black uppercase p-2 rounded-lg z-50 pointer-events-none whitespace-nowrap">
-                                                <span className="text-gray-400">Prev: {data.prevCount || 0}</span> | <span className="text-blue-400">Curr: {data.count}</span>
+                                        <div key={idx} className="flex-1 flex flex-col items-center group relative h-full">
+
+                                            {/* ⚡️ NEW: Advanced Tri-Metric Tooltip */}
+                                            <div className="absolute -top-16 opacity-0 group-hover:opacity-100 transition-opacity bg-black/90 text-white text-[9px] font-black uppercase p-3 rounded-xl z-50 pointer-events-none whitespace-nowrap shadow-2xl flex flex-col gap-1 border border-gray-700">
+                                                <span className="text-blue-400">Total: {data.count} <span className="text-gray-500">({data.prevCount} prev)</span></span>
+                                                <span className="text-purple-400">Unique: {data.uniqueCount} <span className="text-gray-500">({data.prevUniqueCount} prev)</span></span>
+                                                <span className="text-green-400 mt-1 pt-1 border-t border-gray-800">
+                                                    Android: {data.androidCount} <span className="text-gray-600 mx-1">|</span> <span className="text-gray-200">iOS/Web: {data.iosCount}</span>
+                                                </span>
                                             </div>
 
-                                            {/* ⚡️ The Bar Container (Holds both bars side-by-side) */}
-                                            <div className="flex-1 flex items-end justify-center gap-0.5 md:gap-1 w-full">
-                                                {/* Previous Bar */}
+                                            <div className="flex-1 flex items-end justify-center gap-0.5 md:gap-1 w-full h-full relative">
+
+                                                {/* ⚡️ Bar 1: Total Activity */}
                                                 <div
-                                                    className={`w-full max-w-[12px] md:max-w-[16px] rounded-t-md transition-all duration-1000 ease-out 
-                                        ${(data.prevCount || 0) > 0 ? 'bg-gray-300 dark:bg-gray-600' : 'bg-transparent'}`}
-                                                    style={{ height: `${Math.max(prevHeight, 4)}px` }}
+                                                    className={`w-full max-w-[8px] md:max-w-[12px] rounded-t-md transition-all duration-1000 ease-out group-hover:brightness-110 
+                          ${data.count > 0 ? 'bg-blue-600 shadow-[0_0_10px_rgba(37,99,235,0.2)]' : 'bg-gray-100 dark:bg-gray-800'}`}
+                                                    style={{ height: `${Math.max((data.count / maxVal) * 140, 4)}px` }}
                                                 ></div>
 
-                                                {/* Current Bar */}
+                                                {/* ⚡️ Bar 2: Unique Active Users */}
                                                 <div
-                                                    className={`w-full max-w-[12px] md:max-w-[16px] rounded-t-md transition-all duration-1000 ease-out group-hover:brightness-110 
-                                        ${data.count > 0 ? 'bg-blue-600 shadow-[0_0_15px_rgba(37,99,235,0.15)]' : 'bg-gray-100 dark:bg-gray-700'}`}
-                                                    style={{ height: `${Math.max(currentHeight, 4)}px` }}
+                                                    className={`w-full max-w-[8px] md:max-w-[12px] rounded-t-md transition-all duration-1000 ease-out group-hover:brightness-110 
+                          ${data.uniqueCount > 0 ? 'bg-purple-500 shadow-[0_0_10px_rgba(168,85,247,0.2)]' : 'bg-gray-100 dark:bg-gray-800'}`}
+                                                    style={{ height: `${Math.max((data.uniqueCount / maxVal) * 140, 4)}px` }}
                                                 ></div>
+
+                                                {/* ⚡️ Bar 3: Stacked Platform Breakdown */}
+                                                {platformTotal > 0 ? (
+                                                    <div
+                                                        className="w-full max-w-[8px] md:max-w-[12px] flex flex-col justify-end rounded-t-md overflow-hidden transition-all duration-1000 ease-out group-hover:brightness-110"
+                                                        style={{ height: `${Math.max((platformTotal / maxVal) * 140, 4)}px` }}
+                                                    >
+                                                        <div style={{ flexGrow: data.iosCount }} className="bg-gray-800 dark:bg-gray-300 w-full"></div>
+                                                        <div style={{ flexGrow: data.androidCount }} className="bg-green-500 w-full"></div>
+                                                    </div>
+                                                ) : (
+                                                    <div className="w-full max-w-[8px] md:max-w-[12px] rounded-t-md bg-gray-100 dark:bg-gray-800" style={{ height: '4px' }}></div>
+                                                )}
+
                                             </div>
 
                                             <div className="h-6 flex items-center justify-center mt-2">
@@ -775,19 +808,35 @@ export default function FullAdminDashboard() {
                         </div>
                     </div>
 
-                    {/* ... Origin Pulse ... */}
-                    <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-200 dark:border-gray-700">
-                        <h3 className="font-black text-[10px] uppercase tracking-widest mb-6 text-gray-400 italic underline decoration-blue-600 decoration-2 underline-offset-4">Origin Pulse</h3>
-                        <div className="space-y-2 overflow-y-auto max-h-[250px] pr-2 custom-scrollbar">
-                            {stats?.countries?.map(c => (
-                                <div key={c._id} className="flex items-center justify-between p-3 rounded-2xl bg-gray-50 dark:bg-gray-900 border border-transparent hover:border-blue-500/20 transition-all cursor-default">
-                                    <div className="flex items-center gap-3">
-                                        <span className="text-lg leading-none">{getFlagEmoji(c._id)}</span>
-                                        <span className="font-black text-[10px] text-gray-500 uppercase">{c._id || "Other"}</span>
+                    <div className="flex flex-col gap-6">
+                        <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-200 dark:border-gray-700 flex-1">
+                            <h3 className="font-black text-[10px] uppercase tracking-widest mb-6 text-gray-400 italic underline decoration-blue-600 decoration-2 underline-offset-4">Platform OS Breakdown</h3>
+                            <div className="space-y-3">
+                                {stats?.platforms?.map(p => (
+                                    <div key={p._id} className="flex items-center justify-between p-3 rounded-2xl bg-gray-50 dark:bg-gray-900 border border-transparent hover:border-blue-500/20 transition-all">
+                                        <div className="flex items-center gap-3">
+                                            {getPlatformIcon(p._id)}
+                                            <span className="font-black text-xs text-gray-700 dark:text-gray-300 uppercase">{p._id || "Unknown"}</span>
+                                        </div>
+                                        <span className="font-black text-blue-600 text-xs px-2 py-1 bg-blue-600/5 rounded-lg">{p.count}</span>
                                     </div>
-                                    <span className="font-black text-blue-600 text-xs px-2 py-1 bg-blue-600/5 rounded-lg">{c.count}</span>
-                                </div>
-                            ))}
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="bg-white dark:bg-gray-800 p-6 rounded-[2.5rem] border border-gray-200 dark:border-gray-700 flex-1">
+                            <h3 className="font-black text-[10px] uppercase tracking-widest mb-6 text-gray-400 italic underline decoration-blue-600 decoration-2 underline-offset-4">Origin Pulse</h3>
+                            <div className="space-y-2 overflow-y-auto max-h-[150px] pr-2 custom-scrollbar">
+                                {stats?.countries?.map(c => (
+                                    <div key={c._id} className="flex items-center justify-between p-3 rounded-2xl bg-gray-50 dark:bg-gray-900 border border-transparent hover:border-blue-500/20 transition-all">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-lg leading-none">{getFlagEmoji(c._id)}</span>
+                                            <span className="font-black text-[10px] text-gray-500 uppercase">{c._id || "Other"}</span>
+                                        </div>
+                                        <span className="font-black text-blue-600 text-xs px-2 py-1 bg-blue-600/5 rounded-lg">{c.count}</span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -803,7 +852,7 @@ export default function FullAdminDashboard() {
                         onClick={() => setActiveTab('posts')}
                         className={`px-6 py-3 rounded-2xl font-black text-xs uppercase tracking-widest transition-all ${activeTab === 'posts' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/30' : 'bg-white dark:bg-gray-800 text-gray-500 border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
                     >
-                        Transmission Logs (Posts)
+                        Transmission Logs
                     </button>
                 </div>
 
@@ -834,18 +883,19 @@ export default function FullAdminDashboard() {
                             <table className="w-full text-left">
                                 <thead className="bg-gray-50 dark:bg-gray-900 text-[9px] uppercase font-black text-gray-400 tracking-[0.2em]">
                                     <tr>
-                                        <th className="px-8 py-5">Operator Info</th>
-                                        <th className="px-8 py-5">Location</th>
-                                        <th className="px-8 py-5">Activity</th>
-                                        <th className="px-8 py-5">OC Balance</th>
-                                        <th className="px-8 py-5">Last Comms</th>
-                                        <th className="px-8 py-5 text-center">Status</th>
+                                        <th className="px-6 py-5">Operator Info</th>
+                                        <th className="px-6 py-5 text-center">Device</th>
+                                        <th className="px-6 py-5">Location</th>
+                                        <th className="px-6 py-5">Activity</th>
+                                        <th className="px-6 py-5">OC Balance</th>
+                                        <th className="px-6 py-5">Last Comms</th>
+                                        <th className="px-6 py-5 text-center">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-50 dark:divide-gray-700">
                                     {tableLoading ? (
                                         <tr>
-                                            <td colSpan="6" className="p-20 text-center">
+                                            <td colSpan="7" className="p-20 text-center">
                                                 <div className="flex flex-col items-center">
                                                     <div className="h-10 w-10 animate-spin rounded-full border-4 border-blue-600 border-t-transparent mb-4"></div>
                                                     <p className="font-black text-gray-300 text-[9px] uppercase tracking-[0.3em]">Querying Database...</p>
@@ -858,7 +908,7 @@ export default function FullAdminDashboard() {
                                             onClick={() => handleUserSelect(u)}
                                             className={`cursor-pointer transition-all ${selectedUser?._id === u._id ? 'bg-blue-600/5 border-l-4 border-blue-600' : 'hover:bg-gray-50 dark:hover:bg-white/5 border-l-4 border-transparent'}`}
                                         >
-                                            <td className="px-8 py-4">
+                                            <td className="px-6 py-4">
                                                 <div className="flex items-center gap-4">
                                                     <Image
                                                         height={40}
@@ -873,22 +923,27 @@ export default function FullAdminDashboard() {
                                                     </div>
                                                 </div>
                                             </td>
-                                            <td className="px-8 py-4">
+                                            <td className="px-6 py-4 text-center">
+                                                <div className="flex justify-center" title={u.platform || 'Unknown'}>
+                                                    {getPlatformIcon(u.platform)}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
                                                 <span className="font-black text-[10px] uppercase flex items-center gap-2">
                                                     <span className="text-base leading-none">{getFlagEmoji(u.country)}</span>
                                                     {u.country || "---"}
                                                 </span>
                                             </td>
-                                            <td className="px-8 py-4">
+                                            <td className="px-6 py-4">
                                                 <span className="font-black text-[11px] text-purple-500 bg-purple-500/10 px-2 py-1 rounded-lg">{u.appOpens || 0}</span>
                                             </td>
-                                            <td className="px-8 py-4">
+                                            <td className="px-6 py-4">
                                                 <span className="font-black text-[11px] text-yellow-600 bg-yellow-500/10 px-2 py-1 rounded-lg border border-yellow-500/20">{u.coins || 0} OC</span>
                                             </td>
-                                            <td className="px-8 py-4 text-[10px] font-bold text-gray-400 uppercase">
+                                            <td className="px-6 py-4 text-[10px] font-bold text-gray-400 uppercase">
                                                 {u.lastActive ? new Date(u.lastActive).toLocaleString('en-NG', { dateStyle: 'short', timeStyle: 'short' }) : 'Never'}
                                             </td>
-                                            <td className="px-8 py-4">
+                                            <td className="px-6 py-4">
                                                 <div className="flex justify-center">
                                                     <div className={`h-2.5 w-2.5 rounded-full ${Date.now() - new Date(u.lastActive) < 600000 ? 'bg-green-500 shadow-[0_0_12px_rgba(34,197,94,0.6)] animate-pulse' : 'bg-gray-200 dark:bg-gray-700'}`}></div>
                                                 </div>
@@ -921,6 +976,7 @@ export default function FullAdminDashboard() {
                     </div>
                 )}
 
+                {/* ⚡️ ENHANCED GOD-MODE POST VIEWER (WITH INLINE ROW EXPANSION) */}
                 {activeTab === 'posts' && (
                     <div className="bg-white dark:bg-gray-800 rounded-[2.5rem] border border-gray-200 dark:border-gray-700 overflow-hidden shadow-xl mb-20 animate-in fade-in duration-300">
                         <div className="p-6 border-b border-gray-100 dark:border-gray-700 flex justify-between items-center gap-4">
@@ -950,32 +1006,188 @@ export default function FullAdminDashboard() {
                                             </td>
                                         </tr>
                                     ) : postList.map((post) => (
-                                        <tr key={post._id} className="hover:bg-gray-50 dark:hover:bg-white/5 transition-all">
-                                            <td className="px-8 py-4 max-w-xs">
-                                                <p className="font-black text-gray-900 dark:text-white text-sm truncate">{post.title}</p>
-                                                <p className="text-[9px] text-gray-400 font-mono uppercase truncate">{post.message}</p>
-                                            </td>
-                                            <td className="px-8 py-4 text-[11px] font-bold text-gray-500 uppercase">
-                                                {post.authorName || "Unknown"}
-                                            </td>
-                                            <td className="px-8 py-4">
-                                                <span className="font-black text-[9px] uppercase bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-md">{post.category || "News"}</span>
-                                            </td>
-                                            <td className="px-8 py-4 text-center">
-                                                <span className={`font-black text-[9px] uppercase px-3 py-1 rounded-xl ${post.status === 'approved' ? 'bg-green-500/10 text-green-500' :
-                                                    post.status === 'rejected' ? 'bg-red-500/10 text-red-500' :
-                                                        'bg-orange-500/10 text-orange-500'
-                                                    }`}>
-                                                    {post.status}
-                                                </span>
-                                            </td>
-                                            <td className="px-8 py-4 flex items-center justify-end gap-2">
-                                                <button onClick={() => handleUpdatePostStatus(post._id, 'approved')} className="p-2 bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white rounded-lg transition-colors" title="Approve">✔️</button>
-                                                <button onClick={() => handleUpdatePostStatus(post._id, 'rejected')} className="p-2 bg-orange-500/10 text-orange-500 hover:bg-orange-500 hover:text-white rounded-lg transition-colors" title="Reject">⚠️</button>
-                                                <button onClick={() => setEditingPost(post)} className="p-2 bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white rounded-lg transition-colors" title="Edit">✏️</button>
-                                                <button onClick={() => handleDeletePost(post._id)} className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors" title="Delete">🗑️</button>
-                                            </td>
-                                        </tr>
+                                        <React.Fragment key={post._id}>
+                                            <tr className={`hover:bg-gray-50 dark:hover:bg-white/5 transition-all ${editingPost?._id === post._id ? 'bg-blue-50 dark:bg-blue-900/10' : ''}`}>
+                                                <td className="px-8 py-4 max-w-xs">
+                                                    <p className="font-black text-gray-900 dark:text-white text-sm truncate flex items-center gap-2">
+                                                        {post.isAdminPost && <span className="text-[8px] bg-red-500 text-white px-2 rounded-full uppercase">Admin</span>}
+                                                        {post.title}
+                                                    </p>
+                                                    <p className="text-[9px] text-gray-400 font-mono uppercase truncate mt-1">{post.message}</p>
+                                                </td>
+                                                <td className="px-8 py-4 text-[11px] font-bold text-gray-500 uppercase">
+                                                    {post.authorName || "Unknown"}
+                                                </td>
+                                                <td className="px-8 py-4">
+                                                    <span className="font-black text-[9px] uppercase bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded-md">{post.category || "News"}</span>
+                                                </td>
+                                                <td className="px-8 py-4 text-center">
+                                                    <span className={`font-black text-[9px] uppercase px-3 py-1 rounded-xl ${post.status === 'approved' ? 'bg-green-500/10 text-green-500' :
+                                                        post.status === 'rejected' ? 'bg-red-500/10 text-red-500' :
+                                                            'bg-orange-500/10 text-orange-500'
+                                                        }`}>
+                                                        {post.status}
+                                                    </span>
+                                                </td>
+                                                <td className="px-8 py-4 flex items-center justify-end gap-2">
+                                                    <button onClick={() => handleUpdatePostStatus(post._id, 'approved')} className="p-2 bg-green-500/10 text-green-500 hover:bg-green-500 hover:text-white rounded-lg transition-colors" title="Approve">✔️</button>
+                                                    <button onClick={() => handleUpdatePostStatus(post._id, 'rejected')} className="p-2 bg-orange-500/10 text-orange-500 hover:bg-orange-500 hover:text-white rounded-lg transition-colors" title="Reject">⚠️</button>
+
+                                                    {/* ⚡️ The Edit button now toggles the inline expansion drawer */}
+                                                    <button onClick={() => toggleInlineEdit(post)} className={`p-2 rounded-lg transition-colors ${editingPost?._id === post._id ? 'bg-blue-600 text-white' : 'bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white'}`} title="Edit">
+                                                        {editingPost?._id === post._id ? '🔽' : '✏️'}
+                                                    </button>
+
+                                                    <button onClick={() => handleDeletePost(post._id)} className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-colors" title="Delete">🗑️</button>
+                                                </td>
+                                            </tr>
+
+                                            {/* ⚡️ NEW INLINE EDITOR EXPANSION DRAWER */}
+                                            {editingPost && editingPost._id === post._id && (
+                                                <tr>
+                                                    <td colSpan="5" className="p-0 border-b-2 border-blue-500 bg-gray-50 dark:bg-gray-800/80">
+                                                        <div className="p-6 md:p-8 border-l-4 border-blue-500 shadow-inner animate-in slide-in-from-top-4 duration-300">
+
+                                                            <div className="flex items-center gap-3 mb-6">
+                                                                <span className="text-3xl">📝</span>
+                                                                <div>
+                                                                    <h3 className="text-xl font-black italic uppercase tracking-tighter text-blue-600">Command Override</h3>
+                                                                    <p className="text-[10px] font-mono text-gray-500 uppercase tracking-widest mt-1">ID: {editingPost._id}</p>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="flex flex-wrap gap-2 mb-6 bg-white dark:bg-gray-900 p-3 rounded-2xl border border-gray-200 dark:border-gray-700">
+                                                                <span className="text-[10px] font-black text-gray-500 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-xl uppercase">❤️ {editingPost.likeCount || 0} Likes</span>
+                                                                <span className="text-[10px] font-black text-gray-500 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-xl uppercase">💬 {editingPost.comments?.length || 0} Comments</span>
+                                                                <span className="text-[10px] font-black text-gray-500 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-xl uppercase">👁️ {editingPost.views || 0} Views</span>
+                                                                <span className="text-[10px] font-black text-gray-500 bg-gray-50 dark:bg-gray-800 px-3 py-1.5 rounded-xl uppercase text-orange-500">🔥 {editingPost.hypePoints || 0} Hype</span>
+                                                            </div>
+
+                                                            <form onSubmit={handleSaveEditedPost} className="space-y-6">
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                    <div>
+                                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Title</label>
+                                                                        <input
+                                                                            type="text"
+                                                                            value={editingPost.title}
+                                                                            onChange={(e) => setEditingPost({ ...editingPost, title: e.target.value })}
+                                                                            className="w-full bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-blue-500 text-sm"
+                                                                        />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Category</label>
+                                                                        <input
+                                                                            type="text"
+                                                                            value={editingPost.category || "News"}
+                                                                            onChange={(e) => setEditingPost({ ...editingPost, category: e.target.value })}
+                                                                            className="w-full bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-blue-500 text-sm"
+                                                                        />
+                                                                    </div>
+                                                                </div>
+
+                                                                <div>
+                                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Message</label>
+                                                                    <textarea
+                                                                        rows="4"
+                                                                        value={editingPost.message}
+                                                                        onChange={(e) => setEditingPost({ ...editingPost, message: e.target.value })}
+                                                                        className="w-full bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-medium outline-none focus:ring-2 ring-blue-500 resize-none text-sm"
+                                                                    />
+                                                                </div>
+
+                                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                                    <div className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-200 dark:border-gray-700">
+                                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-3">Status Override</label>
+                                                                        <select
+                                                                            value={editingPost.status}
+                                                                            onChange={(e) => setEditingPost({ ...editingPost, status: e.target.value })}
+                                                                            className="w-full bg-gray-50 dark:bg-gray-800 p-3 rounded-xl border border-gray-200 dark:border-gray-700 font-black text-[11px] uppercase outline-none focus:ring-2 ring-blue-500"
+                                                                        >
+                                                                            <option value="pending">⏳ Pending</option>
+                                                                            <option value="approved">✅ Approved</option>
+                                                                            <option value="rejected">❌ Rejected</option>
+                                                                            <option value="pending_media">📁 Pending Media</option>
+                                                                        </select>
+                                                                    </div>
+
+                                                                    <div className="bg-white dark:bg-gray-900 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 flex items-center justify-between">
+                                                                        <div>
+                                                                            <label className="text-[10px] font-black text-gray-900 dark:text-white uppercase tracking-widest block">Is Admin Post?</label>
+                                                                            <p className="text-[8px] font-medium text-gray-500 uppercase mt-1">Forces System Tag on UI</p>
+                                                                        </div>
+                                                                        <button
+                                                                            type="button"
+                                                                            onClick={() => setEditingPost({ ...editingPost, isAdminPost: !editingPost.isAdminPost })}
+                                                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${editingPost.isAdminPost ? 'bg-red-500' : 'bg-gray-300 dark:bg-gray-600'}`}
+                                                                        >
+                                                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${editingPost.isAdminPost ? 'translate-x-6' : 'translate-x-1'}`} />
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div>
+                                                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Rejection / Mod Reason</label>
+                                                                    <input
+                                                                        type="text"
+                                                                        value={editingPost.rejectionReason || ""}
+                                                                        onChange={(e) => setEditingPost({ ...editingPost, rejectionReason: e.target.value })}
+                                                                        placeholder="E.g. Not anime related..."
+                                                                        className="w-full bg-red-500/5 p-4 rounded-2xl border border-red-500/20 font-mono text-red-500 outline-none focus:ring-2 ring-red-500 text-xs"
+                                                                    />
+                                                                </div>
+
+                                                                {/* Media Array Manager */}
+                                                                {editingPost.media && editingPost.media.length > 0 && (
+                                                                    <div>
+                                                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-3">Media Manager ({editingPost.media.length} files)</label>
+                                                                        <div className="space-y-2">
+                                                                            {editingPost.media.map((item, index) => (
+                                                                                <div key={index} className="flex items-center gap-4 bg-white dark:bg-gray-900 p-2 pr-4 rounded-xl border border-gray-200 dark:border-gray-700">
+                                                                                    <Image
+                                                                                        src={getOptimizedCloudinaryUrl(item.url)}
+                                                                                        width={40} height={40}
+                                                                                        className="h-10 w-10 rounded-lg object-cover bg-gray-200"
+                                                                                        alt={`media-${index}`}
+                                                                                    />
+                                                                                    <div className="flex-1 min-w-0">
+                                                                                        <p className="text-[9px] font-mono text-gray-500 truncate">{item.url}</p>
+                                                                                        <p className="text-[8px] font-black uppercase tracking-widest text-blue-500">TYPE: {item.type}</p>
+                                                                                    </div>
+                                                                                    <div className="flex items-center gap-1">
+                                                                                        <button type="button" onClick={() => moveMediaUp(index)} disabled={index === 0} className="p-1.5 bg-gray-200 dark:bg-gray-700 rounded-md disabled:opacity-30 hover:bg-blue-500 hover:text-white transition-colors">↑</button>
+                                                                                        <button type="button" onClick={() => moveMediaDown(index)} disabled={index === editingPost.media.length - 1} className="p-1.5 bg-gray-200 dark:bg-gray-700 rounded-md disabled:opacity-30 hover:bg-blue-500 hover:text-white transition-colors">↓</button>
+                                                                                        <div className="w-px h-4 bg-gray-300 dark:bg-gray-600 mx-1"></div>
+                                                                                        <button type="button" onClick={() => removeMedia(index)} className="p-1.5 bg-red-500/10 text-red-500 rounded-md hover:bg-red-500 hover:text-white transition-colors">❌</button>
+                                                                                    </div>
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    </div>
+                                                                )}
+
+                                                                <div className="flex justify-end gap-4 mt-6">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => setEditingPost(null)}
+                                                                        className="px-6 py-4 rounded-2xl font-black uppercase tracking-[0.2em] text-xs text-gray-500 hover:bg-gray-200 dark:hover:bg-gray-700 transition-all"
+                                                                    >
+                                                                        Cancel
+                                                                    </button>
+                                                                    <button
+                                                                        type="submit"
+                                                                        disabled={taskLoading}
+                                                                        className="flex-1 max-w-sm bg-blue-600 text-white px-6 py-4 rounded-2xl font-black uppercase tracking-[0.2em] text-xs hover:bg-blue-700 transition-all flex justify-center items-center shadow-lg shadow-blue-500/30"
+                                                                    >
+                                                                        {taskLoading ? <div className="h-4 w-4 border-2 border-white border-t-transparent animate-spin rounded-full"></div> : "Deploy Override to Server"}
+                                                                    </button>
+                                                                </div>
+                                                            </form>
+
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                            )}
+                                        </React.Fragment>
                                     ))}
                                 </tbody>
                             </table>
@@ -1003,9 +1215,10 @@ export default function FullAdminDashboard() {
                     </div>
                 )}
 
+                {/* ⚡️ GOD-MODE USER DETAILS (FULL SCHEMA DISPLAY) */}
                 {selectedUser && activeTab === 'users' && (
                     <div className="bg-white dark:bg-gray-800 rounded-[3rem] border-2 border-blue-600/30 p-8 shadow-2xl animate-in fade-in slide-in-from-bottom-8 duration-500 mb-20 relative overflow-hidden">
-                        <div className="absolute top-0 right-0 p-6">
+                        <div className="absolute top-0 right-0 p-6 z-10">
                             <button
                                 onClick={() => setSelectedUser(null)}
                                 className="p-2 bg-gray-100 dark:bg-gray-700 rounded-full text-gray-400 hover:text-red-500 transition-all hover:rotate-90"
@@ -1014,272 +1227,348 @@ export default function FullAdminDashboard() {
                             </button>
                         </div>
 
-                        <div className="flex flex-col lg:flex-row gap-10">
+                        <div className="flex flex-col lg:flex-row gap-8">
+                            {/* Left Column: Avatar & Quick Actions */}
                             <div className="flex flex-col items-center lg:items-start shrink-0">
-                                <Image
-                                    width={176}
-                                    height={176}
-                                    src={getOptimizedCloudinaryUrl(selectedUser.profilePic?.url || selectedUser.image || selectedUser.avatar) || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'}
-                                    className="h-44 w-44 rounded-[3rem] object-cover border-4 border-white dark:border-gray-700 shadow-2xl mb-6 bg-gray-100"
-                                    alt="Avatar"
-                                />
+                                <div className="relative mb-6">
+                                    <Image
+                                        width={176}
+                                        height={176}
+                                        src={getOptimizedCloudinaryUrl(selectedUser.profilePic?.url || selectedUser.image || selectedUser.avatar) || 'https://cdn-icons-png.flaticon.com/512/149/149071.png'}
+                                        className="h-44 w-44 rounded-[3rem] object-cover border-4 border-white dark:border-gray-700 shadow-2xl bg-gray-100"
+                                        alt="Avatar"
+                                    />
+                                    {selectedUser.role === 'Admin' && (
+                                        <div className="absolute -bottom-3 -right-3 bg-red-500 text-white px-3 py-1 rounded-xl text-[10px] font-black uppercase shadow-lg border-2 border-white dark:border-gray-800">Admin</div>
+                                    )}
+                                </div>
+
                                 <Link
                                     href={`/author/${selectedUser.deviceId || selectedUser._id}`}
-                                    className="w-full bg-blue-600 text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] text-center hover:bg-blue-700 hover:shadow-xl transition-all flex items-center justify-center gap-2 group"
+                                    className="w-full bg-blue-600 text-white px-6 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] text-center hover:bg-blue-700 hover:shadow-xl transition-all flex items-center justify-center gap-2 group mb-3"
                                 >
                                     Access Profile <span className="group-hover:translate-x-1 transition-transform">↗</span>
                                 </Link>
+
+                                <div className="w-full bg-blue-600/5 p-4 rounded-2xl border border-blue-600/10 text-center flex flex-col justify-center gap-2">
+                                    <label className="text-[9px] font-black text-gray-400 uppercase block">Total Transmissions</label>
+                                    {userMetaLoading ? (
+                                        <div className="h-8 w-12 bg-gray-200 dark:bg-gray-700 animate-pulse rounded mx-auto"></div>
+                                    ) : (
+                                        <p className="text-4xl font-black text-blue-600">{selectedUser.postCount} <span className="text-[10px] tracking-widest italic opacity-50 uppercase">Posts</span></p>
+                                    )}
+                                    <button
+                                        onClick={handleGiveOC}
+                                        disabled={taskLoading}
+                                        className="mt-2 text-[9px] font-black bg-yellow-500 text-white uppercase tracking-widest py-2 rounded-xl shadow-lg shadow-yellow-500/30 hover:bg-yellow-600 active:scale-95 transition-all"
+                                    >
+                                        {taskLoading ? "Processing..." : "Grant OC 🪙"}
+                                    </button>
+                                </div>
                             </div>
 
-                            <div className="flex-1">
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                                    <div className="lg:col-span-2">
-                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1 italic">Operator Signature</label>
-                                        <h2 className="text-4xl font-black italic tracking-tighter uppercase mb-1">{selectedUser.username || "ANONYMOUS OPERATOR"}</h2>
-                                        <p className="text-[10px] font-mono text-blue-500 break-all bg-blue-500/5 p-2 rounded-lg inline-block border border-blue-500/10">{selectedUser._id}</p>
+                            {/* Right Column: Full Schema Breakdown */}
+                            <div className="flex-1 space-y-6">
+
+                                {/* Header Info */}
+                                <div>
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-1 italic">Operator Signature</label>
+                                    <h2 className="text-4xl font-black italic tracking-tighter uppercase mb-1">{selectedUser.username || "ANONYMOUS OPERATOR"}</h2>
+                                    <div className="flex gap-2 flex-wrap mt-2">
+                                        <span className="text-[10px] font-mono text-blue-500 bg-blue-500/5 p-1.5 px-3 rounded-lg border border-blue-500/10 uppercase tracking-widest">MONGO: {selectedUser._id}</span>
+                                        <span className="text-[10px] font-mono text-purple-500 bg-purple-500/5 p-1.5 px-3 rounded-lg border border-purple-500/10 uppercase tracking-widest">HWID: {selectedUser.hardwareId || "N/A"}</span>
                                     </div>
+                                </div>
 
-                                    <div className="bg-blue-600/5 p-4 rounded-3xl border border-blue-600/10 text-center flex flex-col justify-center gap-2">
-                                        <label className="text-[9px] font-black text-gray-400 uppercase block">Transmissions</label>
-                                        {userMetaLoading ? (
-                                            <div className="h-8 w-12 bg-gray-200 dark:bg-gray-700 animate-pulse rounded mx-auto"></div>
-                                        ) : (
-                                            <p className="text-4xl font-black text-blue-600">{selectedUser.postCount} <span className="text-[10px] tracking-widest italic opacity-50 uppercase">Posts</span></p>
-                                        )}
-                                        <button
-                                            onClick={handleGiveOC}
-                                            disabled={taskLoading}
-                                            className="mt-2 text-[9px] font-black bg-yellow-500 text-white uppercase tracking-widest py-2 rounded-xl shadow-lg shadow-yellow-500/30 hover:bg-yellow-600 active:scale-95 transition-all"
-                                        >
-                                            {taskLoading ? "Processing..." : "Grant OC 🪙"}
-                                        </button>
-                                    </div>
-
-                                    <div className="lg:col-span-3 bg-gray-50 dark:bg-gray-900/50 p-6 rounded-[2.5rem] border border-gray-200 dark:border-gray-700 shadow-inner">
-                                        <div className="flex items-center gap-3 mb-6">
-                                            <span className="p-2 bg-blue-600 rounded-xl text-white text-xs shadow-lg shadow-blue-500/30">🔔</span>
-                                            <h4 className="font-black text-xs uppercase tracking-[0.2em]">Signal Composer</h4>
-                                        </div>
-
-                                        {!selectedUser.pushToken ? (
-                                            <div className="p-6 bg-red-500/5 border border-red-500/20 rounded-2xl text-red-500 font-black text-[10px] uppercase text-center tracking-widest">
-                                                Communication link offline. No Push Token detected.
+                                {/* Grid Info Blocks */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+                                    {/* Security & Identity Card */}
+                                    <div className="bg-gray-50 dark:bg-gray-900/50 p-5 rounded-2xl border border-gray-200 dark:border-gray-700">
+                                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                            <span className="text-blue-500">🛡️</span> Security Matrix
+                                        </h4>
+                                        <div className="space-y-3">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[9px] font-bold text-gray-500 uppercase">Email</span>
+                                                <span className="text-[10px] font-mono font-bold">{selectedUser.email || "Not Provided"}</span>
                                             </div>
-                                        ) : (
-                                            <div className="space-y-4">
-                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                    <input
-                                                        type="text"
-                                                        placeholder="SIGNAL TITLE..."
-                                                        value={pushMessage.title}
-                                                        onChange={(e) => setPushMessage({ ...pushMessage, title: e.target.value })}
-                                                        className="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 text-[11px] font-black uppercase outline-none focus:ring-2 ring-blue-500 transition-all placeholder:text-gray-300"
-                                                    />
-                                                    <input
-                                                        type="text"
-                                                        placeholder="OPERATOR MESSAGE..."
-                                                        value={pushMessage.body}
-                                                        onChange={(e) => setPushMessage({ ...pushMessage, body: e.target.value })}
-                                                        className="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 text-[11px] font-black outline-none focus:ring-2 ring-blue-500 transition-all placeholder:text-gray-300"
-                                                    />
-                                                </div>
-                                                <button
-                                                    onClick={sendSinglePush}
-                                                    disabled={sendingPush}
-                                                    className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-3"
-                                                >
-                                                    {sendingPush ? <div className="h-4 w-4 border-2 border-current border-t-transparent animate-spin rounded-full"></div> : "Transmit Signal"}
-                                                </button>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[9px] font-bold text-gray-500 uppercase">PIN Status</span>
+                                                <span className={`text-[9px] px-2 py-0.5 rounded-full font-black uppercase ${selectedUser.hasPin ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'}`}>{selectedUser.hasPin ? 'SECURED' : 'UNSECURED'}</span>
                                             </div>
-                                        )}
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[9px] font-bold text-gray-500 uppercase">Sec. Level</span>
+                                                <span className="text-[10px] font-black text-blue-500">LVL {selectedUser.securityLevel}</span>
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 lg:col-span-3">
-                                        <div>
-                                            <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Station Origin</label>
-                                            <p className="font-black flex items-center gap-2 text-lg">
-                                                <span className="text-2xl leading-none">{getFlagEmoji(selectedUser.country)}</span>
-                                                {selectedUser.country || "UNKNOWN"}
-                                            </p>
+                                    {/* Economy Card */}
+                                    <div className="bg-gray-50 dark:bg-gray-900/50 p-5 rounded-2xl border border-gray-200 dark:border-gray-700">
+                                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                            <span className="text-yellow-500">💰</span> Economy
+                                        </h4>
+                                        <div className="space-y-3">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[9px] font-bold text-gray-500 uppercase">OC Balance</span>
+                                                <span className="text-[11px] font-black text-yellow-600">{selectedUser.coins} OC</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[9px] font-bold text-gray-500 uppercase">Lifetime Spent</span>
+                                                <span className="text-[10px] font-black">{selectedUser.lifetimeCoinsSpent} OC</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[9px] font-bold text-gray-500 uppercase">Tokens</span>
+                                                <span className="text-[10px] font-black text-purple-500">{selectedUser.tokens}</span>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Hardware ID</label>
-                                            <p className="text-[10px] font-mono text-gray-500 break-all">{selectedUser.deviceId || "VIRTUAL_DEVICE"}</p>
+                                    </div>
+
+                                    {/* Aura & Hype Card */}
+                                    <div className="bg-gray-50 dark:bg-gray-900/50 p-5 rounded-2xl border border-gray-200 dark:border-gray-700">
+                                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                            <span className="text-cyan-500">✨</span> Power Scaling
+                                        </h4>
+                                        <div className="space-y-3">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[9px] font-bold text-gray-500 uppercase">Total Aura</span>
+                                                <span className="text-[11px] font-black text-cyan-500">{selectedUser.aura}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[9px] font-bold text-gray-500 uppercase">Peak Level</span>
+                                                <span className="text-[10px] font-black">LVL {selectedUser.peakLevel}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[9px] font-bold text-gray-500 uppercase">Hype (R/G)</span>
+                                                <span className="text-[10px] font-black text-orange-500">{selectedUser.totalHypePointsReceived} / {selectedUser.totalHypePointsGiven}</span>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <label className="text-[9px] font-black text-gray-400 uppercase block mb-1">Relay Pulse</label>
-                                            <div className="bg-gray-50 dark:bg-gray-900/50 p-2 rounded-xl border border-gray-100 dark:border-gray-700 overflow-hidden">
-                                                <p className="text-[9px] font-mono text-gray-400 truncate">
-                                                    {selectedUser.pushToken || "COMM_LINK_DOWN"}
-                                                </p>
+                                    </div>
+
+                                    {/* Engagement Card */}
+                                    <div className="bg-gray-50 dark:bg-gray-900/50 p-5 rounded-2xl border border-gray-200 dark:border-gray-700">
+                                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                            <span className="text-green-500">📈</span> Engagement
+                                        </h4>
+                                        <div className="space-y-3">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[9px] font-bold text-gray-500 uppercase">Total Likes</span>
+                                                <span className="text-[10px] font-black">{selectedUser.totalLikes}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[9px] font-bold text-gray-500 uppercase">Total Views</span>
+                                                <span className="text-[10px] font-black">{selectedUser.totalViews}</span>
+                                            </div>
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-[9px] font-bold text-gray-500 uppercase">Streak</span>
+                                                <span className="text-[10px] font-black text-orange-500">{selectedUser.consecutiveStreak} 🔥</span>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Character/Inventory Summary Card */}
+                                    <div className="bg-gray-50 dark:bg-gray-900/50 p-5 rounded-2xl border border-gray-200 dark:border-gray-700 lg:col-span-2">
+                                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                                            <span className="text-purple-500">🎒</span> Profile Assets
+                                        </h4>
+                                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                            <div>
+                                                <p className="text-[8px] font-bold text-gray-400 uppercase mb-1">Items</p>
+                                                <p className="font-black text-sm">{selectedUser.inventory?.length || 0}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[8px] font-bold text-gray-400 uppercase mb-1">Wardrobe</p>
+                                                <p className="font-black text-sm">{selectedUser.wardrobe?.length || 0}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[8px] font-bold text-gray-400 uppercase mb-1">Stickers</p>
+                                                <p className="font-black text-sm">{selectedUser.stickers?.owned?.length || 0}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-[8px] font-bold text-gray-400 uppercase mb-1">Titles Unlocked</p>
+                                                <p className="font-black text-sm">{selectedUser.unlockedTitles?.length || 0}</p>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
+
+                                {/* Bulky Data Dropdown (Activity Log) */}
+                                <div className="border border-gray-200 dark:border-gray-700 rounded-2xl overflow-hidden bg-white dark:bg-gray-800">
+                                    <button
+                                        onClick={() => setShowActivityLog(!showActivityLog)}
+                                        className="w-full flex justify-between items-center p-4 bg-gray-50 dark:bg-gray-900/50 hover:bg-gray-100 dark:hover:bg-gray-900 transition-colors"
+                                    >
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">Raw Activity Log ({selectedUser.activityLog?.length || 0} Pulses)</span>
+                                        <span className={`transform transition-transform ${showActivityLog ? 'rotate-180' : ''}`}>▼</span>
+                                    </button>
+                                    {showActivityLog && (
+                                        <div className="p-4 max-h-48 overflow-y-auto custom-scrollbar bg-gray-900 text-gray-300">
+                                            {selectedUser.activityLog && selectedUser.activityLog.length > 0 ? (
+                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                                                    {selectedUser.activityLog.slice().reverse().map((log, i) => (
+                                                        <div key={i} className="text-[9px] font-mono bg-black/50 p-1.5 rounded border border-gray-800">
+                                                            {new Date(log).toLocaleString()}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            ) : (
+                                                <p className="text-[10px] font-mono text-gray-600">NO_ACTIVITY_DATA</p>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Signal Composer */}
+                                <div className="bg-gray-50 dark:bg-gray-900/50 p-6 rounded-[2.5rem] border border-gray-200 dark:border-gray-700 shadow-inner mt-6">
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <span className="p-2 bg-blue-600 rounded-xl text-white text-xs shadow-lg shadow-blue-500/30">🔔</span>
+                                        <h4 className="font-black text-xs uppercase tracking-[0.2em]">Signal Composer</h4>
+                                    </div>
+
+                                    {!selectedUser.pushToken ? (
+                                        <div className="p-6 bg-red-500/5 border border-red-500/20 rounded-2xl text-red-500 font-black text-[10px] uppercase text-center tracking-widest">
+                                            Communication link offline. No Push Token detected.
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                <input
+                                                    type="text"
+                                                    placeholder="SIGNAL TITLE..."
+                                                    value={pushMessage.title}
+                                                    onChange={(e) => setPushMessage({ ...pushMessage, title: e.target.value })}
+                                                    className="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 text-[11px] font-black uppercase outline-none focus:ring-2 ring-blue-500 transition-all placeholder:text-gray-300"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    placeholder="OPERATOR MESSAGE..."
+                                                    value={pushMessage.body}
+                                                    onChange={(e) => setPushMessage({ ...pushMessage, body: e.target.value })}
+                                                    className="bg-white dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 text-[11px] font-black outline-none focus:ring-2 ring-blue-500 transition-all placeholder:text-gray-300"
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={sendSinglePush}
+                                                disabled={sendingPush}
+                                                className="w-full bg-gray-900 dark:bg-white text-white dark:text-gray-900 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.3em] hover:opacity-90 disabled:opacity-50 transition-all flex items-center justify-center gap-3 shadow-lg"
+                                            >
+                                                {sendingPush ? <div className="h-4 w-4 border-2 border-current border-t-transparent animate-spin rounded-full"></div> : "Transmit Signal"}
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+
                             </div>
                         </div>
                     </div>
                 )}
+
+                {/* ⚡️ PILL COMPOSER MODAL */}
+                {showPillModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+                        <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 w-full max-w-lg border border-gray-200 dark:border-gray-700 shadow-2xl relative">
+                            <button
+                                onClick={() => setShowPillModal(false)}
+                                className="absolute top-6 right-6 p-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-red-100 hover:text-red-500 transition-colors"
+                            >
+                                ❌
+                            </button>
+                            <h3 className="text-2xl font-black italic uppercase tracking-tighter text-purple-600 mb-2">Deploy Marquee Pill</h3>
+                            <p className="text-xs text-gray-500 mb-6 font-medium tracking-tight">Inject a live broadcast directly into the UI.</p>
+
+                            <form onSubmit={handleDeployPill} className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Theme Type</label>
+                                        <select
+                                            value={pillForm.type}
+                                            onChange={(e) => setPillForm({ ...pillForm, type: e.target.value })}
+                                            className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-purple-500"
+                                        >
+                                            <option value="system">🔵 System (Default)</option>
+                                            <option value="warning">🔴 Warning (Urgent)</option>
+                                            <option value="event">🟣 Event (Updates)</option>
+                                            <option value="achievement">🟡 Achievement</option>
+                                            <option value="drop">🟢 Drop / Bonus</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Priority (Higher = First)</label>
+                                        <input
+                                            type="number"
+                                            min="0"
+                                            max="100"
+                                            value={pillForm.priority}
+                                            onChange={(e) => setPillForm({ ...pillForm, priority: e.target.value })}
+                                            className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-purple-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Target Audience</label>
+                                        <select
+                                            value={pillForm.targetAudience}
+                                            onChange={(e) => setPillForm({ ...pillForm, targetAudience: e.target.value, targetId: "" })}
+                                            className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-purple-500"
+                                        >
+                                            <option value="global">🌍 Global (Everyone)</option>
+                                            <option value="clan">🛡️ Specific Clan</option>
+                                            <option value="user">👤 Specific User</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Expires In (Hours)</label>
+                                        <input
+                                            type="number"
+                                            min="1"
+                                            max="168"
+                                            value={pillForm.expiresInHours}
+                                            onChange={(e) => setPillForm({ ...pillForm, expiresInHours: e.target.value })}
+                                            className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-purple-500"
+                                        />
+                                    </div>
+                                </div>
+
+                                {pillForm.targetAudience !== 'global' && (
+                                    <div className="animate-in fade-in slide-in-from-top-2">
+                                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">
+                                            Target ID (Enter {pillForm.targetAudience === 'clan' ? 'Clan Tag' : 'User Mongo ID'})
+                                        </label>
+                                        <input
+                                            type="text"
+                                            placeholder={`E.g. ${pillForm.targetAudience === 'clan' ? 'SQUAD13' : '65a4...9f'}`}
+                                            value={pillForm.targetId}
+                                            onChange={(e) => setPillForm({ ...pillForm, targetId: e.target.value })}
+                                            className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-mono outline-none focus:ring-2 ring-purple-500"
+                                        />
+                                    </div>
+                                )}
+
+                                <div>
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Broadcast Message</label>
+                                    <textarea
+                                        rows="3"
+                                        placeholder="Enter the transmission text..."
+                                        value={pillForm.text}
+                                        onChange={(e) => setPillForm({ ...pillForm, text: e.target.value })}
+                                        className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold uppercase outline-none focus:ring-2 ring-purple-500 resize-none"
+                                    />
+                                </div>
+
+                                <button
+                                    type="submit"
+                                    disabled={taskLoading}
+                                    className="w-full bg-purple-600 text-white p-4 rounded-2xl font-black uppercase tracking-[0.2em] text-xs hover:bg-purple-700 transition-all flex justify-center items-center mt-4 shadow-lg shadow-purple-500/20"
+                                >
+                                    {taskLoading ? <div className="h-4 w-4 border-2 border-white border-t-transparent animate-spin rounded-full"></div> : "Inject Pill into System"}
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                )}
             </div>
-
-            {/* --- MODAL FOR EDITING POSTS --- */}
-            {editingPost && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-                    <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 w-full max-w-lg border border-gray-200 dark:border-gray-700 shadow-2xl relative">
-                        <button
-                            onClick={() => setEditingPost(null)}
-                            className="absolute top-6 right-6 p-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-red-100 hover:text-red-500 transition-colors"
-                        >
-                            ❌
-                        </button>
-                        <h3 className="text-2xl font-black italic uppercase tracking-tighter mb-6">Edit Transmission</h3>
-
-                        <form onSubmit={handleSaveEditedPost} className="space-y-4">
-                            <div>
-                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Title</label>
-                                <input
-                                    type="text"
-                                    value={editingPost.title}
-                                    onChange={(e) => setEditingPost({ ...editingPost, title: e.target.value })}
-                                    className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-blue-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Category</label>
-                                <input
-                                    type="text"
-                                    value={editingPost.category || "News"}
-                                    onChange={(e) => setEditingPost({ ...editingPost, category: e.target.value })}
-                                    className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-blue-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Message</label>
-                                <textarea
-                                    rows="5"
-                                    value={editingPost.message}
-                                    onChange={(e) => setEditingPost({ ...editingPost, message: e.target.value })}
-                                    className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-medium outline-none focus:ring-2 ring-blue-500 resize-none"
-                                />
-                            </div>
-
-                            <button
-                                type="submit"
-                                disabled={taskLoading}
-                                className="w-full bg-blue-600 text-white p-4 rounded-2xl font-black uppercase tracking-[0.2em] text-xs hover:bg-blue-700 transition-all flex justify-center items-center mt-4"
-                            >
-                                {taskLoading ? <div className="h-4 w-4 border-2 border-white border-t-transparent animate-spin rounded-full"></div> : "Save Override"}
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
-
-            {/* ⚡️ PILL COMPOSER MODAL */}
-            {showPillModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
-                    <div className="bg-white dark:bg-gray-900 rounded-[2.5rem] p-8 w-full max-w-lg border border-gray-200 dark:border-gray-700 shadow-2xl relative">
-                        <button
-                            onClick={() => setShowPillModal(false)}
-                            className="absolute top-6 right-6 p-2 bg-gray-100 dark:bg-gray-800 rounded-full hover:bg-red-100 hover:text-red-500 transition-colors"
-                        >
-                            ❌
-                        </button>
-                        <h3 className="text-2xl font-black italic uppercase tracking-tighter text-purple-600 mb-2">Deploy Marquee Pill</h3>
-                        <p className="text-xs text-gray-500 mb-6 font-medium tracking-tight">Inject a live broadcast directly into the UI.</p>
-
-                        <form onSubmit={handleDeployPill} className="space-y-4">
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Theme Type</label>
-                                    <select
-                                        value={pillForm.type}
-                                        onChange={(e) => setPillForm({ ...pillForm, type: e.target.value })}
-                                        className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-purple-500"
-                                    >
-                                        <option value="system">🔵 System (Default)</option>
-                                        <option value="warning">🔴 Warning (Urgent)</option>
-                                        <option value="event">🟣 Event (Updates)</option>
-                                        <option value="achievement">🟡 Achievement</option>
-                                        <option value="drop">🟢 Drop / Bonus</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Priority (Higher = First)</label>
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        max="100"
-                                        value={pillForm.priority}
-                                        onChange={(e) => setPillForm({ ...pillForm, priority: e.target.value })}
-                                        className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-purple-500"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Target Audience</label>
-                                    <select
-                                        value={pillForm.targetAudience}
-                                        onChange={(e) => setPillForm({ ...pillForm, targetAudience: e.target.value, targetId: "" })}
-                                        className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-purple-500"
-                                    >
-                                        <option value="global">🌍 Global (Everyone)</option>
-                                        <option value="clan">🛡️ Specific Clan</option>
-                                        <option value="user">👤 Specific User</option>
-                                    </select>
-                                </div>
-                                <div>
-                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Expires In (Hours)</label>
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        max="168"
-                                        value={pillForm.expiresInHours}
-                                        onChange={(e) => setPillForm({ ...pillForm, expiresInHours: e.target.value })}
-                                        className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold outline-none focus:ring-2 ring-purple-500"
-                                    />
-                                </div>
-                            </div>
-
-                            {pillForm.targetAudience !== 'global' && (
-                                <div className="animate-in fade-in slide-in-from-top-2">
-                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">
-                                        Target ID (Enter {pillForm.targetAudience === 'clan' ? 'Clan Tag' : 'User Mongo ID'})
-                                    </label>
-                                    <input
-                                        type="text"
-                                        placeholder={`E.g. ${pillForm.targetAudience === 'clan' ? 'SQUAD13' : '65a4...9f'}`}
-                                        value={pillForm.targetId}
-                                        onChange={(e) => setPillForm({ ...pillForm, targetId: e.target.value })}
-                                        className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-mono outline-none focus:ring-2 ring-purple-500"
-                                    />
-                                </div>
-                            )}
-
-                            <div>
-                                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Broadcast Message</label>
-                                <textarea
-                                    rows="3"
-                                    placeholder="Enter the transmission text..."
-                                    value={pillForm.text}
-                                    onChange={(e) => setPillForm({ ...pillForm, text: e.target.value })}
-                                    className="w-full bg-gray-50 dark:bg-gray-800 p-4 rounded-2xl border border-gray-200 dark:border-gray-700 font-bold uppercase outline-none focus:ring-2 ring-purple-500 resize-none"
-                                />
-                            </div>
-
-                            <button
-                                type="submit"
-                                disabled={taskLoading}
-                                className="w-full bg-purple-600 text-white p-4 rounded-2xl font-black uppercase tracking-[0.2em] text-xs hover:bg-purple-700 transition-all flex justify-center items-center mt-4 shadow-lg shadow-purple-500/20"
-                            >
-                                {taskLoading ? <div className="h-4 w-4 border-2 border-white border-t-transparent animate-spin rounded-full"></div> : "Inject Pill into System"}
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

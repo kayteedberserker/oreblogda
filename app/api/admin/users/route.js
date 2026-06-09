@@ -9,7 +9,7 @@ export async function GET(req) {
     const page = parseInt(searchParams.get("page")) || 1;
     const limit = 20;
     const country = searchParams.get("country");
-    const activeOnly = searchParams.get("activeOnly") === "true"; // Parse the toggle
+    const activeOnly = searchParams.get("activeOnly") === "true"; 
     const skip = (page - 1) * limit;
 
     let query = {};
@@ -23,10 +23,21 @@ export async function GET(req) {
       query.lastActive = { $gte: tenMinutesAgo };
     }
 
-    const [users, total] = await Promise.all([
-      MobileUser.find(query).sort({ lastActive: -1 }).skip(skip).limit(limit),
+    // ⚡️ Added `.select("+pin")` so we can check if it exists, and `.lean()` for performance
+    const [rawUsers, total] = await Promise.all([
+      MobileUser.find(query).select("+pin").sort({ lastActive: -1 }).skip(skip).limit(limit).lean(),
       MobileUser.countDocuments(query)
     ]);
+
+    // ⚡️ Map through users to create 'hasPin' and strip the actual hash for security
+    const users = rawUsers.map(user => {
+      const hasPin = !!user.pin;
+      delete user.pin; // CRITICAL: Never send the hash to the frontend
+      return {
+        ...user,
+        hasPin
+      };
+    });
 
     return NextResponse.json({ 
       users, 

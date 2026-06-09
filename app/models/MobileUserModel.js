@@ -205,6 +205,7 @@ const mobileUserSchema = new mongoose.Schema(
     weeklyAura: { type: Number, default: 0 },
     aura: { type: Number, default: 0 },
     previousRank: { type: Number, default: null },
+    platform: { type: String, default: null },
     auraHistory: [
       {
         weekNumber: Number,
