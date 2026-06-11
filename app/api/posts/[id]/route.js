@@ -732,42 +732,55 @@ async function updateUserAffinityByFingerprint(fingerprint, post, weight) {
         const tagWeight = weight;
         const authorWeight = Math.round(weight * 0.5);
         const countryWeight = Math.round(weight * 0.25);
+
         // 1. Fetch ONLY the affinity fields to save bandwidth and memory
         const user = await MobileUser.findOne({ deviceId: fingerprint }).select('affinityScores authorAffinity countryAffinity');
         if (!user) return;
+
         // 2. Safely parse existing maps/objects
         let affinityScores = user.affinityScores ? (user.affinityScores instanceof Map ? Object.fromEntries(user.affinityScores) : user.affinityScores) : {};
         let authorAffinity = user.authorAffinity ? (user.authorAffinity instanceof Map ? Object.fromEntries(user.authorAffinity) : user.authorAffinity) : {};
         let countryAffinity = user.countryAffinity ? (user.countryAffinity instanceof Map ? Object.fromEntries(user.countryAffinity) : user.countryAffinity) : {};
+
         // 3. Smart Update & Prune Helper (Limits size + prevents sorting on every single action)
         const updateAndTrim = (obj, key, addWeight, limit) => {
             if (!key) return obj;
+
+            // 🌟 FIX: Sanitize the key to escape '.' and '$' characters which crash Mongoose/MongoDB maps
+            const sanitizedKey = key.replace(/\./g, '_').replace(/\$/g, '');
+            if (!sanitizedKey) return obj;
+
             const current =
-                typeof obj[key] === "number"
-                    ? obj[key]
+                typeof obj[sanitizedKey] === "number"
+                    ? obj[sanitizedKey]
                     : 0;
 
-            obj[key] = current + addWeight;
-            // Only sort and slice if we exceed the limit by 5 to save heavy CPU cycles
+            obj[sanitizedKey] = current + addWeight;
+
+            // Only sort and slice if we exceed the limit by 10 to save heavy CPU cycles
             if (Object.keys(obj).length > limit + 10) {
                 const sortedEntries = Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, limit);
                 return Object.fromEntries(sortedEntries);
             }
             return obj;
         };
+
         // 4. Process & Cap Affinities
         if (post.interests && Array.isArray(post.interests)) {
             post.interests.forEach(tag => {
                 if (tag) affinityScores = updateAndTrim(affinityScores, tag.trim().toLowerCase(), tagWeight, 50); // Keep top 50 Tags
             });
         }
+
         const targetAuthor = post.authorUserId ? post.authorUserId.toString() : post.authorId;
         if (targetAuthor && targetAuthor !== fingerprint) {
             authorAffinity = updateAndTrim(authorAffinity, targetAuthor, authorWeight, 30); // Keep top 30 Authors
         }
+
         if (post.country && post.country !== "Global" && post.country !== "Unknown") {
             countryAffinity = updateAndTrim(countryAffinity, post.country, countryWeight, 10); // Keep top 10 Countries
         }
+
         // 5. Save the pruned dictionaries back to the database using $set
         await MobileUser.updateOne(
             { _id: user._id },
