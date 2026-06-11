@@ -8,6 +8,7 @@ import { NextResponse } from "next/server";
 // ⚡️ Add this import at the top of your file
 import { awardAura } from "@/app/lib/auraManager";
 import { sendPillParallel } from "@/app/lib/messagePillService";
+import StickerModel from "@/app/models/StickerModel";
 // --- Helper: Milestone Check Logic ---
 const shouldNotifyMilestone = (count) => {
     if (count <= 5) return true;
@@ -197,6 +198,18 @@ export async function POST(req, { params }) {
         const searchFilter = id.includes("-") ? { slug: id } : { _id: id };
         const post = await Post.findOne(searchFilter);
         if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
+
+        // 🌟 NEW: Fetch the actual sticker URL from the database if a sticker was used
+        let resolvedStickerUrl = null;
+        if (stickerId) {
+            // Depending on what your frontend sends, this checks either your custom stickerId field or the Mongo _id
+            const stickerDoc = await StickerModel.findOne({
+                $or: [{ stickerId: stickerId }, { _id: stickerId }]
+            });
+            if (stickerDoc && stickerDoc.url) {
+                resolvedStickerUrl = stickerDoc.url;
+            }
+        }
 
         // 🧠 AFFINITY: +15 for Commenting (High effort interaction)
         await updateUserAffinityByFingerprint(fingerprint, post, 15);
@@ -388,8 +401,9 @@ export async function POST(req, { params }) {
                             postId: post._id.toString(),
                             type: n.type,
                             commentId: n.commentId?.toString(),
-                            mediaUrl: post.mediaUrl, // 🌟 INJECTED MEDIA URL FOR RICH NOTIFICATIONS
-                            authorPfp: foundMobileUser?.profilePic?.url // 🌟 INJECTED AUTHOR PFP
+                            // 🌟 FIXED: We inject the successfully queried Sticker URL here, falling back to the post image if no sticker exists
+                            mediaUrl: resolvedStickerUrl ? resolvedStickerUrl : post.mediaUrl,
+                            authorPfp: foundMobileUser?.profilePic?.url
                         },
                         {
                             type: `post_${n.type}`,
