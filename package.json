@@ -19,6 +19,7 @@
     "formidable": "^3.5.4",
     "framer-motion": "^12.4.0",
     "geoip-lite": "^1.4.10",
+    "googleapis": "^173.0.0",
     "jose": "^6.2.3",
     "js-cookie": "^3.0.5",
     "jsonwebtoken": "^9.0.3",

@@ -1,66 +1,58 @@
-import { createMessagePill } from '@/app/lib/messagePillService'; // ⚡️ Ensure this is imported
+import { createMessagePill } from '@/app/lib/messagePillService';
 import connectDB from "@/app/lib/mongodb";
 import { sendMultiplePushNotifications } from "@/app/lib/pushNotifications";
 import Clan from "@/app/models/ClanModel";
-import MessagePill from "@/app/models/MessagePillModel"; // ⚡️ ADDED: Import Pill Model
+import MessagePill from "@/app/models/MessagePillModel";
 import MobileUser from "@/app/models/MobileUserModel";
-import MonthlyHypeStat from "@/app/models/MonthlyHypeStat"; // ⚡️ ADDED: For monthly leaderboard processing
+import MonthlyHypeStat from "@/app/models/MonthlyHypeStat";
 import { NextResponse } from 'next/server';
-
 // --- LOGIC FUNCTIONS ---
-
-// ⚡️ Updated: Daily New User Broadcast with Cleanup
+async function dailyStreakCleanup() {
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const result = await MobileUser.updateMany(
+        { lastActive: { $lt: sevenDaysAgo }, lastStreak: { $gt: 0 } },
+        { $set: { lastStreak: 0 } }
+    );
+    if (result.modifiedCount > 0) {
+        console.log(`[CRON] Permanently reset broken streaks to 0 for ${result.modifiedCount} inactive users.`);
+    }
+}
 async function dailyNewUserBroadcast() {
-    // 1️⃣ Cleanup: Delete any pills that have already expired
-    const cleanup = await MessagePill.deleteMany({
-        expiresAt: { $lt: new Date() }
-    });
+    const cleanup = await MessagePill.deleteMany({ expiresAt: { $lt: new Date() } });
     if (cleanup.deletedCount > 0) {
         console.log(`[CRON] Cleaned up ${cleanup.deletedCount} expired pills.`);
     }
-
-    // 2️⃣ Logic for New User Count
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     yesterday.setHours(0, 0, 0, 0);
-
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-
-    const newUsersCount = await MobileUser.countDocuments({
-        createdAt: { $gte: yesterday, $lt: today }
-    });
-
+    const newUsersCount = await MobileUser.countDocuments({ createdAt: { $gte: yesterday, $lt: today } });
     if (newUsersCount > 0) {
         await MessagePill.create({
             text: `SYSTEM UPDATE: WELCOME TO THE ${newUsersCount} NEW OPERATORS WHO AWAKENED YESTERDAY.`,
             type: 'system',
             targetAudience: 'global',
             priority: 2,
-            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) // ⚡️ Strict 24-hour expiry
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000)
         });
         console.log(`[CRON] Broadcasted New User Pill: ${newUsersCount} users.`);
     }
 }
-
 async function dailyClanCheck() {
     const clans = await Clan.find({});
     const now = new Date();
     const bulkOps = [];
-
     for (const clan of clans) {
         let setFields = {};
         let badgesToAdd = [];
         const currentBadges = clan.badges || [];
-
-        // --- Inactivity Decay ---
         const daysSinceActive = Math.floor((now - new Date(clan.lastActive)) / (1000 * 60 * 60 * 24));
         if (daysSinceActive >= 7) {
             setFields.totalPoints = Math.floor((clan.totalPoints || 0) * 0.5);
             setFields.spendablePoints = Math.floor((clan.spendablePoints || 0) * 0.5);
             setFields.lastActive = new Date();
-
-            // ⚡️ OPTIONAL: Add a warning pill for inactive clans
             await createMessagePill({
                 text: `⚠️ CLAN DECAY: Points halved due to 7 days of inactivity.`,
                 type: 'warning',
@@ -71,33 +63,15 @@ async function dailyClanCheck() {
                 replaceExistingType: true
             });
         }
-
-        // --- Badge Logic ---
-        if (clan.members?.length >= 10 && !currentBadges.includes("Gotei 13")) {
-            badgesToAdd.push("Gotei 13");
-        } else if (clan.members?.length >= 5 && !currentBadges.includes("The 5 Kage")) {
-            badgesToAdd.push("The 5 Kage");
-        }
-
-        if ((clan.stats?.totalPosts || 0) >= 1000 && !currentBadges.includes("Library of Ohara")) {
-            badgesToAdd.push("Library of Ohara");
-        }
-
-        if ((clan.stats?.likes || 0) >= 100000 && !currentBadges.includes("King's Haki")) {
-            badgesToAdd.push("King's Haki");
-        }
-
+        if (clan.members?.length >= 10 && !currentBadges.includes("Gotei 13")) badgesToAdd.push("Gotei 13");
+        else if (clan.members?.length >= 5 && !currentBadges.includes("The 5 Kage")) badgesToAdd.push("The 5 Kage");
+        if ((clan.stats?.totalPosts || 0) >= 1000 && !currentBadges.includes("Library of Ohara")) badgesToAdd.push("Library of Ohara");
+        if ((clan.stats?.likes || 0) >= 100000 && !currentBadges.includes("King's Haki")) badgesToAdd.push("King's Haki");
         if (!currentBadges.includes("Sage Mode")) {
             const { likes = 0, comments = 0, shares = 0 } = clan.stats || {};
-            if ((clan.totalPoints || 0) >= 50000 && likes >= 500 && comments >= 500 && shares >= 500) {
-                badgesToAdd.push("Sage Mode");
-            }
+            if ((clan.totalPoints || 0) >= 50000 && likes >= 500 && comments >= 500 && shares >= 500) badgesToAdd.push("Sage Mode");
         }
-
-        if (clan.rank === 6 && !currentBadges.includes("Final Form")) {
-            badgesToAdd.push("Final Form");
-        }
-
+        if (clan.rank === 6 && !currentBadges.includes("Final Form")) badgesToAdd.push("Final Form");
         const scouterLevels = [
             { threshold: 1000, badge: "Scouter Lvl 1" },
             { threshold: 5000, badge: "Scouter Lvl 2" },
@@ -106,143 +80,80 @@ async function dailyClanCheck() {
             { threshold: 80000, badge: "Scouter: Broken Scale" },
             { threshold: 100000, badge: "Scouter: It's Over 9000" },
         ];
-
         for (const level of scouterLevels) {
-            if ((clan.followerCount || 0) >= level.threshold && !currentBadges.includes(level.badge)) {
-                badgesToAdd.push(level.badge);
-            }
+            if ((clan.followerCount || 0) >= level.threshold && !currentBadges.includes(level.badge)) badgesToAdd.push(level.badge);
         }
-
-        // --- Message Pill for New Badges ⚡️ ---
         if (badgesToAdd.length > 0) {
             const latestBadge = badgesToAdd[badgesToAdd.length - 1];
             const extraCount = badgesToAdd.length - 1;
-            const pillText = extraCount > 0
-                ? `🏆 CLAN ACHIEVEMENT: Earned ${latestBadge} and ${extraCount} other medals!`
-                : `🏆 CLAN ACHIEVEMENT: Earned the ${latestBadge} medal!`;
-
+            const pillText = extraCount > 0 ? `🏆 CLAN ACHIEVEMENT: Earned ${latestBadge} and ${extraCount} other medals!` : `🏆 CLAN ACHIEVEMENT: Earned the ${latestBadge} medal!`;
             await createMessagePill({
                 text: pillText,
-                type: 'achievement', // Use achievement theme (Gold)
+                type: 'achievement',
                 targetAudience: 'clan',
                 targetId: clan.tag,
-                link: `/clanprofile`, // Direct link to their clan page
+                link: `/clanprofile`,
                 priority: 2,
-                expiresInHours: 48, // Keep it visible for 3 days
-                replaceExistingType: false // Keep it even if there's a war pill
+                expiresInHours: 48,
+                replaceExistingType: false
             });
         }
-
         const finalUpdate = {};
         if (Object.keys(setFields).length > 0) finalUpdate.$set = setFields;
-        if (badgesToAdd.length > 0) {
-            finalUpdate.$addToSet = { badges: { $each: badgesToAdd } };
-        }
-
-        if (Object.keys(finalUpdate).length > 0) {
-            bulkOps.push({
-                updateOne: {
-                    filter: { _id: clan._id },
-                    update: finalUpdate
-                }
-            });
-        }
+        if (badgesToAdd.length > 0) finalUpdate.$addToSet = { badges: { $each: badgesToAdd } };
+        if (Object.keys(finalUpdate).length > 0) bulkOps.push({ updateOne: { filter: { _id: clan._id }, update: finalUpdate } });
     }
-
-    if (bulkOps.length > 0) {
-        await Clan.bulkWrite(bulkOps);
-    }
+    if (bulkOps.length > 0) await Clan.bulkWrite(bulkOps);
 }
-
 async function dailyAllocation() {
     const clans = await Clan.find({});
     const bulkOps = [];
     const now = new Date();
-
     for (const clan of clans) {
         let allowance = 0;
-
         const isVerified = clan.verifiedUntil && new Date(clan.verifiedUntil) > now;
-
         if (isVerified) {
             allowance = 10;
-        }
-        else if (clan.weeklyPointHistory && clan.weeklyPointHistory.length > 0) {
+        } else if (clan.weeklyPointHistory && clan.weeklyPointHistory.length > 0) {
             const lastHistoryEntry = clan.weeklyPointHistory[clan.weeklyPointHistory.length - 1];
-            if (lastHistoryEntry.rankAtTime > 0 && lastHistoryEntry.rankAtTime <= 10) {
-                allowance = 15;
-            }
+            if (lastHistoryEntry.rankAtTime > 0 && lastHistoryEntry.rankAtTime <= 10) allowance = 15;
         }
-
-        bulkOps.push({
-            updateOne: {
-                filter: { _id: clan._id },
-                update: { $inc: { spendablePoints: allowance } }
-            }
-        });
+        bulkOps.push({ updateOne: { filter: { _id: clan._id }, update: { $inc: { spendablePoints: allowance } } } });
     }
-
-    if (bulkOps.length > 0) {
-        await Clan.bulkWrite(bulkOps);
-    }
+    if (bulkOps.length > 0) await Clan.bulkWrite(bulkOps);
 }
-
-
 async function auraReset() {
     const now = new Date();
     const currentYear = now.getFullYear();
-
     const startOfYear = new Date(now.getFullYear(), 0, 1);
     const diff = now.getTime() - startOfYear.getTime();
     const oneDay = 1000 * 60 * 60 * 24;
     const dayOfYear = Math.floor(diff / oneDay);
     const weekNumber = Math.ceil((dayOfYear + 1) / 7);
-
-    const leaders = await MobileUser.find({ weeklyAura: { $gt: 0 } })
-        .sort({ weeklyAura: -1 })
-        .limit(10);
-
+    const leaders = await MobileUser.find({ weeklyAura: { $gt: 0 } }).sort({ weeklyAura: -1 }).limit(10);
     if (leaders.length === 0) {
         await MobileUser.updateMany({}, { $set: { weeklyAura: 0, previousRank: null } });
         return;
     }
-
     const winnerName = leaders[0].username || "An Elite User";
     const winnerAura = leaders[0].weeklyAura;
-
     await MobileUser.updateMany({}, { $set: { previousRank: null, weeklyAura: 0 } });
-
     const awardPromises = leaders.map(async (user, index) => {
         const rank = index + 1;
-        return MobileUser.updateOne(
-            { _id: user._id },
-            {
-                $set: { previousRank: rank },
-                $push: {
-                    auraHistory: { weekNumber, year: currentYear, points: user.weeklyAura, rank }
-                }
-            }
-        );
+        return MobileUser.updateOne({ _id: user._id }, { $set: { previousRank: rank }, $push: { auraHistory: { weekNumber, year: currentYear, points: user.weeklyAura, rank } } });
     });
-
     await Promise.all(awardPromises);
-
     try {
-        // ⚡️ CREATE GLOBAL MESSAGE PILL FOR THE TOURNAMENT WINNER
         await createMessagePill({
             text: `🏆 ${winnerName} won the weekly tournament with ${winnerAura.toLocaleString()} Aura! Ranks have reset.`,
-            type: 'achievement', // Will use the gold trophy theme
+            type: 'achievement',
             targetAudience: 'global',
-            link: '/screens/Leaderboard', // Adjust to match your actual routing
-            priority: 3, // High priority so it sits at the front
-            expiresInHours: 24, // Let it display for a full day
+            link: '/screens/Leaderboard',
+            priority: 3,
+            expiresInHours: 24,
             replaceExistingType: true
         });
-
-        const usersWithTokens = await MobileUser.find({
-            pushToken: { $nin: [null, ""], $exists: true }
-        }).select('pushToken');
-
+        const usersWithTokens = await MobileUser.find({ pushToken: { $nin: [null, ""], $exists: true } }).select('pushToken');
         if (usersWithTokens.length > 0) {
             const tokens = usersWithTokens.map(u => u.pushToken);
             const title = '🏆 Tournament Concluded!';
@@ -254,37 +165,26 @@ async function auraReset() {
         console.error("❌ Notification Phase Error:", notifErr);
     }
 }
-
 async function weeklyClanReset() {
     const rankThresholds = [0, 5000, 20000, 50000, 100000, 300000];
     const decayAmounts = [200, 500, 1000, 2000, 5000, 30000];
-
     const rankedClans = await Clan.find({}).sort({ currentWeeklyPoints: -1 });
     const mostDiscussedClan = await Clan.findOne({}).sort({ "stats.comments": -1 });
     const weekEnding = new Date();
-
     const bulkOps = [];
-    const pillPromises = []; // ⚡️ Array to hold all our pill creations
-
-    // ⚡️ Pull all weekly badges (Talk-no-jutsu reset included)
+    const pillPromises = [];
     const weeklyTitleBadges = ["The Pirate King", "The Pillars", "Hunter Association", "Talk-no-jutsu", "Talk no jutsu"];
     await Clan.updateMany({}, { $pull: { badges: { $in: weeklyTitleBadges } } });
-
     for (let i = 0; i < rankedClans.length; i++) {
         const clan = rankedClans[i];
         const position = i + 1;
         const currentRank = clan.rank || 1;
-
         let setFields = {};
         let pushFields = {};
         let incFields = {};
         let badgesToAdd = [];
-
-        // --- Decay Logic (Allows Negative Points) ---
         const decayValue = decayAmounts[currentRank - 1] || 0;
         let decayedPoints = (clan.totalPoints || 0) - decayValue;
-
-        // ⚡️ New Rank Logic: Default to 0 (Debt/Exiled status)
         let newRank = 0;
         if (decayedPoints > 0) {
             newRank = 1;
@@ -295,59 +195,28 @@ async function weeklyClanReset() {
                 }
             }
         }
-
         setFields.totalPoints = decayedPoints;
         setFields.rank = newRank;
-
-        // ⚡️ PILL TRIGGER: Promotions and Demotions
         if (newRank > currentRank) {
-            pillPromises.push(createMessagePill({
-                text: `🎖️ PROMOTION: Your clan has ascended to Tier ${newRank}!`,
-                type: 'achievement',
-                targetAudience: 'clan',
-                targetId: clan.tag,
-                priority: 2,
-                expiresInHours: 36,
-                replaceExistingType: false
-            }));
+            pillPromises.push(createMessagePill({ text: `🎖️ PROMOTION: Your clan has ascended to Tier ${newRank}!`, type: 'achievement', targetAudience: 'clan', targetId: clan.tag, priority: 2, expiresInHours: 36, replaceExistingType: false }));
         } else if (newRank < currentRank) {
-            const demotionMsg = newRank === 0
-                ? `⚠️ EXILED: Your clan is in DEBT (${decayedPoints} pts). Earn points to restore rank!`
-                : `⚠️ DEMOTION: Weekly decay dropped your clan to Tier ${newRank}.`;
-
-            pillPromises.push(createMessagePill({
-                text: demotionMsg,
-                type: 'warning',
-                targetAudience: 'clan',
-                targetId: clan.tag,
-                priority: 1,
-                expiresInHours: 48,
-                replaceExistingType: false
-            }));
+            const demotionMsg = newRank === 0 ? `⚠️ EXILED: Your clan is in DEBT (${decayedPoints} pts). Earn points to restore rank!` : `⚠️ DEMOTION: Weekly decay dropped your clan to Tier ${newRank}.`;
+            pillPromises.push(createMessagePill({ text: demotionMsg, type: 'warning', targetAudience: 'clan', targetId: clan.tag, priority: 1, expiresInHours: 48, replaceExistingType: false }));
         }
-
-        // --- Streak Logic (Only for Rank > 0) ---
         const nextRankThreshold = rankThresholds[newRank];
         let hit80PercentLimit = false;
-
         if (nextRankThreshold && newRank > 0) {
             if (decayedPoints >= (nextRankThreshold * 0.8)) hit80PercentLimit = true;
         } else if (newRank === 6) {
             hit80PercentLimit = true;
         }
-
         if (hit80PercentLimit) {
             incFields.consecutiveWeeksNoDerank = 1;
-            if ((clan.consecutiveWeeksNoDerank + 1) >= 4) {
-                badgesToAdd.push("Unlimited Chakra");
-            }
+            if ((clan.consecutiveWeeksNoDerank + 1) >= 4) badgesToAdd.push("Unlimited Chakra");
         } else {
             setFields.consecutiveWeeksNoDerank = 0;
-            // Immediate individual pull to prevent bulkWrite conflicts with $addToSet
             await Clan.updateOne({ _id: clan._id }, { $pull: { badges: "Unlimited Chakra" } });
         }
-
-        // --- Growth Logic ---
         const history = clan.weeklyPointHistory || [];
         const lastWeek = history[history.length - 1];
         if (lastWeek?.points > 0) {
@@ -355,140 +224,66 @@ async function weeklyClanReset() {
             if (growth >= 2.0) badgesToAdd.push("Gear 2nd");
             else if (growth >= 1.5) badgesToAdd.push("Zenkai Boost");
         }
-
-        // --- Weekly Titles (Only for Rank > 0) ---
         if (newRank > 0) {
             if (position === 1) {
                 badgesToAdd.push("The Pirate King");
-                pillPromises.push(createMessagePill({
-                    text: `👑 ALL HAIL: [${clan.tag}] ${clan.name} is the #1 Clan of the Week!`,
-                    type: 'event',
-                    targetAudience: 'global',
-                    link: `/clans/${clan.tag}`,
-                    priority: 3,
-                    expiresInHours: 48,
-                    replaceExistingType: true
-                }));
-            }
-            else if (position <= 5) badgesToAdd.push("The Pillars");
+                pillPromises.push(createMessagePill({ text: `👑 ALL HAIL: [${clan.tag}] ${clan.name} is the #1 Clan of the Week!`, type: 'event', targetAudience: 'global', link: `/clans/${clan.tag}`, priority: 3, expiresInHours: 48, replaceExistingType: true }));
+            } else if (position <= 5) badgesToAdd.push("The Pillars");
             else if (position <= 10) badgesToAdd.push("Hunter Association");
-
             if (mostDiscussedClan && clan._id.equals(mostDiscussedClan._id)) {
                 badgesToAdd.push("Talk-no-jutsu");
-                pillPromises.push(createMessagePill({
-                    text: `💬 TALK-NO-JUTSU: Your clan was the most discussed this week!`,
-                    type: 'achievement',
-                    targetAudience: 'clan',
-                    targetId: clan.tag,
-                    priority: 2,
-                    expiresInHours: 48,
-                    replaceExistingType: false
-                }));
+                pillPromises.push(createMessagePill({ text: `💬 TALK-NO-JUTSU: Your clan was the most discussed this week!`, type: 'achievement', targetAudience: 'clan', targetId: clan.tag, priority: 2, expiresInHours: 48, replaceExistingType: false }));
             }
         }
-
-        pushFields.weeklyPointHistory = {
-            $each: [{
-                weekEnding,
-                points: clan.currentWeeklyPoints,
-                rankAtTime: position
-            }],
-            $slice: -12
-        };
-
+        pushFields.weeklyPointHistory = { $each: [{ weekEnding, points: clan.currentWeeklyPoints, rankAtTime: position }], $slice: -12 };
         setFields.currentWeeklyPoints = 0;
-
         const finalUpdate = { $set: setFields, $push: pushFields };
         if (badgesToAdd.length > 0) finalUpdate.$addToSet = { badges: { $each: badgesToAdd } };
         if (Object.keys(incFields).length > 0) finalUpdate.$inc = incFields;
-
-        bulkOps.push({
-            updateOne: {
-                filter: { _id: clan._id },
-                update: finalUpdate
-            }
-        });
+        bulkOps.push({ updateOne: { filter: { _id: clan._id }, update: finalUpdate } });
     }
-
-    // 1. Execute DB writes for Clan Stats
-    if (bulkOps.length > 0) {
-        await Clan.bulkWrite(bulkOps);
-    }
-
-    // 2. ⚡️ Execute all Message Pills simultaneously
-    if (pillPromises.length > 0) {
-        await Promise.all(pillPromises).catch(err => console.error("Pill generation error:", err));
-    }
+    if (bulkOps.length > 0) await Clan.bulkWrite(bulkOps);
+    if (pillPromises.length > 0) await Promise.all(pillPromises).catch(err => console.error("Pill generation error:", err));
 }
-
-// ⚡️ ADDED: Monthly Hype Leaderboard Processing & Reward System
 async function monthlyHypeReset() {
     const now = new Date();
-
-    // Determine the month string that just concluded (subtract 1 day from 1st of the month to get any date in previous month)
     const lastMonthDate = new Date(now);
     lastMonthDate.setDate(lastMonthDate.getDate() - 1);
-    const targetMonthStr = lastMonthDate.toISOString().slice(0, 7); // Generates "YYYY-MM"
-
+    const targetMonthStr = lastMonthDate.toISOString().slice(0, 7);
     console.log(`[CRON] Processing Hype Matrix conclusion for: ${targetMonthStr}`);
-
     const tokensToNotify = [];
-
-    // 🌌 1. REWARD TOP HYPER (USER_GIVEN)
     const topGiver = await MonthlyHypeStat.findOne({ month: targetMonthStr, entityType: 'USER_GIVEN' }).sort({ score: -1 });
     if (topGiver) {
         const user = await MobileUser.findById(topGiver.entityId);
         if (user) {
             const hyperSovereignTitle = { name: "Hype Sovereign", tier: "Unique" };
             if (!user.unlockedTitles) user.unlockedTitles = [];
-
             const alreadyUnlocked = user.unlockedTitles.some(t => t.name === hyperSovereignTitle.name);
             if (!alreadyUnlocked) {
                 user.unlockedTitles.push(hyperSovereignTitle);
-                user.equippedTitle = hyperSovereignTitle; // Auto-equip the server crown
+                user.equippedTitle = hyperSovereignTitle;
                 await user.save();
             }
-
             if (user.pushToken) tokensToNotify.push({ token: user.pushToken, title: '🌌 Unique Title Awarded!', body: 'You finished as the #1 Top Hyper last month and unlocked: "Hype Sovereign"!' });
-
-            await createMessagePill({
-                text: `🌌 HYPE MATRIX: ${user.username || 'An Operator'} has been crowned "Hype Sovereign" for generating ${topGiver.score.toLocaleString()} PTS last month!`,
-                type: 'achievement',
-                targetAudience: 'global',
-                priority: 3,
-                expiresInHours: 48 // Visible for 5 days
-            });
+            await createMessagePill({ text: `🌌 HYPE MATRIX: ${user.username || 'An Operator'} has been crowned "Hype Sovereign" for generating ${topGiver.score.toLocaleString()} PTS last month!`, type: 'achievement', targetAudience: 'global', priority: 3, expiresInHours: 48 });
         }
     }
-
-    // 👑 2. REWARD TOP HYPED USER (USER_RECEIVED)
     const topReceiver = await MonthlyHypeStat.findOne({ month: targetMonthStr, entityType: 'USER_RECEIVED' }).sort({ score: -1 });
     if (topReceiver) {
         const author = await MobileUser.findById(topReceiver.entityId);
         if (author) {
             const apexPhenomenonTitle = { name: "Phenomenal Creator", tier: "Unique" };
             if (!author.unlockedTitles) author.unlockedTitles = [];
-
             const alreadyUnlocked = author.unlockedTitles.some(t => t.name === apexPhenomenonTitle.name);
             if (!alreadyUnlocked) {
                 author.unlockedTitles.push(apexPhenomenonTitle);
                 author.equippedTitle = apexPhenomenonTitle;
                 await author.save();
             }
-
             if (author.pushToken) tokensToNotify.push({ token: author.pushToken, title: '👑 Ultimate Superstar!', body: 'Your content ruled the network. You unlocked the Unique title: "Apex Phenomenon"!' });
-
-            await createMessagePill({
-                text: `👑 THE SUPERSTAR: ${author.username || 'An Operator'} has unlocked "Phenomenal Creator" with ${topReceiver.score.toLocaleString()} PTS received!`,
-                type: 'achievement',
-                targetAudience: 'global',
-                priority: 3,
-                expiresInHours: 48
-            });
+            await createMessagePill({ text: `👑 THE SUPERSTAR: ${author.username || 'An Operator'} has unlocked "Phenomenal Creator" with ${topReceiver.score.toLocaleString()} PTS received!`, type: 'achievement', targetAudience: 'global', priority: 3, expiresInHours: 48 });
         }
     }
-
-    // 🛡️ 3. REWARD TOP HYPED CLAN (CLAN_RECEIVED)
     const topClanStat = await MonthlyHypeStat.findOne({ month: targetMonthStr, entityType: 'CLAN_RECEIVED' }).sort({ score: -1 });
     if (topClanStat) {
         const clan = await Clan.findOne({ tag: topClanStat.entityId });
@@ -498,18 +293,9 @@ async function monthlyHypeReset() {
                 clan.badges.push("PEAK CLAN");
                 await clan.save();
             }
-
-            await createMessagePill({
-                text: `🛡️ PEAK CLAN: Clan [${clan.tag}] ${clan.name} crushed the competition with ${topClanStat.score.toLocaleString()} Monthly Hype Heat!`,
-                type: 'event',
-                targetAudience: 'global',
-                priority: 3,
-                expiresInHours: 48
-            });
+            await createMessagePill({ text: `🛡️ PEAK CLAN: Clan [${clan.tag}] ${clan.name} crushed the competition with ${topClanStat.score.toLocaleString()} Monthly Hype Heat!`, type: 'event', targetAudience: 'global', priority: 3, expiresInHours: 48 });
         }
     }
-
-    // Direct personal push notification engine dispatch
     for (const item of tokensToNotify) {
         try {
             await sendMultiplePushNotifications([item.token], item.title, item.body, { screen: 'Leaderboard' });
@@ -518,62 +304,37 @@ async function monthlyHypeReset() {
         }
     }
 }
-
 // --- MAIN HANDLER ---
-
 export async function GET(req) {
     const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
-
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
         console.error("❌ Auth Match Failed");
         return new Response('Unauthorized', { status: 401 });
     }
-
     const now = new Date();
-
-    const watDay = new Intl.DateTimeFormat('en-GB', {
-        weekday: 'long',
-        timeZone: 'Africa/Lagos',
-    }).format(now);
-
-    // ⚡️ Calculate if today is the 1st of the month in WAT timezone
-    const watDayOfMonth = parseInt(new Intl.DateTimeFormat('en-GB', {
-        day: 'numeric',
-        timeZone: 'Africa/Lagos',
-    }).format(now), 10);
-
+    const watDay = new Intl.DateTimeFormat('en-GB', { weekday: 'long', timeZone: 'Africa/Lagos' }).format(now);
+    const watDayOfMonth = parseInt(new Intl.DateTimeFormat('en-GB', { day: 'numeric', timeZone: 'Africa/Lagos' }).format(now), 10);
     const isMondayWAT = watDay === "Monday";
     const isFirstOfMonthWAT = watDayOfMonth === 1;
-
     try {
         await connectDB();
         console.log("--- Starting Master Cron Sequence ---");
-
-        // 1. Daily Tasks
         console.log("⏳ Processing Daily Tasks...");
+        await dailyStreakCleanup();
         await dailyClanCheck();
         await dailyAllocation();
-        await dailyNewUserBroadcast(); // ⚡️ ADDED: Trigger the Pill Generator
-
-        // 2. Weekly Tasks
+        await dailyNewUserBroadcast();
         if (isMondayWAT) {
             console.log("⏳ Processing Weekly Resets...");
             await auraReset();
             await weeklyClanReset();
         }
-
-        // 3. Monthly Tasks (⚡️ ADDED)
         if (isFirstOfMonthWAT) {
             console.log("⏳ Processing Monthly Hype Resets...");
             await monthlyHypeReset();
         }
-
         console.log("✅ Master Cron Completed Successfully");
-        return NextResponse.json({
-            success: true,
-            message: `Executed daily tasks${isMondayWAT ? " + weekly tasks" : ""}${isFirstOfMonthWAT ? " + monthly hype tasks" : ""}`
-        });
-
+        return NextResponse.json({ success: true, message: `Executed daily tasks${isMondayWAT ? " + weekly tasks" : ""}${isFirstOfMonthWAT ? " + monthly hype tasks" : ""}` });
     } catch (error) {
         console.error("❌ Cron Master Error:", error);
         return NextResponse.json({ success: false, error: error.message }, { status: 500 });

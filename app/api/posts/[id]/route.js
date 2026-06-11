@@ -311,7 +311,8 @@ export async function PATCH(req, { params }) {
                             {
                                 postId: updatedPost._id.toString(),
                                 type: "post_detail",
-                                mediaUrl: updatedPost.mediaUrl // 🌟 INJECTED MEDIA URL FOR RICH NOTIFICATIONS
+                                mediaUrl: updatedPost.mediaUrl, // 🌟 INJECTED MEDIA URL FOR RICH NOTIFICATIONS
+                                authorPfp: author.profilePic?.url // 🌟 INJECTED AUTHOR PFP
                             },
                             {
                                 type: 'post_vote',
@@ -384,7 +385,8 @@ export async function PATCH(req, { params }) {
                             {
                                 postId: updatedPost._id.toString(),
                                 type: "post_detail",
-                                mediaUrl: updatedPost.mediaUrl // 🌟 INJECTED MEDIA URL FOR RICH NOTIFICATIONS
+                                mediaUrl: updatedPost.mediaUrl, // 🌟 INJECTED MEDIA URL FOR RICH NOTIFICATIONS
+                                authorPfp: author.profilePic?.url // 🌟 INJECTED AUTHOR PFP
                             },
                             {
                                 type: 'post_like',
@@ -410,7 +412,8 @@ export async function PATCH(req, { params }) {
                                 {
                                     postId: updatedPost._id.toString(),
                                     type: "post_detail",
-                                    mediaUrl: updatedPost.mediaUrl // 🌟 INJECTED MEDIA URL FOR RICH NOTIFICATIONS
+                                    mediaUrl: updatedPost.mediaUrl, // 🌟 INJECTED MEDIA URL FOR RICH NOTIFICATIONS
+                                    authorPfp: author.profilePic?.url // 🌟 INJECTED AUTHOR PFP
                                 },
                                 {
                                     type: 'event',
@@ -724,72 +727,52 @@ export async function GET(req, { params }) {
 }
 
 async function updateUserAffinityByFingerprint(fingerprint, post, weight) {
-    if (!fingerprint || !post) {
-        console.log("⚠️ Affinity Update Aborted: Missing fingerprint or post data.");
-        return;
-    }
-
+    if (!fingerprint || !post) return;
     try {
-        console.log(`\n======================================`);
-        console.log(`🧠 STARTING AFFINITY UPDATE FOR: ${fingerprint}`);
-        console.log(`Base Action Weight: ${weight}`);
-        console.log(`Post ID: ${post._id || 'Unknown'}`);
-        console.log(`======================================`);
-
-        const incUpdates = {};
-
-        // 🧠 SCALE THE WEIGHTS
         const tagWeight = weight;
         const authorWeight = Math.round(weight * 0.5);
         const countryWeight = Math.round(weight * 0.25);
+        // 1. Fetch ONLY the affinity fields to save bandwidth and memory
+        const user = await MobileUser.findOne({ deviceId: fingerprint }).select('affinityScores authorAffinity countryAffinity');
+        if (!user) return;
+        // 2. Safely parse existing maps/objects
+        let affinityScores = user.affinityScores ? (user.affinityScores instanceof Map ? Object.fromEntries(user.affinityScores) : user.affinityScores) : {};
+        let authorAffinity = user.authorAffinity ? (user.authorAffinity instanceof Map ? Object.fromEntries(user.authorAffinity) : user.authorAffinity) : {};
+        let countryAffinity = user.countryAffinity ? (user.countryAffinity instanceof Map ? Object.fromEntries(user.countryAffinity) : user.countryAffinity) : {};
+        // 3. Smart Update & Prune Helper (Limits size + prevents sorting on every single action)
+        const updateAndTrim = (obj, key, addWeight, limit) => {
+            if (!key) return obj;
+            const current =
+                typeof obj[key] === "number"
+                    ? obj[key]
+                    : 0;
 
-        // 1. Anime/Gaming Tags Affinity
-        if (post.interests && Array.isArray(post.interests) && post.interests.length > 0) {
-            console.log(`🏷️ Raw Tags found: ${post.interests.join(", ")}`);
+            obj[key] = current + addWeight;
+            // Only sort and slice if we exceed the limit by 5 to save heavy CPU cycles
+            if (Object.keys(obj).length > limit + 10) {
+                const sortedEntries = Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, limit);
+                return Object.fromEntries(sortedEntries);
+            }
+            return obj;
+        };
+        // 4. Process & Cap Affinities
+        if (post.interests && Array.isArray(post.interests)) {
             post.interests.forEach(tag => {
-                if (tag) {
-                    // ⚡️ NEW: Force lowercase and trim spaces
-                    const cleanTag = tag.trim().toLowerCase();
-                    incUpdates[`affinityScores.${cleanTag}`] = tagWeight;
-                    console.log(`   -> Added Clean Tag [${cleanTag}]: ${tagWeight}`);
-                }
+                if (tag) affinityScores = updateAndTrim(affinityScores, tag.trim().toLowerCase(), tagWeight, 50); // Keep top 50 Tags
             });
-        } else {
-            console.log(`🏷️ No valid tags found on post.`);
         }
-
-        // 2. Author Affinity
         const targetAuthor = post.authorUserId ? post.authorUserId.toString() : post.authorId;
         if (targetAuthor && targetAuthor !== fingerprint) {
-            incUpdates[`authorAffinity.${targetAuthor}`] = authorWeight;
-            console.log(`👤 Author found [${targetAuthor}]: ${authorWeight}`);
-        } else {
-            console.log(`👤 Author skipped (Missing or Viewer is the Author).`);
+            authorAffinity = updateAndTrim(authorAffinity, targetAuthor, authorWeight, 30); // Keep top 30 Authors
         }
-
-        // 3. Country Affinity
         if (post.country && post.country !== "Global" && post.country !== "Unknown") {
-            incUpdates[`countryAffinity.${post.country}`] = countryWeight;
-            console.log(`🌍 Country found [${post.country}]: ${countryWeight}`);
-        } else {
-            console.log(`🌍 Country skipped (Global or Unknown).`);
+            countryAffinity = updateAndTrim(countryAffinity, post.country, countryWeight, 10); // Keep top 10 Countries
         }
-
-        if (Object.keys(incUpdates).length > 0) {
-            console.log(`\n🚀 FINAL DB PAYLOAD:`);
-            console.log(JSON.stringify({ $inc: incUpdates }, null, 2));
-
-            await MobileUser.findOneAndUpdate(
-                { deviceId: fingerprint },
-                { $inc: incUpdates }
-            );
-
-            console.log(`✅ Affinity Update Successfully Saved to Database!`);
-        } else {
-            console.log(`\n⏭️ No valid updates to process. Skipping DB call.`);
-        }
-        console.log(`======================================\n`);
-
+        // 5. Save the pruned dictionaries back to the database using $set
+        await MobileUser.updateOne(
+            { _id: user._id },
+            { $set: { affinityScores, authorAffinity, countryAffinity } }
+        );
     } catch (err) {
         console.error("❌ Affinity Update Error:", err);
     }

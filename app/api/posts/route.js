@@ -1202,7 +1202,8 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
                             postId: post._id.toString(),
                             clanTag: post.clanId,
                             screen: `/post/${post._id.toString()}`,
-                            mediaUrl: post.mediaUrl // 🌟 INJECTED MEDIA URL FOR CLAN PUSH
+                            mediaUrl: post.mediaUrl, // 🌟 INJECTED MEDIA URL FOR CLAN PUSH
+                            authorPfp: userDoc?.profilePic?.url // 🌟 INJECTED AUTHOR PFP
                         },
                         {
                             type: 'clan_post',
@@ -1228,7 +1229,8 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
                     "A post is awaiting your approval.",
                     {
                         postId: post._id.toString(),
-                        mediaUrl: post.mediaUrl // 🌟 INJECTED MEDIA URL FOR ADMIN PUSH
+                        mediaUrl: post.mediaUrl, // 🌟 INJECTED MEDIA URL FOR ADMIN PUSH
+                        authorPfp: userDoc?.profilePic?.url // 🌟 INJECTED AUTHOR PFP
                     }
                 );
             } catch (pErr) { }
@@ -1257,7 +1259,8 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
                     reason: rejectionReason,
                     postId: post._id.toString(),
                     screen: "/authordiary",
-                    mediaUrl: post.mediaUrl // 🌟 INJECTED MEDIA URL FOR REJECTION PUSH
+                    mediaUrl: post.mediaUrl, // 🌟 INJECTED MEDIA URL FOR REJECTION PUSH
+                    authorPfp: userDoc?.profilePic?.url // 🌟 INJECTED AUTHOR PFP
                 },
                 {
                     type: 'post_rejection',

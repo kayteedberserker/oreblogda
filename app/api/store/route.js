@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 
 // --- ✍️ AUTHOR CATALOG (CC) ---
-// --- 🛡️ CLAN CATALOG (CC) ---
 const AUTHOR_CATALOG = {
 	// Non-themed items like Upgrades and Verification
 	standaloneItems: [

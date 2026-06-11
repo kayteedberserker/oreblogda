@@ -1,57 +1,63 @@
-import { NextResponse } from "next/server";
 import connectDB from "@/app/lib/mongodb";
 import MobileUserModel from "@/app/models/MobileUserModel";
+import UserStreak from "@/app/models/UserStreak";
+import { NextResponse } from "next/server";
 
 export async function GET(req) {
   await connectDB();
   const { searchParams } = new URL(req.url);
   const fingerprint = searchParams.get("fingerprint");
-
+  // 🛡️ Security Check (brought over from streak route)
+  const secret = req.headers.get("x-oreblogda-secret");
+  if (secret !== "thisismyrandomsuperlongsecretkey") {
+    return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
+  }
   if (!fingerprint) return NextResponse.json({ message: "No ID" }, { status: 400 });
-
   try {
-    // 1. Find the user and use .lean() for maximum read performance
+    // 1. Find or Create User
     let user = await MobileUserModel.findOne({ deviceId: fingerprint }).lean();
-    
     if (!user) {
       let randNum = Math.floor(Math.random() * 10000000);
-      // If they don't exist in DB yet, create them now
       const newUser = await MobileUserModel.create({ deviceId: fingerprint, username: `User${randNum}` });
-      // Convert to a plain object so it matches the .lean() output format
-      user = newUser.toObject(); 
+      user = newUser.toObject();
     } else {
-      // ⚡️ --- NEW: LAZY DELETION FOR EXPIRED INVENTORY --- ⚡️
-      // Only run this if the user already existed and has an inventory
+      // ⚡️ LAZY DELETION FOR EXPIRED INVENTORY
       if (user.inventory && Array.isArray(user.inventory)) {
-          const now = new Date();
-          let inventoryNeedsUpdate = false;
-
-          // Filter out any items that have an expiration date that has passed
-          const validInventory = user.inventory.filter(item => {
-              if (item.expiresAt && new Date(item.expiresAt) < now) {
-                  inventoryNeedsUpdate = true; // Found a dead item
-                  return false; // Remove it
-              }
-              return true; // Keep it
-          });
-
-          // If we removed anything, quietly update the database in the background
-          if (inventoryNeedsUpdate) {
-              await MobileUserModel.updateOne(
-                  { _id: user._id },
-                  { $set: { inventory: validInventory } }
-              );
-              
-              // Update the in-memory object before sending it to the app
-              user.inventory = validInventory;
+        const now = new Date();
+        let inventoryNeedsUpdate = false;
+        const validInventory = user.inventory.filter(item => {
+          if (item.expiresAt && new Date(item.expiresAt) < now) {
+            inventoryNeedsUpdate = true;
+            return false;
           }
+          return true;
+        });
+        if (inventoryNeedsUpdate) {
+          // Fire and forget update (doesn't block the response)
+          MobileUserModel.updateOne(
+            { _id: user._id },
+            { $set: { inventory: validInventory } }
+          ).catch(console.error);
+          user.inventory = validInventory;
+        }
       }
     }
-
-    // Return the clean user profile
-    return NextResponse.json(user, { status: 200 });
+    // 2. Fetch Active Streak
+    const streakDoc = await UserStreak.findOne({ userId: user._id }).lean();
+    const streakData = {
+      streak: streakDoc?.streak || 0,
+      lastPostDate: streakDoc?.lastPostDate || null,
+      expiresAt: streakDoc?.expiresAt || null,
+      canRestore: !streakDoc && (user.lastStreak > 0),
+      recoverableStreak: user.lastStreak || 0
+    };
+    // 3. Return Combined Payload
+    return NextResponse.json({
+      user: user,
+      streak: streakData
+    }, { status: 200 });
   } catch (err) {
-    console.error("User Context Fetch Error:", err);
+    console.error("Merged User/Streak Fetch Error:", err);
     return NextResponse.json({ message: "Error" }, { status: 500 });
   }
 }

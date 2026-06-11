@@ -140,7 +140,8 @@ export async function POST(req) {
                         type: "open_post",
                         postId: post._id.toString(),
                         screen: `/post/${post._id.toString()}`,
-                        mediaUrl: post.mediaUrl // 🌟 INJECTED POST IMAGE THUMBNAIL
+                        mediaUrl: post.mediaUrl, // 🌟 INJECTED POST IMAGE THUMBNAIL
+                        authorPfp: user.profilePic?.url // 🌟 INJECTED SENDER PFP
                     },
                     {
                         type: 'achievement',
