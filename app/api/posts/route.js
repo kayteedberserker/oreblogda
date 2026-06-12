@@ -187,7 +187,7 @@ async function notifyAllMobileUsersAboutPost(newPost, authorName) {
     const allTokens = mobileUsers.map(user => user.pushToken);
     const title = "📰 New post on Oreblogda";
     const body = `${authorName} just posted: ${newPost.title.length > 50 ? newPost.title.slice(0, 50) + "…" : newPost.title}`;
-    const data = { postId: newPost._id.toString(), slug: newPost.slug };
+    const data = { postId: newPost._id.toString(), slug: newPost.slug, mediaUrl: newPost.mediaUrl };
 
     try {
         await sendMultiplePushNotifications(allTokens, title, body, data);
@@ -1190,7 +1190,11 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
             try {
                 const clan = await Clan.findOne({ tag: post.clanId }).select("name");
                 const followers = await ClanFollower.find({ clanTag: post.clanId }).populate({ path: 'userId', select: 'pushToken' });
-                const tokens = followers.map(f => f.userId?.pushToken).filter(t => t?.startsWith('ExponentPushToken'));
+                const tokens = followers.flatMap(f => {
+                    const token = f.userId?.pushToken;
+                    return token != null ? [token] : [];
+                });
+
 
                 if (tokens.length > 0) {
                     await sendPillParallel(
@@ -1220,7 +1224,7 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
     }
 
     if (finalStatus === "pending") {
-        const adminTokens = ["ExponentPushToken[TkR7ucI2anWi3XJrALGr4T]"];
+        const adminTokens = ["cUxM1ev3RBucmAXg7LklVv:APA91bEqsCxOVL9wzS-ag9DRvEJjNBUnhmiZ7hyreQ54mUGxH9x3CraM27SVZuPIyUG4HRx8IODPYGkD24MJqYiNSTKoBVrV19CLMs-ZcUiNa-plrUta6D0",];
         for (const token of adminTokens) {
             try {
                 await sendPushNotification(
