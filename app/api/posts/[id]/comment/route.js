@@ -202,10 +202,18 @@ export async function POST(req, { params }) {
         // 🌟 NEW: Fetch the actual sticker URL from the database if a sticker was used
         let resolvedStickerUrl = null;
         if (stickerId) {
-            // Depending on what your frontend sends, this checks either your custom stickerId field or the Mongo _id
+            // Build a dynamic query matching layout structure safely to avoid CastErrors
+            const queryConditions = [{ stickerId: stickerId }];
+            
+            // 🛡️ Only evaluate _id if the incoming identifier passes standard validation lengths
+            if (mongoose.Types.ObjectId.isValid(stickerId)) {
+                queryConditions.push({ _id: stickerId });
+            }
+
             const stickerDoc = await StickerModel.findOne({
-                $or: [{ stickerId: stickerId }, { _id: stickerId }]
+                $or: queryConditions
             });
+            
             if (stickerDoc && stickerDoc.url) {
                 resolvedStickerUrl = stickerDoc.url;
             }
