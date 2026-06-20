@@ -1,11 +1,11 @@
-import MobileUser from '@/app/models/MobileUserModel';
-import Clan from '@/app/models/ClanModel';
 import connectDB from '@/app/lib/mongodb';
+import Clan from '@/app/models/ClanModel';
+import MobileUser from '@/app/models/MobileUserModel';
 import { NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
 
 const CC_VALUES = {
-    "increase_slot": 1500,
+    "increase_slot": 400,
     "change_name_desc": 200,
 };
 
@@ -14,6 +14,22 @@ const VERIFIED_TIERS = {
     'basic': 1,
     'standard': 2,
     'premium': 3
+};
+
+// Server-controlled pricing configuration (Prevents frontend parameter tampering exploits)
+const VERIFIED_PRICES = {
+    'basic': {
+        7: 100,    // $1.00 (Casual Fan Weekly)
+        30: 300    // $3.00 (Casual Fan Monthly)
+    },
+    'standard': {
+        7: 200,    // $2.00 (Otaku / Gamer Weekly)
+        30: 600    // $6.00 (Otaku / Gamer Monthly)
+    },
+    'premium': {
+        7: 400,    // $4.00 (Clan Leader / Whale Weekly)
+        30: 1200   // $12.00 (Clan Leader / Whale Monthly)
+    }
 };
 
 export async function POST(req) {
@@ -48,12 +64,14 @@ export async function POST(req) {
 
         // --- ACTION: BUY DYNAMIC STORE ITEMS (using CC) ---
         if (action === 'buy_item') {
-            
+
             if (category === "UPGRADE" || type === "UPGRADE" || type === "increase_slot") {
                 if (clan.maxSlots >= 13) return NextResponse.json({ success: false, error: 'Clan Slots full' }, { status: 400 });
-                const cost = price || CC_VALUES["increase_slot"];
+
+                // FORCE secure server configuration value instead of accepting client price parameter
+                const cost = CC_VALUES["increase_slot"];
                 if ((clan.spendablePoints || 0) < cost) return NextResponse.json({ success: false, error: 'Insufficient CC' }, { status: 400 });
-                
+
                 clan.spendablePoints -= cost;
                 clan.maxSlots += 1;
                 await clan.save();
@@ -61,17 +79,27 @@ export async function POST(req) {
             }
 
             if (category === "VERIFIED") {
-                if ((clan.spendablePoints || 0) < price) return NextResponse.json({ success: false, error: 'Insufficient CC' }, { status: 400 });
-                const parts = itemId.split('_'); 
-                const newTier = parts[1]; 
-                const days = parseInt(parts[2]); 
+                const parts = itemId.split('_');
+                const newTier = parts[1];
+                const days = parseInt(parts[2]);
+
+                // Fetch the absolute source-of-truth price strictly from the server mapping configuration
+                const secureSubscriptionCost = VERIFIED_PRICES[newTier]?.[days];
+
+                // Safety check if an unregistered tier or illegal timeframe is passed manually
+                if (secureSubscriptionCost === undefined) {
+                    return NextResponse.json({ success: false, error: 'Invalid or unknown subscription item package configuration' }, { status: 400 });
+                }
+
+                if ((clan.spendablePoints || 0) < secureSubscriptionCost) return NextResponse.json({ success: false, error: 'Insufficient CC' }, { status: 400 });
+
                 const currentTier = clan.activeCustomizations?.verifiedTier || 'none';
-                
+
                 if (VERIFIED_TIERS[newTier] < VERIFIED_TIERS[currentTier]) {
                     return NextResponse.json({ success: false, error: 'Higher tier active' }, { status: 400 });
                 }
 
-                clan.spendablePoints -= price;
+                clan.spendablePoints -= secureSubscriptionCost;
                 const now = new Date();
                 let expiry = (clan.verifiedUntil && clan.verifiedUntil > now) ? new Date(clan.verifiedUntil) : now;
                 expiry.setDate(expiry.getDate() + days);
@@ -82,7 +110,7 @@ export async function POST(req) {
                 return NextResponse.json({ success: true, newBalance: clan.spendablePoints });
             }
 
-            // Standard Inventory Items
+            // Standard Inventory Items - Left flexible with dynamic pricing per request
             if ((clan.spendablePoints || 0) < price) return NextResponse.json({ success: false, error: 'Insufficient CC' }, { status: 400 });
             clan.spendablePoints -= price;
             clan.specialInventory.push({
@@ -95,7 +123,7 @@ export async function POST(req) {
 
         // --- ACTION: PURCHASE CLAN PACKS (IAP) ---
         if (action === 'purchase_pack') {
-            const packRewards = rewards; 
+            const packRewards = rewards;
             const pId = packId || type; // Safety for identifier
             if (clan.purchasedPacks?.includes(pId)) return NextResponse.json({ success: false, error: 'Already owned' }, { status: 400 });
 
@@ -111,11 +139,11 @@ export async function POST(req) {
                     clan.activeMultiplier = reward.value || 2;
                 } else if (reward.type === 'VERIFIED') {
                     // Handle Verified Badges inside Packs
-                    const parts = reward.id.split('_'); 
-                    const newTier = reward.visualConfig?.tier || parts[1] || 'basic'; 
-                    const days = parseInt(parts[2]) || 7; 
+                    const parts = reward.id.split('_');
+                    const newTier = reward.visualConfig?.tier || parts[1] || 'basic';
+                    const days = parseInt(parts[2]) || 7;
                     const currentTier = clan.activeCustomizations?.verifiedTier || 'none';
-                    
+
                     // Only update visual/tier if it's an upgrade or same level
                     if (VERIFIED_TIERS[newTier] >= VERIFIED_TIERS[currentTier]) {
                         clan.activeCustomizations.verifiedTier = newTier;
@@ -167,10 +195,10 @@ export async function POST(req) {
                     service: "gmail",
                     auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
                 });
-                
+
                 const mailOptions = {
                     from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
-                    to: "Admins", 
+                    to: "Admins",
                     bcc: ["kayteedberserker@gmail.com"],
                     subject: `💰 New Clan Coin (CC) Purchase Alert!`,
                     html: `
@@ -181,7 +209,7 @@ export async function POST(req) {
                         <p><strong>Amount Gained:</strong> ${ccGained} Clan Coins (CC)</p>
                     `
                 };
-                
+
                 await transporter.sendMail(mailOptions);
             } catch (emailErr) {
                 console.error("Clan Coin purchase email notification failed:", emailErr);
@@ -196,4 +224,4 @@ export async function POST(req) {
         console.error("Clan Transaction Error:", error);
         return NextResponse.json({ success: false, error: 'Internal error' }, { status: 500 });
     }
-        }
+}
