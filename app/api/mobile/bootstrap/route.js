@@ -3,13 +3,16 @@ import MobileUser from "@/app/models/MobileUserModel";
 import UserStreak from "@/app/models/UserStreak";
 import mongoose from 'mongoose';
 import { NextResponse } from "next/server";
+
 const VersionSchema = new mongoose.Schema({
     key: { type: String, default: 'latest_app_version' },
     appVersion: { type: String, required: true },
     runtimeVersion: { type: String, required: true },
     critical: { type: Boolean, default: false },
 }, { timestamps: true });
+
 const VersionModel = mongoose.models.Version || mongoose.model('Version', VersionSchema);
+
 const calculatePeakLevel = (totalPurchased) => {
     if (!totalPurchased || totalPurchased < 1) return 0;
     if (totalPurchased < 1000) return 1;
@@ -23,45 +26,115 @@ const calculatePeakLevel = (totalPurchased) => {
     if (totalPurchased < 1000000) return 9;
     return 10;
 };
+
 function addCorsHeaders(response) {
     response.headers.set("Access-Control-Allow-Origin", "*");
     response.headers.set("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
     response.headers.set("Access-Control-Allow-Headers", "Content-Type,Authorization");
     return response;
 }
+
 export async function OPTIONS() { return addCorsHeaders(new NextResponse(null, { status: 204 })); }
+
 export async function POST(req) {
     try {
         await connectDB();
         const { deviceId, pushToken, platform } = await req.json();
+
         if (!deviceId) return addCorsHeaders(NextResponse.json({ error: "Missing deviceId" }, { status: 400 }));
+
         const now = new Date();
         const sixtyDaysAgo = new Date(now);
         sixtyDaysAgo.setDate(sixtyDaysAgo.getDate() - 60);
         const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
         let user = await MobileUser.findOne({ deviceId }).lean();
         let isNewUser = false;
+
         if (!user) {
             let randNum = Math.floor(Math.random() * 10000000);
             const newUser = await MobileUser.create({ deviceId, username: `User${randNum}` });
             user = newUser.toObject();
             isNewUser = true;
         }
+
         let validInventory = user.inventory || [];
         let inventoryNeedsUpdate = false;
+
+        // Clean expired inventory items
         if (validInventory.length > 0) {
             validInventory = validInventory.filter(item => {
-                if (item.expiresAt && new Date(item.expiresAt) < now) { inventoryNeedsUpdate = true; return false; }
+                if (item.expiresAt && new Date(item.expiresAt) < now) {
+                    inventoryNeedsUpdate = true;
+                    return false;
+                }
                 return true;
             });
             if (inventoryNeedsUpdate) user.inventory = validInventory;
         }
+
         let updateQuery = { $set: { lastActive: now } };
+        let hasReturned = false;
+
+        // =======================================================================
+        // ⚡️ RETURNER REWARD PROTOCOL (28+ Days Inactive)
+        // =======================================================================
+        if (!isNewUser && user.lastActive) {
+            const daysSinceLastActive = (now.getTime() - new Date(user.lastActive).getTime()) / (1000 * 60 * 60 * 24);
+
+            if (daysSinceLastActive >= 28) {
+                hasReturned = true;
+
+                // 1. Double Streak for 7 days
+                const doubleStreakDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+                updateQuery.$set.doubleStreakUntil = doubleStreakDate;
+                user.doubleStreakUntil = doubleStreakDate; // Update memory for response
+
+                // 2. Grant 2 Free Hypes
+                const existingHype = validInventory.find(item => item.itemId === 'hype_free');
+                if (existingHype) {
+                    existingHype.itemCount = (existingHype.itemCount || 1) + 2;
+                } else {
+                    validInventory.push({
+                        itemId: `hype_free`,
+                        name: `Free Hype`,
+                        category: 'HYPE',
+                        rarity: 'RARE',
+                        hypeType: 'FREE',
+                        visualConfig: {
+                            primaryColor: '#22c55e',
+                            isAnimated: false
+                        },
+                        itemCount: 2,
+                        acquiredAt: now,
+                        expiresAt: null,
+                        isConsumable: true
+                    });
+                }
+                inventoryNeedsUpdate = true;
+
+                // 3. Grant "Resurrected" Title
+                user.unlockedTitles = user.unlockedTitles || [];
+                const hasResurrectedTitle = user.unlockedTitles.some(t => t.name === 'Resurrected');
+
+                if (!hasResurrectedTitle) {
+                    const resTitle = { name: 'Resurrected', tier: 'Epic' };
+                    user.unlockedTitles.push(resTitle);
+                    user.equippedTitle = resTitle;
+
+                    updateQuery.$set.unlockedTitles = user.unlockedTitles;
+                    updateQuery.$set.equippedTitle = resTitle;
+                }
+            }
+        }
+
         if (pushToken) updateQuery.$set.pushToken = pushToken;
         if (platform) updateQuery.$set.platform = platform;
         if (inventoryNeedsUpdate) updateQuery.$set.inventory = validInventory;
+
         const lastLogEntry = user?.activityLog?.[user.activityLog?.length - 1];
         const shouldLog = isNewUser || !lastLogEntry || new Date(lastLogEntry) < oneHourAgo;
+
         if (shouldLog) {
             updateQuery.$inc = { appOpens: 1 };
             let newActivityLog = user.activityLog || [];
@@ -69,31 +142,67 @@ export async function POST(req) {
             newActivityLog = newActivityLog.filter(date => new Date(date) >= sixtyDaysAgo);
             updateQuery.$set.activityLog = newActivityLog;
         }
+
         const [updateResult, streakDoc, versionConfig] = await Promise.all([
             MobileUser.updateOne({ _id: user._id }, updateQuery),
             UserStreak.findOne({ userId: user._id }).lean(),
             VersionModel.findOne({ key: 'latest_app_version' }).lean()
         ]);
-        const rawEvents = [
-            {
-                id: 'trivia_lore_check', type: "quiz", title: 'The Meaning of the System', description: 'Prove your knowledge of THE SYSTEM to unlock 500 OC.', eventType: 'quiz', promoImage: 'https://res.cloudinary.com/donakg9he/image/upload/v1778879732/ChatGPT_Image_May_6_2026_12_13_46_PM_yb2isc.png', icon: 'help-circle', themeColor: '#8b5cf6', startsAt: new Date('2026-05-16T07:00:00Z').toISOString(), endsAt: new Date('2026-05-23T23:59:59Z').toISOString(),
-            },
-            {
-                id: 'gacha_400_cache', type: "gacha", gachaType: "GRID", title: '400 SYNCED: MAIN EVENT', description: 'To celebrate, the limited-time Surge Event is live! Drop in, take your spins, and cash in your fragments for the ultra-rare Cyan Surge items before they vanish!', startsAt: new Date('2026-05-17T00:00:00Z').toISOString(), eventType: 'seasonal', tokenName: '400 SYNCED', tokenVisual: { svgCode: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000"><defs><linearGradient id="b" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#07519e"/><stop offset="100%" stop-color="#02152e"/></linearGradient><linearGradient id="d" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stop-color="#3bf7db"/><stop offset="45%" stop-color="#21bbf3"/><stop offset="100%" stop-color="#0b38b3"/></linearGradient></defs><g transform="translate(500 500)"><path fill="#02152e" d="m0 0-480-380 60-40zm0 0 480-320-80-80zm0 0-450 380 90 40zm0 0 460 350-60 80zm0 0-520-80 20 100zm0 0 520-50-20-70z"/><path fill="#21bbf3" d="m0 0-460-360 60-30z"/><path fill="#3bf7db" d="m0 0 450-300-70-70z"/><path fill="#21bbf3" d="m0 0-420 360 80 30z"/><path fill="#3bf7db" d="m0 0 440 330-60 70z"/><circle cx="-420" cy="-200" r="8" fill="#02152e"/><circle cx="-400" cy="-220" r="12" fill="#21bbf3"/><circle cx="430" cy="-180" r="10" fill="#02152e"/><circle cx="450" cy="180" r="15" fill="#3bf7db"/><circle cx="-380" cy="220" r="9" fill="#02152e"/></g><g transform="translate(515 520)"><path d="m0-342 60 162 156-135-36 153 204-90-120 144 192 18-156 72 168 90-192 18 132 135-216-63 72 162L96 198 0 351l-96-153-168 126 72-162-216 63 132-135-192-18 168-90-156-72 192-18-120-144 204 90-36-153 156 135Z" fill="#000000" stroke="#000000" stroke-width="40" stroke-linejoin="round" opacity="0.2"/></g><g transform="translate(500 500)"><path d="m0-342 60 162 156-135-36 153 204-90-120 144 192 18-156 72 168 90-192 18 132 135-216-63 72 162L96 198 0 351l-96-153-168 126 72-162-216 63 132-135-192-18 168-90-156-72 192-18-120-144 204 90-36-153 156 135Z" fill="#000000" stroke="#000" stroke-width="40" stroke-linejoin="round"/><path d="m0-342 60 162 156-135-36 153 204-90-120 144 192 18-156 72 168 90-192 18 132 135-216-63 72 162L96 198 0 351l-96-153-168 126 72-162-216 63 132-135-192-18 168-90-156-72 192-18-120-144 204 90-36-153 156 135Z" fill="none" stroke="#fff" stroke-width="20" stroke-linejoin="round"/><path d="m0-342 60 162 156-135-36 153 204-90-120 144 192 18-156 72 168 90-192 18 132 135-216-63 72 162L96 198 0 351l-96-153-168 126 72-162-216 63 132-135-192-18 168-90-156-72 192-18-120-144 204 90-36-153 156 135Z" fill="url(#b)"/><path d="m-170-150-30-150m-50 210-120-150m540 90 30-150" fill="none" stroke="#3bf7db" stroke-width="8" stroke-linecap="round" opacity=".8"/></g><text font-family="Impact, Arial Black, sans-serif" font-size="420" font-weight="900" font-style="italic" text-anchor="middle" letter-spacing="-10" x="15" y="20" fill="#000000" stroke="#000" stroke-width="45" stroke-linejoin="round" transform="translate(500 540)skewX(-14)">400</text><text font-family="Impact, Arial Black, sans-serif" font-size="420" font-weight="900" font-style="italic" text-anchor="middle" letter-spacing="-10" fill="#000000" stroke="#000" stroke-width="45" stroke-linejoin="round" transform="translate(500 540)skewX(-14)">400</text><text font-family="Impact, Arial Black, sans-serif" font-size="420" font-weight="900" font-style="italic" text-anchor="middle" letter-spacing="-10" fill="none" stroke="#fff" stroke-width="18" stroke-linejoin="round" transform="translate(500 540)skewX(-14)">400</text><text font-family="Impact, Arial Black, sans-serif" font-size="420" font-weight="900" font-style="italic" text-anchor="middle" letter-spacing="-10" fill="url(#d)" transform="translate(500 540)skewX(-14)">400</text><g fill="none" stroke="#fff" stroke-width="6" stroke-linecap="round" transform="translate(500 540)skewX(-14)"><path d="m-160-280 40 160M-220 10l40 50m170-320 20 110m170-110 20 110"/><circle cx="-130" cy="-80" r="4" fill="#fff" stroke="none"/><circle cx="20" cy="-110" r="4" fill="#fff" stroke="none"/><circle cx="210" cy="-110" r="4" fill="#fff" stroke="none"/></g></svg>` }, icon: 'flare', themeColor: '#8bf755', endsAt: new Date('2026-06-01T00:00:00Z').toISOString(),
-            }
-        ];
-        const activeEvents = rawEvents.filter(event => !event.endsAt || new Date(event.endsAt) > now).map(event => ({ ...event, isComing: event.startsAt && new Date(event.startsAt) > now, status: (event.startsAt && new Date(event.startsAt) > now) ? 'coming_soon' : 'active' }));
+
+        const rawEvents = [];
+        const activeEvents = rawEvents.filter(event => !event.endsAt || new Date(event.endsAt) > now).map(event => ({
+            ...event,
+            isComing: event.startsAt && new Date(event.startsAt) > now,
+            status: (event.startsAt && new Date(event.startsAt) > now) ? 'coming_soon' : 'active'
+        }));
+
         const systemVersion = versionConfig || { appVersion: "1.0.0", runtimeVersion: "v1", critical: false };
+
+        // =======================================================================
+        // ⚡️ CRITICAL PAYLOAD OPTIMIZATION: UNCONDITIONALLY STRIP SVGS
+        // =======================================================================
+        const safeInventoryPayload = validInventory.map(item => {
+            const safeItem = item.toObject ? item.toObject() : { ...item };
+
+            // Completely destroy the SVG string payload to prevent network truncation crashes
+            if (safeItem.visualConfig) {
+                safeItem.visualConfig = { ...safeItem.visualConfig };
+                delete safeItem.visualConfig.svgCode;
+            }
+
+            // Catching any edge cases where it's stored in visualData instead
+            if (safeItem.visualData) {
+                safeItem.visualData = { ...safeItem.visualData };
+                delete safeItem.visualData.svgCode;
+            }
+
+            return safeItem;
+        });
+
         return addCorsHeaders(NextResponse.json({
             success: true,
             system: { appVersion: systemVersion.appVersion, runtimeVersion: systemVersion.runtimeVersion, critical: systemVersion.critical },
-            activity: { recorded: shouldLog, pushTokenUpdated: !!pushToken },
-            user: { ...user, country: user.country || "Unknown", securityLevel: user.securityLevel || 0, inventory: validInventory },
-            // ⚡️ FIXED: Ensure clanBalance and doubleStreakUntil are returned here
-            coins: { balance: user.coins || 0, tokens: user.tokens || 0, clanBalance: user.clanCoins || 0, totalPurchasedCoins: user.totalPurchasedCoins || 0, peakLevel: calculatePeakLevel(user.totalPurchasedCoins || 0), doubleStreakUntil: user.doubleStreakUntil || null },
-            streak: { streak: streakDoc?.streak || 0, lastPostDate: streakDoc?.lastPostDate || null, expiresAt: streakDoc?.expiresAt || null, canRestore: !streakDoc && (user.lastStreak > 0), recoverableStreak: user.lastStreak || 0 },
+            // ⚡️ Added `hasReturned` to the activity block for your frontend check
+            activity: { recorded: shouldLog, pushTokenUpdated: !!pushToken, hasReturned },
+            user: { ...user, country: user.country || "Unknown", securityLevel: user.securityLevel || 0, inventory: safeInventoryPayload },
+            coins: {
+                balance: user.coins || 0,
+                tokens: user.tokens || 0,
+                clanBalance: user.clanCoins || 0,
+                totalPurchasedCoins: user.totalPurchasedCoins || 0,
+                peakLevel: calculatePeakLevel(user.totalPurchasedCoins || 0),
+                doubleStreakUntil: user.doubleStreakUntil || null
+            },
+            streak: {
+                streak: streakDoc?.streak || 0,
+                lastPostDate: streakDoc?.lastPostDate || null,
+                expiresAt: streakDoc?.expiresAt || null,
+                canRestore: !streakDoc && (user.lastStreak > 0),
+                recoverableStreak: user.lastStreak || 0
+            },
             events: activeEvents
         }));
+
     } catch (err) {
         console.error("Bootstrap Error:", err);
         return addCorsHeaders(NextResponse.json({ error: "Internal Server Error" }, { status: 500 }));
