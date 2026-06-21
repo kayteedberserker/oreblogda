@@ -72,14 +72,14 @@ export async function POST(req, { params }) {
                     "New Clan Join Request",
                     `${username || user.username} has requested to join your clan [${targetClan.name}]!`,
                     {
-                        screen: "/clanprofile",
+                        screen: "/clanprofile?tab=kagedesk",
                         clanTag: targetClan.tag
                     },
                     {
                         type: 'clan_request',
                         targetAudience: 'user',
                         targetId: targetClan.leader.toString(),
-                        link: `/clanprofile`,
+                        link: `/clanprofile?tab=kagedesk`,
                         priority: 4
                     }
                 );

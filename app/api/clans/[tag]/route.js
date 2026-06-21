@@ -232,8 +232,8 @@ export async function PATCH(req, { params }) {
                         [targetUser.pushToken],
                         "Application Declined",
                         `[${clan.name}] has declined your request to join.`,
-                        { screen: "/clanprofile" },
-                        { type: 'clan_alert', targetAudience: 'user', targetId: targetUser._id.toString(), link: `/clanprofile`, priority: 3 }
+                        { screen: "/clanprofile?tab=shinobi" },
+                        { type: 'clan_alert', targetAudience: 'user', targetId: targetUser._id.toString(), link: `/clanprofile?tab=shinobi`, priority: 3 }
                     );
                 }
             } catch (e) { console.error("Notification Error:", e); }
@@ -298,8 +298,8 @@ export async function PATCH(req, { params }) {
                         tokens,
                         `${clan.name} Hall`,
                         `${user.username}: ${payload.text.slice(0, 100)}`,
-                        { screen: "/clanprofile", clanTag: clan.tag, type: "CLAN_CHAT" },
-                        { type: 'clan_message', targetAudience: 'clan', targetId: clan.tag, link: `/clanprofile`, priority: 4 }
+                        { screen: "/clanprofile?tab=hall", clanTag: clan.tag, type: "CLAN_CHAT" },
+                        { type: 'clan_message', targetAudience: 'clan', targetId: clan.tag, link: `/clanprofile?tab=hall`, priority: 4 }
                     );
                 }
             } catch (pushErr) { console.error("Push Error:", pushErr); }
