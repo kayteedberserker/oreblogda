@@ -65,7 +65,7 @@ export async function POST(req) {
         // --- ACTION: BUY DYNAMIC STORE ITEMS (using CC) ---
         if (action === 'buy_item') {
 
-            if (category === "UPGRADE" || type === "UPGRADE" || type === "increase_slot") {
+            if (category === "UPGRADE" || type === "UPGRADE" || type === "increase_slot" || type === "increase_slot") {
                 if (clan.maxSlots >= 13) return NextResponse.json({ success: false, error: 'Clan Slots full' }, { status: 400 });
 
                 // FORCE secure server configuration value instead of accepting client price parameter
@@ -75,7 +75,7 @@ export async function POST(req) {
                 clan.spendablePoints -= cost;
                 clan.maxSlots += 1;
                 await clan.save();
-                return NextResponse.json({ success: true, newBalance: clan.spendablePoints });
+                return NextResponse.json({ success: true, newBalance: clan.spendablePoints, newClanBalance: clan.spendablePoints });
             }
 
             if (category === "VERIFIED") {
@@ -107,7 +107,7 @@ export async function POST(req) {
                 clan.activeCustomizations.verifiedTier = newTier;
                 clan.activeCustomizations.verifiedBadgeXml = visualConfig?.svgCode;
                 await clan.save();
-                return NextResponse.json({ success: true, newBalance: clan.spendablePoints });
+                return NextResponse.json({ success: true, newBalance: clan.spendablePoints, newClanBalance: clan.spendablePoints });
             }
 
             // Standard Inventory Items - Left flexible with dynamic pricing per request
@@ -118,7 +118,7 @@ export async function POST(req) {
                 visualConfig: { ...visualConfig, isAnimated: visualConfig?.isAnimated || !!visualConfig?.animationType }
             });
             await clan.save();
-            return NextResponse.json({ success: true, newBalance: clan.spendablePoints });
+            return NextResponse.json({ success: true, newBalance: clan.spendablePoints, newClanBalance: clan.spendablePoints });
         }
 
         // --- ACTION: PURCHASE CLAN PACKS (IAP) ---
@@ -175,7 +175,7 @@ export async function POST(req) {
             if (!clan.purchasedPacks) clan.purchasedPacks = [];
             clan.purchasedPacks.push(pId);
             await clan.save();
-            return NextResponse.json({ success: true, newBalance: clan.spendablePoints });
+            return NextResponse.json({ success: true, newBalance: clan.spendablePoints, newClanBalance: clan.spendablePoints });
         }
 
         // --- ACTION: BUY CC TIERS (Direct IAP for coins) ---
@@ -215,7 +215,31 @@ export async function POST(req) {
                 console.error("Clan Coin purchase email notification failed:", emailErr);
             }
 
-            return NextResponse.json({ success: true, newBalance: clan.spendablePoints });
+            return NextResponse.json({ success: true, newBalance: clan.spendablePoints, newClanBalance: clan.spendablePoints });
+        }
+
+        // --- ⚡️ ACTION: SPEND CLAN COINS (General Backend Deductions) ---
+        if (action === 'spend') {
+            const cost = CC_VALUES[type];
+            if (!cost) return NextResponse.json({ success: false, error: 'Invalid spend type configured' }, { status: 400 });
+
+            if ((clan.spendablePoints || 0) < cost) {
+                return NextResponse.json({ success: false, error: 'Insufficient CC' }, { status: 400 });
+            }
+
+            clan.spendablePoints -= cost;
+            await clan.save();
+            return NextResponse.json({ success: true, newBalance: clan.spendablePoints, newClanBalance: clan.spendablePoints });
+        }
+
+        // --- ⚡️ ACTION: REFUND CLAN COINS (Failure Fallbacks) ---
+        if (action === 'refund') {
+            const cost = CC_VALUES[type];
+            if (!cost) return NextResponse.json({ success: false, error: 'Invalid refund type configured' }, { status: 400 });
+
+            clan.spendablePoints = (clan.spendablePoints || 0) + cost;
+            await clan.save();
+            return NextResponse.json({ success: true, newBalance: clan.spendablePoints, newClanBalance: clan.spendablePoints });
         }
 
         return NextResponse.json({ success: false, error: 'Invalid action' }, { status: 400 });
