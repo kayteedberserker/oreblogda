@@ -1,6 +1,9 @@
+import Clan from '@/app/models/ClanModel';
+import MobileUser from '@/app/models/MobileUserModel';
+import mongoose from 'mongoose';
 import { NextResponse } from 'next/server';
-import MobileUser from '@/models/MobileUser'; 
-import Clan from '@/models/Clan'; 
+
+// Ensure ClanFollower is registered to prevent missing model errors
 
 const gachaTypes = ["grid", "roulette"]
 
@@ -9,6 +12,7 @@ export async function GET(request) {
         const now = new Date();
         const { searchParams } = new URL(request.url);
         const referredBy = searchParams.get('referredBy');
+        const userId = searchParams.get('userId'); // ⚡️ NEW: Capture the requesting user's ID
 
         // ⚡️ Raw Event Configurations
         const rawEvents = [
@@ -125,7 +129,7 @@ export async function GET(request) {
         let referredClan = null;
         if (referredBy) {
             const referrer = await MobileUser.findOne({ referralCode: referredBy }).lean();
-            
+
             if (referrer) {
                 // Find if the referring user leads or belongs to any clan
                 const clan = await Clan.findOne({
@@ -137,20 +141,52 @@ export async function GET(request) {
                 }).lean();
 
                 if (clan) {
-                    // Generate a vibrant, deterministic cyberpunk color using a hash of the clan tag
-                    const colors = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899"];
-                    let hash = 0;
-                    for (let i = 0; i < clan.tag.length; i++) {
-                        hash = clan.tag.charCodeAt(i) + ((hash << 5) - hash);
-                    }
-                    const dynamicColor = colors[Math.abs(hash) % colors.length];
+                    let isAlreadyFollowingOrMember = false;
 
-                    referredClan = {
-                        name: clan.name,
-                        tag: clan.tag,
-                        description: clan.description || `Join ${clan.name} on Oreblogda. You've been linked via a direct alliance referral. Sync immediately to access dedicated pools and shared clan multipliers.`,
-                        color: dynamicColor
-                    };
+                    // ⚡️ NEW: Check if the user already follows this clan or is a member
+                    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+                        // Check Follower DB
+                        const followerRecord = await mongoose.models.ClanFollower.findOne({
+                            clanTag: clan.tag,
+                            userId: userId
+                        }).lean();
+
+                        if (followerRecord) {
+                            isAlreadyFollowingOrMember = true;
+                        }
+
+                        // Check actual membership inside the Clan object
+                        if (!isAlreadyFollowingOrMember) {
+                            if (
+                                clan.leader?.toString() === userId ||
+                                clan.viceLeader?.toString() === userId ||
+                                clan.members?.some(m => m.toString() === userId)
+                            ) {
+                                isAlreadyFollowingOrMember = true;
+                            }
+                        }
+                    }
+
+                    // Only send the payload down if they aren't following yet
+                    if (!isAlreadyFollowingOrMember) {
+                        // Generate a vibrant, deterministic cyberpunk color using a hash of the clan tag
+                        const colors = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899"];
+                        let hash = 0;
+                        for (let i = 0; i < clan.tag.length; i++) {
+                            hash = clan.tag.charCodeAt(i) + ((hash << 5) - hash);
+                        }
+                        const dynamicColor = colors[Math.abs(hash) % colors.length];
+
+                        referredClan = {
+                            name: clan.name,
+                            tag: clan.tag,
+                            description: clan.description || "You've been linked via a direct alliance referral. Sync immediately to access dedicated pools and shared clan multipliers.",
+                            color: dynamicColor,
+                            rank: clan.rank || 1, // Added for ClanCrest
+                            referrerName: referrer.username || "Unknown Author",
+                            referrerImage: referrer.profilePic?.url || null
+                        };
+                    }
                 }
             }
         }
