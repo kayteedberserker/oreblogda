@@ -49,13 +49,23 @@ export async function POST(req) {
         const { hardwareId, recoverId, pin, pushToken, deviceId } = validation.data;
 
         // 1. 🔍 SEARCH USER
-        // Finds the account associated with the provided UID or Device ID
-        let user = await MobileUser.findOne({
-            $or: [
-                { uid: recoverId },
-                { deviceId: recoverId }
-            ]
-        }).select("+pin +loginAttempts +lockUntil +refreshToken");
+        // ⚡️ NEW: Regex to determine if the recoverId is formatted as an email
+        const isEmailFormat = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recoverId);
+
+        let queryCondition = {};
+        if (isEmailFormat) {
+            // Force lowercase to match the 'lowercase: true' configuration in your schema
+            queryCondition = { email: recoverId.toLowerCase() };
+        } else {
+            queryCondition = {
+                $or: [
+                    { uid: recoverId },
+                    { deviceId: recoverId }
+                ]
+            };
+        }
+
+        let user = await MobileUser.findOne(queryCondition).select("+pin +loginAttempts +lockUntil +refreshToken");
 
         if (!user) {
             return NextResponse.json({ message: "Identity not found." }, { status: 404 });
