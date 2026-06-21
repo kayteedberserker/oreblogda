@@ -1,10 +1,14 @@
 import { NextResponse } from 'next/server';
+import MobileUser from '@/models/MobileUser'; 
+import Clan from '@/models/Clan'; 
 
 const gachaTypes = ["grid", "roulette"]
 
-export async function GET() {
+export async function GET(request) {
     try {
         const now = new Date();
+        const { searchParams } = new URL(request.url);
+        const referredBy = searchParams.get('referredBy');
 
         // ⚡️ Raw Event Configurations
         const rawEvents = [
@@ -84,7 +88,6 @@ export async function GET() {
                                 <circle cx="210" cy="-110" r="4" fill="#fff" stroke="none"/>
                             </g>
                             </svg>
-    
                     ` },
                 icon: 'flare', // A cool burst/spark icon
                 themeColor: '#8bf755', // A cosmic purple
@@ -118,9 +121,44 @@ export async function GET() {
                 };
             });
 
+        // ⚡️ DYNAMIC CLAN REFERRAL MATCHING ENGINE
+        let referredClan = null;
+        if (referredBy) {
+            const referrer = await MobileUser.findOne({ referralCode: referredBy }).lean();
+            
+            if (referrer) {
+                // Find if the referring user leads or belongs to any clan
+                const clan = await Clan.findOne({
+                    $or: [
+                        { leader: referrer._id },
+                        { viceLeader: referrer._id },
+                        { members: referrer._id }
+                    ]
+                }).lean();
+
+                if (clan) {
+                    // Generate a vibrant, deterministic cyberpunk color using a hash of the clan tag
+                    const colors = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899"];
+                    let hash = 0;
+                    for (let i = 0; i < clan.tag.length; i++) {
+                        hash = clan.tag.charCodeAt(i) + ((hash << 5) - hash);
+                    }
+                    const dynamicColor = colors[Math.abs(hash) % colors.length];
+
+                    referredClan = {
+                        name: clan.name,
+                        tag: clan.tag,
+                        description: clan.description || `Join ${clan.name} on Oreblogda. You've been linked via a direct alliance referral. Sync immediately to access dedicated pools and shared clan multipliers.`,
+                        color: dynamicColor
+                    };
+                }
+            }
+        }
+
         return NextResponse.json({
             success: true,
-            events: activeEvents
+            events: activeEvents,
+            referredClan // Seamlessly appended for the UI to consume
         });
 
     } catch (error) {
