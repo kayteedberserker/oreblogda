@@ -46,8 +46,9 @@ export async function POST(req) {
     const detectedCountry = geo ? geo.country : "Unknown";
 
     const existingAccounts = await MobileUser.find({ hardwareId });
-
-    if (existingAccounts.length >= 3) {
+    console.log(existingAccounts, hardwareId, "trying to signup");
+    
+    if (existingAccounts.length >= 5) {
       return NextResponse.json({
         message: "SECURITY_PROTOCOL: Device limit reached. Maximum 3 players allowed per device."
       }, { status: 403 });

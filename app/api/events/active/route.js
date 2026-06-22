@@ -1,3 +1,4 @@
+import connectDB from "@/app/lib/mongodb";
 import Clan from '@/app/models/ClanModel';
 import MobileUser from '@/app/models/MobileUserModel';
 import mongoose from 'mongoose';
@@ -8,6 +9,7 @@ import { NextResponse } from 'next/server';
 const gachaTypes = ["grid", "roulette"]
 
 export async function GET(request) {
+    await connectDB()
     try {
         const now = new Date();
         const { searchParams } = new URL(request.url);
