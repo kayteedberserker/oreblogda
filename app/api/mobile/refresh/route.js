@@ -25,7 +25,6 @@ export async function POST(req) {
         // 2. Find user in MongoDB and verify token + deviceId match
         const user = await MobileUser.findOne({ uid: decoded.uid });
         console.log(
-            "the user is ", user,
             "the user refreshToken in database is ", user.refreshToken,
             "the user refreshToken sent from app is ", refreshToken,
             "the user deviceId is ", user.deviceId, "sent from phone is ", deviceId
