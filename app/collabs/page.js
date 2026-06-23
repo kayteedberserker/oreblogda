@@ -6,24 +6,23 @@ import { toast } from "react-toastify";
 
 const CollabsDashboard = () => {
     const [user, setUser] = useState(null);
-    const [networkMembers, setNetworkMembers] = useState([]);
-    const [loadingData, setLoadingData] = useState(false);
+    const [clanMembers, setClanMembers] = useState([]);
+    const [loadingClan, setLoadingClan] = useState(false);
     const [countryFilter, setCountryFilter] = useState("All");
     const [sortOrder, setSortOrder] = useState("topups_desc");
 
-    // Pagination & Global Metrics States
+    // ⚡️ Pagination & Global Metrics States
     const [page, setPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
     const [totalMembersCount, setTotalMembersCount] = useState(0);
     const [globalTotalTopups, setGlobalTotalTopups] = useState(0);
 
-    // Dynamic Collab States
+    // ⚡️ Dynamic Collab States
     const [collabType, setCollabType] = useState("followers");
     const [collabPercentage, setCollabPercentage] = useState(20);
 
     const router = useRouter();
 
-    // --- Fetch Authenticated Creator Profile Context ---
     useEffect(() => {
         const fetchUserSession = async () => {
             try {
@@ -44,60 +43,51 @@ const CollabsDashboard = () => {
         fetchUserSession();
     }, []);
 
-    // --- Fetch Network Data on User Verification or Page Change ---
     useEffect(() => {
         if (user) {
-            fetchNetworkMembers();
+            fetchClanMembers();
         }
     }, [user, page]);
 
-    const fetchNetworkMembers = async () => {
-        setLoadingData(true);
+    const fetchClanMembers = async () => {
+        setLoadingClan(true);
         try {
             const res = await fetch(`/api/collabs/clan?leaderId=${user.id}&page=${page}&limit=20`);
             const data = await res.json();
 
             if (res.ok) {
-                setNetworkMembers(data.members || []);
+                setClanMembers(data.members || []);
                 setTotalPages(data.pagination?.totalPages || 1);
-                setTotalMembersCount(data.pagination?.totalMembers || (data.members?.length || 0)); // Fallback if pagination isn't strictly enforced yet
+                setTotalMembersCount(data.pagination?.totalMembers || 0);
 
-                // Calculate total top-ups dynamically from the fetched data if backend doesn't aggregate it
-                const aggregatedTopups = data.metrics?.globalTotalTopups || data.members?.reduce((acc, m) => acc + (m.totalPurchasedCoins || 0), 0) || 0;
-                setGlobalTotalTopups(aggregatedTopups);
-
+                setGlobalTotalTopups(data.metrics?.globalTotalTopups || 0);
                 setCollabType(data.collabType || "followers");
-                setCollabPercentage(data.collabPercentage || (data.collabType === 'referrals' ? 40 : 20));
+                setCollabPercentage(data.collabPercentage || 20);
             } else {
-                toast.info("Connecting to Database...");
+                toast.info("Connecting to Clan Database...");
             }
         } catch (err) {
             console.error(err);
         } finally {
-            setLoadingData(false);
+            setLoadingClan(false);
         }
     };
 
-    // --- DATA PROCESSING ---
-    const uniqueCountries = ["All", ...new Set(networkMembers.map(m => m.country || "Unknown"))];
+    // --- CLAN DATA PROCESSING ---
+    const uniqueCountries = ["All", ...new Set(clanMembers.map(m => m.country || "Unknown"))];
 
-    const filteredMembers = networkMembers
+    const filteredMembers = clanMembers
         .filter(m => countryFilter === "All" || (m.country || "Unknown") === countryFilter)
         .sort((a, b) => {
-            if (sortOrder === "topups_desc") return (b.totalPurchasedCoins || 0) - (a.totalPurchasedCoins || 0);
-            if (sortOrder === "topups_asc") return (a.totalPurchasedCoins || 0) - (b.totalPurchasedCoins || 0);
+            if (sortOrder === "topups_desc") return (b.clanTopups || 0) - (a.clanTopups || 0);
+            if (sortOrder === "topups_asc") return (a.clanTopups || 0) - (b.clanTopups || 0);
             if (sortOrder === "recent") return new Date(b.lastActive || 0).getTime() - new Date(a.lastActive || 0).getTime();
             return 0;
         });
 
-    // REVENUE METRIC FIX: Derived from global aggregate, deducting 30% store processing fee first, then taking the dynamic percentage
+    // ⚡️ SHARP REVENUE METRIC FIX
     const leaderShare = (globalTotalTopups * 0.7) * (collabPercentage / 100);
-
-    // DOLLAR CONVERSION ENGINE: 100 Coins = $0.5 (1 Coin = $0.005)
     const leaderShareUSD = leaderShare * 0.005;
-
-    // UI TEXT DYNAMICS
-    const networkLabel = collabType === 'referrals' ? "Referral Network" : "Clan Forces";
 
     if (!user) {
         return (
@@ -114,7 +104,7 @@ const CollabsDashboard = () => {
                         <div className="h-[1px] w-8 bg-gray-200 dark:bg-gray-800"></div>
                         <div className="flex items-center gap-1.5">
                             <span className="h-1.5 w-1.5 rounded-full bg-indigo-500 animate-ping"></span>
-                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500/60">Data_Sync</span>
+                            <span className="text-[10px] font-black uppercase tracking-[0.2em] text-indigo-500/60">Clan_Sync</span>
                         </div>
                     </div>
 
@@ -126,25 +116,29 @@ const CollabsDashboard = () => {
 
                     <div className="text-center">
                         <h2 className="text-xl font-black italic tracking-tighter uppercase text-gray-900 dark:text-white mb-1">
-                            Syncing Financial Ledger
+                            Syncing Clan Ledger
                         </h2>
                         <div className="w-48 h-1 bg-gray-100 dark:bg-gray-800 rounded-full mt-4 mx-auto overflow-hidden relative">
                             <div className="absolute inset-y-0 left-0 bg-indigo-600 w-1/2 animate-[collabLoad_2s_ease-in-out_infinite] rounded-full shadow-[0_0_10px_#4f46e5]"></div>
                         </div>
                         <div className="mt-4 flex flex-col gap-1">
                             <p className="text-[8px] font-bold text-gray-400 uppercase tracking-[0.3em] animate-pulse">
-                                Authorizing Financial Uplinks...
+                                Authorizing Financial Uplinks & Roster Ingestion...
+                            </p>
+                            <p className="text-[7px] font-mono text-gray-500/50 uppercase">
+                                Subdomain Security: COLLAB_SECURE_v4.2 // SSL_VERIFIED
                             </p>
                         </div>
                     </div>
                 </div>
+
                 <style jsx global>{`
-                    @keyframes collabLoad {
-                        0% { transform: translateX(-100%); }
-                        50% { transform: translateX(100%); }
-                        100% { transform: translateX(-100%); }
-                    }
-                `}</style>
+@keyframes collabLoad {
+0% { transform: translateX(-100%); }
+50% { transform: translateX(100%); }
+100% { transform: translateX(-100%); }
+}
+`}</style>
             </div>
         );
     }
@@ -168,7 +162,7 @@ const CollabsDashboard = () => {
             <main className="w-full animate-in fade-in slide-in-from-bottom-4 duration-500">
                 <div className="flex items-center gap-4 mb-8">
                     <h2 className="text-xl font-black uppercase tracking-tighter italic flex items-center gap-2">
-                        {networkLabel} & Revenue
+                        {collabType === 'referrals' ? 'Referral Network & Revenue' : 'Clan Network & Revenue'}
                         <span className="bg-indigo-600/10 text-indigo-500 px-2 py-0.5 rounded text-[9px] border border-indigo-500/20 font-sans tracking-normal not-italic font-bold">LIVE</span>
                     </h2>
                     <div className="h-[1px] flex-1 bg-gradient-to-r from-gray-200 dark:from-gray-800 to-transparent" />
@@ -177,13 +171,17 @@ const CollabsDashboard = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
                     <div className="p-6 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-3xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-24 h-24 bg-blue-500/10 blur-2xl rounded-full" />
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 mb-2">Total {networkLabel}</p>
-                        <p className="text-4xl font-black tracking-tighter">{totalMembersCount.toLocaleString()}</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 mb-2">
+                            {collabType === 'referrals' ? 'Total Referrals' : 'Total Clan Forces'}
+                        </p>
+                        <p className="text-4xl font-black tracking-tighter">
+                            {totalMembersCount.toLocaleString()}
+                        </p>
                     </div>
 
                     <div className="p-6 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-3xl relative overflow-hidden">
                         <div className="absolute top-0 right-0 w-24 h-24 bg-green-500/10 blur-2xl rounded-full" />
-                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 mb-2">Total Top-ups</p>
+                        <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 mb-2">Network Top-ups</p>
                         <p className="text-4xl font-black tracking-tighter text-green-600 dark:text-green-500">
                             {globalTotalTopups.toLocaleString()} <span className="text-lg text-gray-400">Coins</span>
                         </p>
@@ -240,21 +238,23 @@ const CollabsDashboard = () => {
                 </div>
 
                 <div className="border border-gray-200 dark:border-gray-800 rounded-3xl overflow-hidden bg-white dark:bg-[#0a0a0a]">
-                    {loadingData ? (
+                    {loadingClan ? (
                         <div className="flex flex-col items-center justify-center py-24 relative">
                             <div className="relative mb-4">
                                 <div className="h-12 w-12 rounded-full border-[3px] border-indigo-600/10 border-t-indigo-600 animate-spin"></div>
                                 <div className="absolute top-1 left-1 h-10 w-10 rounded-full border-[3px] border-transparent border-t-blue-500 animate-[spin_1.5s_linear_infinite_reverse]"></div>
                             </div>
                             <h3 className="text-[10px] font-black italic tracking-[0.3em] uppercase text-gray-400 animate-pulse">
-                                Accessing Databases...
+                                Accessing User Databases...
                             </h3>
                         </div>
-                    ) : networkMembers.length === 0 ? (
+                    ) : filteredMembers.length === 0 ? (
                         <div className="py-24 text-center">
                             <div className="text-4xl mb-4 opacity-50">👥</div>
                             <p className="text-gray-500 font-bold uppercase tracking-widest text-sm">No Members Found</p>
-                            <p className="text-gray-400 text-xs mt-2">Start recruiting to build your network.</p>
+                            <p className="text-gray-400 text-xs mt-2">
+                                {collabType === 'referrals' ? "No one has used your referral code yet." : "Start recruiting to build your empire."}
+                            </p>
                         </div>
                     ) : (
                         <>
@@ -274,16 +274,7 @@ const CollabsDashboard = () => {
                                         {filteredMembers.map((member, idx) => {
                                             const isReferredByMe = member.referredBy === user?.referralCode;
 
-                                            // Ensure the math uses totalPurchasedCoins since that's what the backend sends!
-                                            const memberCoins = member.totalPurchasedCoins || 0;
-
-                                            // The list is already strictly filtered in the backend to match the collab criteria.
-                                            // We only calculate if they meet the exact parameter required.
-                                            let memberShare = 0;
-                                            if (collabType === 'followers' || (collabType === 'referrals' && isReferredByMe)) {
-                                                memberShare = (memberCoins * 0.7) * (collabPercentage / 100);
-                                            }
-
+                                            const memberShare = ((member.clanTopups || 0) * 0.7) * (collabPercentage / 100);
                                             const memberShareUSD = memberShare * 0.005;
 
                                             return (
@@ -314,7 +305,7 @@ const CollabsDashboard = () => {
                                                         {member.lastActive ? new Date(member.lastActive).toLocaleDateString() : 'N/A'}
                                                     </td>
                                                     <td className="p-4 text-right">
-                                                        <span className="font-black text-sm">{memberCoins}</span>
+                                                        <span className="font-black text-sm">{member.clanTopups || 0}</span>
                                                         <span className="text-[9px] font-bold text-gray-400 ml-1">COINS</span>
                                                     </td>
                                                     <td className="p-4 text-right">
@@ -336,18 +327,18 @@ const CollabsDashboard = () => {
 
                             <div className="flex items-center justify-between px-6 py-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-800">
                                 <div className="text-xs text-gray-500 font-bold uppercase tracking-wider">
-                                    Page {page} of {totalPages} <span className="text-gray-400 font-normal">({totalMembersCount} Total Forces)</span>
+                                    Page {page} of {totalPages} <span className="text-gray-400 font-normal">({totalMembersCount} Total Network Index)</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <button
-                                        disabled={page <= 1 || loadingData}
+                                        disabled={page <= 1 || loadingClan}
                                         onClick={() => setPage(p => Math.max(p - 1, 1))}
                                         className="px-4 py-2 text-[10px] font-black tracking-widest uppercase rounded-xl border border-gray-200 dark:border-gray-800 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all disabled:opacity-40 disabled:hover:bg-transparent"
                                     >
                                         Prev
                                     </button>
                                     <button
-                                        disabled={page >= totalPages || loadingData}
+                                        disabled={page >= totalPages || loadingClan}
                                         onClick={() => setPage(p => Math.min(p + 1, totalPages))}
                                         className="px-4 py-2 text-[10px] font-black tracking-widest uppercase rounded-xl bg-indigo-600 text-white shadow-[0_0_15px_rgba(79,70,229,0.3)] hover:bg-indigo-700 transition-all disabled:opacity-40 disabled:hover:bg-indigo-600"
                                     >

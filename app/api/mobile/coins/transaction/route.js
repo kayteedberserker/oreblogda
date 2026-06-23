@@ -452,48 +452,71 @@ export async function POST(req) {
             updatedUser.peakLevel = calculatePeakLevel(updatedUser.totalPurchasedCoins);
             await updatedUser.save();
 
-            // ⚡️ SHARP FIX: Handle multiple clans, check verified statuses, apply store cut, and notify leaders
+            // ⚡️ SHARP FIX: Dynamic Collab Revenue Processing (Followers vs Referrals)
             try {
+                const clansToReward = new Map(); // Ensures we don't reward the same clan twice for one user
+
+                // 1. Scan for Follower-Mode Clans
                 const activeMemberships = await ClanFollower.find({ userId: updatedUser._id });
-
                 for (const membership of activeMemberships) {
-                    // Check if this explicit clan tag actually exists and is verified
                     const clan = await Clan.findOne({ tag: membership.clanTag });
+                    // Only reward if verified and explicitly set to 'followers' (or default missing)
+                    if (clan && clan.verifiedClan && (!clan.collabType || clan.collabType === 'followers')) {
+                        clansToReward.set(clan._id.toString(), clan);
+                    }
+                }
 
-                    if (clan && clan.verifiedClan) {
-                        // Log explicit ledger record for this specific verified clan association
-                        await ClanTopup.create({
-                            userId: updatedUser._id,
-                            clanTag: clan.tag,
-                            amount: amount
-                        });
-
-                        // Financial Splitting Logic: Deduct 30% App Store cut first, then calculate the dynamic percentage based on collab settings
-                        const netCoins = amount * 0.7;
-                        const currentCollabPercentage = clan.collabPercentage !== undefined ? clan.collabPercentage : 20;
-                        const finalLeaderShare = Math.floor(netCoins * (currentCollabPercentage / 100));
-
-                        // Look up the leader to push instant real-time financial pills
-                        const leaderUser = await MobileUser.findById(clan.leader);
-                        if (leaderUser && leaderUser.pushToken) {
-                            await sendPillParallel(
-                                [leaderUser.pushToken],
-                                "Clan Revenue Dispatched! 💰",
-                                `Clan member @${updatedUser.username || 'A follower'} purchased ${amount} Coins! Your ${currentCollabPercentage}% share (after 30% store cut) is +${finalLeaderShare} Coins.`,
-                                { screen: "CollabsDashboard", clanTag: clan.tag },
-                                {
-                                    type: "clan_points",
-                                    targetId: leaderUser._id.toString(),
-                                    targetAudience: "user",
-                                    singleUser: true,
-                                    priority: 3
-                                }
-                            );
+                // 2. Scan for Referral-Mode Clans 
+                if (updatedUser.referredBy) {
+                    const referringLeader = await MobileUser.findOne({ referralCode: updatedUser.referredBy });
+                    if (referringLeader) {
+                        const referralClan = await Clan.findOne({ leader: referringLeader._id });
+                        // Only reward if verified and explicitly set to 'referrals'
+                        if (referralClan && referralClan.verifiedClan && referralClan.collabType === 'referrals') {
+                            clansToReward.set(referralClan._id.toString(), referralClan);
                         }
                     }
                 }
+
+                // 3. Dispatch Ledger Updates and Push Notifications
+                for (const clan of clansToReward.values()) {
+                    await ClanTopup.create({
+                        userId: updatedUser._id,
+                        clanTag: clan.tag,
+                        amount: amount
+                    });
+
+                    // Financial Splitting Logic: Deduct 30% App Store cut first
+                    const netCoins = amount * 0.7;
+                    const currentCollabPercentage = clan.collabPercentage !== undefined
+                        ? clan.collabPercentage
+                        : (clan.collabType === 'referrals' ? 40 : 20);
+                    const finalLeaderShare = Math.floor(netCoins * (currentCollabPercentage / 100));
+
+                    // Lookup leader for real-time notification
+                    const leaderUser = await MobileUser.findById(clan.leader);
+                    if (leaderUser && leaderUser.pushToken) {
+                        const messageSubtext = clan.collabType === 'referrals'
+                            ? `Your referral @${updatedUser.username || 'A user'}`
+                            : `Clan member @${updatedUser.username || 'A follower'}`;
+
+                        await sendPillParallel(
+                            [leaderUser.pushToken],
+                            "Revenue Dispatched! 💰",
+                            `${messageSubtext} purchased ${amount} Coins! Your ${currentCollabPercentage}% share (after 30% store cut) is +${finalLeaderShare} Coins.`,
+                            { screen: "CollabsDashboard", clanTag: clan.tag },
+                            {
+                                type: "clan_points",
+                                targetId: leaderUser._id.toString(),
+                                targetAudience: "user",
+                                singleUser: true,
+                                priority: 3
+                            }
+                        );
+                    }
+                }
             } catch (clanLogErr) {
-                console.error("Failed handling multi-clan verification/notification ledger loop:", clanLogErr);
+                console.error("Failed handling dynamic collab notification ledger loop:", clanLogErr);
             }
 
             // 🏆 Check Titles

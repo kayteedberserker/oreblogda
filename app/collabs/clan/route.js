@@ -1,93 +1,105 @@
-import { NextResponse } from "next/server";
-// Ensure mongoose is initialized and database connection is established
 import connectDB from "@/app/lib/mongodb";
 import ClanFollower from "@/app/models/ClanFollower";
 import Clan from "@/app/models/ClanModel";
+import ClanTopup from "@/app/models/ClanTopup";
 import MobileUser from "@/app/models/MobileUserModel";
+import { NextResponse } from "next/server";
 
 export async function GET(request) {
     try {
         await connectDB();
 
-        // 1. Parse query parameters from request url
         const { searchParams } = new URL(request.url);
         const leaderId = searchParams.get("leaderId");
         let clanTag = searchParams.get("clanTag");
 
+        // ⚡️ Parse bounds tracking pagination configuration safely
+        const page = parseInt(searchParams.get("page") || "1", 10);
+        const limit = parseInt(searchParams.get("limit") || "20", 10);
+        const skip = (page - 1) * limit;
+
         if (!leaderId) {
-            return NextResponse.json(
-                { message: "Missing required parameter: leaderId" },
-                { status: 400 }
-            );
+            return NextResponse.json({ message: "Missing required parameter: leaderId" }, { status: 400 });
         }
 
-        // 2. Fetch the leader's account to grab their referralCode and verify identity
         const leader = await MobileUser.findById(leaderId);
         if (!leader) {
-            return NextResponse.json(
-                { message: "Clan leader account not found." },
-                { status: 404 }
-            );
+            return NextResponse.json({ message: "Clan leader account not found." }, { status: 404 });
         }
 
         if (!clanTag) {
-            clanTag = leader.username;
+            const activeClanDoc = await Clan.findOne({ leader: leader._id });
+            clanTag = activeClanDoc?.tag || leader.username;
         }
 
-        // 3. Fetch the actual Clan entity to pull dynamic Collab Rules
-        const clan = await Clan.findOne({ tag: clanTag });
-        const collabType = clan?.collabType || 'followers';
-        const collabPercentage = clan?.collabPercentage !== undefined ? clan.collabPercentage : (collabType === 'referrals' ? 40 : 20);
+        // Verify that the target clan is actually a valid, officially verified ledger network tier
+        const activeClanVerification = await Clan.findOne({ tag: clanTag });
+        const isVerified = activeClanVerification ? activeClanVerification.verifiedClan : false;
 
-        let activeMembers = [];
+        // ⚡️ Extract dynamic collab settings directly from the Clan doc
+        const collabType = activeClanVerification?.collabType || 'followers';
+        const collabPercentage = activeClanVerification?.collabPercentage !== undefined
+            ? activeClanVerification.collabPercentage
+            : (collabType === 'referrals' ? 40 : 20);
 
-        // ⚡️ 4. DYNAMIC DATA FETCHING BASED ON COLLAB TYPE
-        if (collabType === 'referrals') {
-            // Fetch ALL users who used this leader's referral code, regardless of clan status
-            if (leader.referralCode) {
-                const referredUsers = await MobileUser.find({ referredBy: leader.referralCode })
-                    .select("username country referredBy lastActive totalPurchasedCoins profilePic role")
-                    .lean();
+        // ⚡️ Pull and aggregate real-time clan-specific topups
+        const aggregatedTopups = await ClanTopup.aggregate([
+            { $match: { clanTag: clanTag } },
+            { $group: { _id: "$userId", totalClanTopups: { $sum: "$amount" } } }
+        ]);
 
-                activeMembers = referredUsers.map((profile) => ({
+        // Build map dictionary for O(1) performance extraction
+        const topupMap = {};
+        aggregatedTopups.forEach(item => {
+            if (item._id) topupMap[item._id.toString()] = item.totalClanTopups;
+        });
+
+        // ⚡️ Pagination boundaries count pipeline query execution
+        const totalFollowersCount = await ClanFollower.countDocuments({ clanTag });
+
+        // ⚡️ Applied Pagination limits to the find pipeline stream to prevent memory overflow
+        const followers = await ClanFollower.find({ clanTag })
+            .populate({
+                path: "userId",
+                model: MobileUser,
+                select: "username country referredBy lastActive profilePic role description",
+            })
+            .skip(skip)
+            .limit(limit)
+            .lean();
+
+        let globalTotalTopups = 0;
+        let globalEligibleTopups = 0;
+
+        const activeMembers = followers
+            .filter((follower) => follower.userId !== null && follower.userId !== undefined)
+            .map((follower) => {
+                const profile = follower.userId;
+                const profileIdString = profile._id.toString();
+
+                const memberTopups = isVerified ? (topupMap[profileIdString] || 0) : 0;
+                const isReferredByLeader = profile.referredBy === leader.referralCode;
+
+                // Track total raw topups in the clan
+                globalTotalTopups += memberTopups;
+
+                // ⚡️ Track ONLY eligible topups based on the collab rules
+                if (collabType === 'followers' || (collabType === 'referrals' && isReferredByLeader)) {
+                    globalEligibleTopups += memberTopups;
+                }
+
+                return {
                     id: profile._id,
                     username: profile.username || "Anonymous Creator",
                     country: profile.country || "Unknown",
                     referredBy: profile.referredBy || null,
-                    lastActive: profile.lastActive,
-                    totalPurchasedCoins: profile.totalPurchasedCoins || 0,
+                    lastActive: profile.lastActive || follower.followedAt,
+                    clanTopups: memberTopups,
                     profilePic: profile.profilePic || { url: "", public_id: "" },
                     role: profile.role || "Author",
-                }));
-            }
-        } else {
-            // Default: Fetch users currently following the Clan
-            const followers = await ClanFollower.find({ clanTag })
-                .populate({
-                    path: "userId",
-                    model: MobileUser,
-                    select: "username country referredBy lastActive totalPurchasedCoins profilePic role",
-                })
-                .lean();
+                };
+            });
 
-            activeMembers = followers
-                .filter((follower) => follower.userId !== null && follower.userId !== undefined)
-                .map((follower) => {
-                    const profile = follower.userId;
-                    return {
-                        id: profile._id,
-                        username: profile.username || "Anonymous Creator",
-                        country: profile.country || "Unknown",
-                        referredBy: profile.referredBy || null,
-                        lastActive: profile.lastActive || follower.followedAt,
-                        totalPurchasedCoins: profile.totalPurchasedCoins || 0,
-                        profilePic: profile.profilePic || { url: "", public_id: "" },
-                        role: profile.role || "Author",
-                    };
-                });
-        }
-
-        // 5. Return clean structured operational response to the dashboard
         return NextResponse.json(
             {
                 success: true,
@@ -96,14 +108,22 @@ export async function GET(request) {
                 collabType,
                 collabPercentage,
                 members: activeMembers,
+                metrics: {
+                    globalTotalTopups,
+                    globalEligibleTopups, // ⚡️ Passed to frontend to ensure top HUD math is strict
+                    isClanVerified: isVerified
+                },
+                pagination: {
+                    totalMembers: totalFollowersCount,
+                    currentPage: page,
+                    totalPages: Math.ceil(totalFollowersCount / limit) || 1
+                }
             },
             { status: 200 }
         );
+
     } catch (error) {
         console.error("[CLAN_API_ERROR]:", error);
-        return NextResponse.json(
-            { message: "Internal server error occurred processing collab network." },
-            { status: 500 }
-        );
+        return NextResponse.json({ message: "Internal server error processing clan arrays." }, { status: 500 });
     }
 }
