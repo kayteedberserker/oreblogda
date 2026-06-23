@@ -45,14 +45,18 @@ const ClanSchema = new mongoose.Schema({
     name: { type: String, required: true },
     tag: { type: String, required: true, unique: true, uppercase: true },
     description: { type: String, default: "" },
+
     // Roles
     leader: { type: mongoose.Schema.Types.ObjectId, ref: 'MobileUser' },
     viceLeader: { type: mongoose.Schema.Types.ObjectId, ref: 'MobileUser' },
     members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'MobileUser' }],
+
     // --- 💬 NEW: THE CHAT ROOM ---
     messages: [ClanMessageSchema],
+
     // Public Stats
     followerCount: { type: Number, default: 0 },
+
     // Stats for Point Generation & Badges
     stats: {
         views: { type: Number, default: 0 },
@@ -78,6 +82,7 @@ const ClanSchema = new mongoose.Schema({
         username: String,
         appliedAt: { type: Date, default: Date.now }
     }],
+
     // Weekly Tracking
     currentWeeklyPoints: { type: Number, default: 0 },
     weeklyPointHistory: [{
@@ -104,6 +109,7 @@ const ClanSchema = new mongoose.Schema({
         default: null
     },
     bountyExpiry: { type: Date },
+
     // Inventory & Customization
     specialInventory: [InventoryItemSchema],
     activeCustomizations: {
@@ -115,7 +121,15 @@ const ClanSchema = new mongoose.Schema({
     },
     verifiedUntil: { type: Date, default: null },
     purchasedPacks: [{ type: String }],
-    // Add this inside your ClanSchema fields:
+
+    // --- 🆕 CLAN VERIFIED ALLOWANCES (Monthly Perks) ---
+    allowances: {
+        freeNameChanges: { type: Number, default: 0 }, // Unlocks 1 if buying 30-day Basic+
+        passiveStreakFreezeActive: { type: Boolean, default: false }, // Unlocks if buying 30-day Standard+
+        postResurrections: { type: Number, default: 0 }, // Unlocks 1 if buying 30-day Premium
+        bonfireActive: { type: Boolean, default: false } // Active while Premium tier verified
+    },
+
     totalHypePointsReceived: { type: Number, default: 0 },
     consecutiveWeeksNoDerank: { type: Number, default: 0 },
     lastActive: { type: Date, default: Date.now },
@@ -144,8 +158,5 @@ ClanSchema.pre('save', function (next) {
     next();
 });
 
-// Hot reload safe export
-if (process.env.NODE_ENV === "development") {
-    delete mongoose.models.Clan;
-}
-export default mongoose.models.Clan || mongoose.model('Clan', ClanSchema);
+const Clan = mongoose.models.Clan || mongoose.model('Clan', ClanSchema);
+export default Clan;

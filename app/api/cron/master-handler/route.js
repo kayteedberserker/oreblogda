@@ -52,12 +52,12 @@ async function dailyClanCheck() {
         let badgesToAdd = [];
         const currentBadges = clan.badges || [];
         const daysSinceActive = Math.floor((now - new Date(clan.lastActive)) / (1000 * 60 * 60 * 24));
-        if (daysSinceActive >= 7) {
+        if (daysSinceActive >= 14) {
             setFields.totalPoints = Math.floor((clan.totalPoints || 0) * 0.5);
             setFields.spendablePoints = Math.floor((clan.spendablePoints || 0) * 0.5);
             setFields.lastActive = new Date();
             await createMessagePill({
-                text: `⚠️ CLAN DECAY: Points halved due to 7 days of inactivity.`,
+                text: `⚠️ CLAN DECAY: Points halved due to 14 days of inactivity.`,
                 type: 'warning',
                 targetAudience: 'clan',
                 targetId: clan.tag,
@@ -116,11 +116,9 @@ async function dailyAllocation() {
     for (const clan of clans) {
         let allowance = 0;
         const isVerified = clan.verifiedUntil && new Date(clan.verifiedUntil) > now;
-        if (isVerified) {
-            allowance = 10;
-        } else if (clan.weeklyPointHistory && clan.weeklyPointHistory.length > 0) {
+        if (clan.weeklyPointHistory && clan.weeklyPointHistory.length > 0) {
             const lastHistoryEntry = clan.weeklyPointHistory[clan.weeklyPointHistory.length - 1];
-            if (lastHistoryEntry.rankAtTime > 0 && lastHistoryEntry.rankAtTime <= 10) allowance = 15;
+            if (lastHistoryEntry.rankAtTime > 0 && lastHistoryEntry.rankAtTime <= 10) allowance = 10;
         }
         bulkOps.push({ updateOne: { filter: { _id: clan._id }, update: { $inc: { spendablePoints: allowance } } } });
     }
