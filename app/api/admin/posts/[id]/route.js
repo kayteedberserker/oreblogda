@@ -51,7 +51,7 @@ export async function PATCH(req, { params }) {
             },
             { new: true }
         );
-        let userDoc = await MobileUser.findOne({ deviceId: fingerprint })
+        let userDoc = await MobileUser.findOne({ deviceId: updatedPost?.authorId })
         // Gamification & Aura Engine Processing
         if (status === "approved" && userDoc) {
             try {
