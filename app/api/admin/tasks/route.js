@@ -1,13 +1,11 @@
 import { sendPillParallel } from "@/app/lib/messagePillService"; // Assumed import path for your new utility
 import connectDB from '@/app/lib/mongodb';
 import { sendMultiplePushNotifications } from "@/app/lib/pushNotifications";
-import ClanFollower from '@/app/models/ClanFollowerModel'; // Needed for Clan pings
+import ClanFollower from '@/app/models/ClanFollower'; // Needed for Clan pings
 import Clan from '@/app/models/ClanModel'; // Needed for Clan updates
 import MessagePill from "@/app/models/MessagePillModel";
 import MobileUser from '@/app/models/MobileUserModel';
-import Newsletter from '@/app/models/NewsletterModel'; // Needed for Emails
 import Post from '@/app/models/PostModel';
-import nodemailer from 'nodemailer'; // Needed for Emails
 // import { awardAura, checkTitleUnlocks, awardClanPoints, notifyAllMobileUsersAboutPost } from '@/app/lib/gamification'; // Adjust based on your paths
 import { NextResponse } from 'next/server';
 
@@ -192,31 +190,6 @@ export async function POST(req) {
                                 }
                             } catch (err) { console.error("Clan processing fault:", err); }
                         }
-
-                        // 🌟 Newsletter & Broadcast Network
-                        try {
-                            const subscribers = await Newsletter.find({}, "email");
-                            if (subscribers.length > 0) {
-                                const transporter = nodemailer.createTransport({
-                                    service: "gmail",
-                                    auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
-                                });
-                                await transporter.sendMail({
-                                    from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
-                                    to: "Subscribers",
-                                    bcc: subscribers.map(s => s.email),
-                                    subject: `📰 New Post from ${author.username}`,
-                                    html: `<h2>${updatedPost.title}</h2><p>${updatedPost.message.substring(0, 200)}...</p><a href="${process.env.SITE_URL}/post/${updatedPost.slug || updatedPost._id}">Read More</a>`
-                                });
-                            }
-                        } catch (err) { console.error("Newsletter fault:", err); }
-
-                        // Trigger Global Global Notifications (if active in your architecture)
-                        try {
-                            if (typeof notifyAllMobileUsersAboutPost !== 'undefined') {
-                                await notifyAllMobileUsersAboutPost(updatedPost, author.username);
-                            }
-                        } catch (err) { }
 
                         // 🌟 Clan Members Push Broadcast
                         if (updatedPost.clanId) {
