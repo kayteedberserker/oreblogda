@@ -1,3 +1,5 @@
+import { awardAura } from "@/app/lib/auraManager";
+import { awardClanPoints } from "@/app/lib/clanService";
 import { sendPillParallel } from "@/app/lib/messagePillService"; // Assumed import path for your new utility
 import connectDB from '@/app/lib/mongodb';
 import { sendMultiplePushNotifications } from "@/app/lib/pushNotifications";
@@ -6,8 +8,50 @@ import Clan from '@/app/models/ClanModel'; // Needed for Clan updates
 import MessagePill from "@/app/models/MessagePillModel";
 import MobileUser from '@/app/models/MobileUserModel';
 import Post from '@/app/models/PostModel';
-// import { awardAura, checkTitleUnlocks, awardClanPoints, notifyAllMobileUsersAboutPost } from '@/app/lib/gamification'; // Adjust based on your paths
 import { NextResponse } from 'next/server';
+
+
+// 🏆 Enhanced Title Thresholds
+const TITLE_THRESHOLDS = {
+    // ✍️ Creator Path Thresholds
+    totalPosts: [
+        { limit: 1, name: "Origin Point", tier: "COMMON" },
+        { limit: 5, name: "Quiet Scribe", tier: "COMMON" },
+        { limit: 50, name: "Active Voice", tier: "RARE" },
+        { limit: 250, name: "The Chronicler", tier: "EPIC" },
+        { limit: 1000, name: "Architect of Lore", tier: "LEGENDARY" }
+    ]
+};
+
+// 🛠 Helper to check and award titles
+async function checkTitleUnlocks(user, field, currentCount) {
+    const thresholds = TITLE_THRESHOLDS[field];
+    if (!thresholds) return null;
+
+    const earnedTitle = [...thresholds].reverse().find(t => currentCount >= t.limit);
+
+    if (earnedTitle) {
+        const alreadyHas = user.unlockedTitles?.some(t => t.name === earnedTitle.name);
+        if (!alreadyHas) {
+            await MobileUser.findByIdAndUpdate(user._id, {
+                $addToSet: { unlockedTitles: earnedTitle }
+            });
+
+            if (user.pushToken) {
+                const titleMsg = `🏆 NEW TITLE: You have received the "${earnedTitle.name}" TITLE!`;
+                await sendPillParallel([user.pushToken], "Title Earned", titleMsg, { type: "achievement" }, {
+                    type: 'achievement',
+                    targetAudience: 'user',
+                    targetId: user._id.toString(),
+                    singleUser: true,
+                    priority: 3
+                });
+            }
+            return earnedTitle;
+        }
+    }
+    return null;
+}
 
 export async function GET(req) {
     try {
