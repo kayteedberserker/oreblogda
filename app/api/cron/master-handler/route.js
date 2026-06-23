@@ -6,6 +6,7 @@ import MessagePill from "@/app/models/MessagePillModel";
 import MobileUser from "@/app/models/MobileUserModel";
 import MonthlyHypeStat from "@/app/models/MonthlyHypeStat";
 import { NextResponse } from 'next/server';
+
 // --- LOGIC FUNCTIONS ---
 async function dailyStreakCleanup() {
     const sevenDaysAgo = new Date();
@@ -18,6 +19,7 @@ async function dailyStreakCleanup() {
         console.log(`[CRON] Permanently reset broken streaks to 0 for ${result.modifiedCount} inactive users.`);
     }
 }
+
 async function dailyNewUserBroadcast() {
     const cleanup = await MessagePill.deleteMany({ expiresAt: { $lt: new Date() } });
     if (cleanup.deletedCount > 0) {
@@ -40,6 +42,7 @@ async function dailyNewUserBroadcast() {
         console.log(`[CRON] Broadcasted New User Pill: ${newUsersCount} users.`);
     }
 }
+
 async function dailyClanCheck() {
     const clans = await Clan.find({});
     const now = new Date();
@@ -105,6 +108,7 @@ async function dailyClanCheck() {
     }
     if (bulkOps.length > 0) await Clan.bulkWrite(bulkOps);
 }
+
 async function dailyAllocation() {
     const clans = await Clan.find({});
     const bulkOps = [];
@@ -122,6 +126,7 @@ async function dailyAllocation() {
     }
     if (bulkOps.length > 0) await Clan.bulkWrite(bulkOps);
 }
+
 async function auraReset() {
     const now = new Date();
     const currentYear = now.getFullYear();
@@ -165,6 +170,7 @@ async function auraReset() {
         console.error("❌ Notification Phase Error:", notifErr);
     }
 }
+
 async function weeklyClanReset() {
     const rankThresholds = [0, 5000, 20000, 50000, 100000, 300000];
     const decayAmounts = [200, 500, 1000, 2000, 5000, 30000];
@@ -245,6 +251,73 @@ async function weeklyClanReset() {
     if (bulkOps.length > 0) await Clan.bulkWrite(bulkOps);
     if (pillPromises.length > 0) await Promise.all(pillPromises).catch(err => console.error("Pill generation error:", err));
 }
+
+// 💎 NEW: CONTINUOUS WEEKLY COLLAB PAYOUT (TO CLAN LEADER)
+async function weeklyCollabPayout() {
+    console.log("⏳ Processing Weekly Continuous Collab Payouts...");
+    // Find verified clans that have a monthly allowance set
+    const clans = await Clan.find({ verifiedClan: true, monthlyCollabAllowance: { $gt: 0 } });
+
+    if (clans.length === 0) return;
+
+    const userBulkOps = []; // Modifying to update MobileUsers instead of Clans
+    const pillPromises = [];
+
+    for (const clan of clans) {
+        // Split the total monthly amount by 4 for the weekly drip
+        const payout = Math.floor(clan.monthlyCollabAllowance / 4);
+
+        // Skip if payout is 0 or if the clan has no leader
+        if (payout <= 0 || !clan.leader) continue;
+
+        // Queue the Database Update (Adding OC to the LEADER'S personal coins)
+        userBulkOps.push({
+            updateOne: {
+                filter: { _id: clan.leader },
+                update: {
+                    $inc: { coins: payout } // Continuously adds the 1/4th amount to the leader
+                }
+            }
+        });
+
+        // Queue the Message Pill (Sent exclusively to the leader)
+        pillPromises.push(createMessagePill({
+            text: `💎 INFLUENCER REWARD: You received ${payout} OC for [${clan.tag}]'s weekly allocation!`,
+            type: 'achievement',
+            targetAudience: 'user', // Specifically target the leader
+            targetId: clan.leader.toString(),
+            priority: 3,
+            expiresInHours: 72,
+            replaceExistingType: false
+        }));
+
+        // Send Push Notification directly to the Clan Leader
+        try {
+            const leader = await MobileUser.findById(clan.leader).select('pushToken');
+            if (leader && leader.pushToken) {
+                await sendMultiplePushNotifications(
+                    [leader.pushToken],
+                    "Collab Payout Arrived! 💎",
+                    `You received ${payout} OC for this week's influencer allocation!`,
+                    { screen: 'CollabsDashboard', clanTag: clan.tag }
+                );
+            }
+        } catch (err) {
+            console.error(`Failed to push collab notification to leader of ${clan.tag}:`, err);
+        }
+    }
+
+    // Execute the bulk write on the MobileUser collection
+    if (userBulkOps.length > 0) {
+        await MobileUser.bulkWrite(userBulkOps);
+        console.log(`[CRON] Processed weekly continuous influencer payouts for ${userBulkOps.length} clan leaders.`);
+    }
+
+    if (pillPromises.length > 0) {
+        await Promise.all(pillPromises).catch(err => console.error("Collab Pill generation error:", err));
+    }
+}
+
 async function monthlyHypeReset() {
     const now = new Date();
     const lastMonthDate = new Date(now);
@@ -304,6 +377,7 @@ async function monthlyHypeReset() {
         }
     }
 }
+
 // --- MAIN HANDLER ---
 export async function GET(req) {
     const authHeader = req.headers.get("authorization") || req.headers.get("Authorization");
@@ -316,6 +390,7 @@ export async function GET(req) {
     const watDayOfMonth = parseInt(new Intl.DateTimeFormat('en-GB', { day: 'numeric', timeZone: 'Africa/Lagos' }).format(now), 10);
     const isMondayWAT = watDay === "Monday";
     const isFirstOfMonthWAT = watDayOfMonth === 1;
+
     try {
         await connectDB();
         console.log("--- Starting Master Cron Sequence ---");
@@ -324,15 +399,21 @@ export async function GET(req) {
         await dailyClanCheck();
         await dailyAllocation();
         await dailyNewUserBroadcast();
+
         if (isMondayWAT) {
             console.log("⏳ Processing Weekly Resets...");
             await auraReset();
             await weeklyClanReset();
+
+            // ⚡️ TRIGGER THE CONTINUOUS PAYOUT ENGINE HERE
+            await weeklyCollabPayout();
         }
+
         if (isFirstOfMonthWAT) {
             console.log("⏳ Processing Monthly Hype Resets...");
             await monthlyHypeReset();
         }
+
         console.log("✅ Master Cron Completed Successfully");
         return NextResponse.json({ success: true, message: `Executed daily tasks${isMondayWAT ? " + weekly tasks" : ""}${isFirstOfMonthWAT ? " + monthly hype tasks" : ""}` });
     } catch (error) {

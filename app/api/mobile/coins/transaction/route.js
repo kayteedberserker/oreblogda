@@ -131,6 +131,10 @@ async function checkTitleUnlocks(user, field, currentCount) {
     return null;
 }
 
+// Ensure you have these environment variables set:
+// REVENUECAT_API_KEY (Your v1 Secret Key)
+// MAILEREMAIL, MAILERPASS
+
 export async function POST(req) {
     try {
         await connectDB();
@@ -286,11 +290,49 @@ export async function POST(req) {
 
         // --- ACTION: PURCHASE PACK ---
         if (action === 'purchase_pack') {
-            const packData = rewards;
+            const packData = rewards || payload?.rewards;
             if (!packData) return NextResponse.json({ error: 'Pack data missing' }, { status: 400 });
 
             if (user.purchasedPacks?.includes(packId)) {
                 return NextResponse.json({ error: 'Pack already purchased' }, { status: 400 });
+            }
+
+            // 🛡️ SECURITY VERIFICATION: Validate IAP tokens with RevenueCat
+            const { appUserId, transactionId } = payload || body || {};
+
+            if (!appUserId || !transactionId) {
+                return NextResponse.json({ error: "TRANSMISSION REJECTED: Missing receipt tokens." }, { status: 400 });
+            }
+
+            try {
+                const rcResponse = await fetch(`https://api.revenuecat.com/v1/subscribers/${appUserId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${process.env.REVENUECAT_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!rcResponse.ok) {
+                    return NextResponse.json({ error: "VERIFICATION FAILURE: Validation server unreachable." }, { status: 400 });
+                }
+
+                const rcData = await rcResponse.json();
+                const nonSubscriptions = rcData.subscriber?.non_subscriptions || {};
+
+                // Frontend might pass the package identifier in 'type' or 'packId'
+                const productPurchases = nonSubscriptions[type] || nonSubscriptions[packId];
+                if (!productPurchases || productPurchases.length === 0) {
+                    return NextResponse.json({ error: "VERIFICATION FAILURE: Purchase matching identifier not found." }, { status: 400 });
+                }
+
+                const transactionExists = productPurchases.some(p => p.id === transactionId);
+                if (!transactionExists) {
+                    return NextResponse.json({ error: "VERIFICATION FAILURE: Malformed purchase transaction token." }, { status: 400 });
+                }
+            } catch (verificationErr) {
+                console.error("RevenueCat transaction authorization failed:", verificationErr);
+                return NextResponse.json({ error: "VERIFICATION OFFLINE: Security processing error." }, { status: 500 });
             }
 
             // Since packs have multiple different reward types, we'll keep the loop but save once at the end
@@ -350,6 +392,43 @@ export async function POST(req) {
 
         // --- ACTION: BUY COINS (IAP) ---
         if (action === 'buy_coins') {
+            // 🛡️ SECURITY VERIFICATION: Validate IAP tokens with RevenueCat
+            const { appUserId, transactionId } = payload || body || {};
+
+            if (!appUserId || !transactionId) {
+                return NextResponse.json({ error: "TRANSMISSION REJECTED: Missing receipt tokens." }, { status: 400 });
+            }
+
+            try {
+                const rcResponse = await fetch(`https://api.revenuecat.com/v1/subscribers/${appUserId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${process.env.REVENUECAT_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!rcResponse.ok) {
+                    return NextResponse.json({ error: "VERIFICATION FAILURE: Validation server unreachable." }, { status: 400 });
+                }
+
+                const rcData = await rcResponse.json();
+                const nonSubscriptions = rcData.subscriber?.non_subscriptions || {};
+
+                const productPurchases = nonSubscriptions[type];
+                if (!productPurchases || productPurchases.length === 0) {
+                    return NextResponse.json({ error: "VERIFICATION FAILURE: Purchase matching identifier not found." }, { status: 400 });
+                }
+
+                const transactionExists = productPurchases.some(p => p.id === transactionId);
+                if (!transactionExists) {
+                    return NextResponse.json({ error: "VERIFICATION FAILURE: Malformed purchase transaction token." }, { status: 400 });
+                }
+            } catch (verificationErr) {
+                console.error("RevenueCat transaction authorization failed:", verificationErr);
+                return NextResponse.json({ error: "VERIFICATION OFFLINE: Security processing error." }, { status: 500 });
+            }
+
             const matchedNumbers = type.match(/\d+/);
             const amount = matchedNumbers ? parseInt(matchedNumbers[0], 10) : 0;
             let purchasedCurrency = 'OC';
@@ -389,9 +468,10 @@ export async function POST(req) {
                             amount: amount
                         });
 
-                        // Financial Splitting Logic: Deduct 30% App Store cut first, then calculate 20% of the net remaining amount
+                        // Financial Splitting Logic: Deduct 30% App Store cut first, then calculate the dynamic percentage based on collab settings
                         const netCoins = amount * 0.7;
-                        const finalLeaderShare = Math.floor(netCoins * 0.2);
+                        const currentCollabPercentage = clan.collabPercentage !== undefined ? clan.collabPercentage : 20;
+                        const finalLeaderShare = Math.floor(netCoins * (currentCollabPercentage / 100));
 
                         // Look up the leader to push instant real-time financial pills
                         const leaderUser = await MobileUser.findById(clan.leader);
@@ -399,7 +479,7 @@ export async function POST(req) {
                             await sendPillParallel(
                                 [leaderUser.pushToken],
                                 "Clan Revenue Dispatched! 💰",
-                                `Clan member @${updatedUser.username || 'A follower'} purchased ${amount} Coins! Your 20% share (after 30% store cut) is +${finalLeaderShare} Coins.`,
+                                `Clan member @${updatedUser.username || 'A follower'} purchased ${amount} Coins! Your ${currentCollabPercentage}% share (after 30% store cut) is +${finalLeaderShare} Coins.`,
                                 { screen: "CollabsDashboard", clanTag: clan.tag },
                                 {
                                     type: "clan_points",
@@ -557,9 +637,8 @@ export async function POST(req) {
             const updatedUser = await MobileUser.findOneAndUpdate(
                 { deviceId },
                 {
-                    $inc: { coins: amount },
-                    // Use Math.max logic outside or use a $cond in update, but simple inc is usually okay
-                    $inc: { lifetimeCoinsSpent: -amount }
+                    // Merged duplicate $inc objects into one valid structure
+                    $inc: { coins: amount, lifetimeCoinsSpent: -amount }
                 },
                 { new: true }
             );

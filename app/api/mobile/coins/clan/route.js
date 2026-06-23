@@ -48,7 +48,7 @@ export async function POST(req) {
             category,
             visualConfig,
             rewards,
-            extraData // Contains rewards and currency type
+            payload // FIX: Extracted as 'payload' matching frontend structure
         } = body;
 
         const user = await MobileUser.findOne({ deviceId });
@@ -123,54 +123,93 @@ export async function POST(req) {
 
         // --- ACTION: PURCHASE CLAN PACKS (IAP) ---
         if (action === 'purchase_pack') {
-            const packRewards = rewards;
+            const packRewards = rewards || payload?.rewards;
             const pId = packId || type; // Safety for identifier
             if (clan.purchasedPacks?.includes(pId)) return NextResponse.json({ success: false, error: 'Already owned' }, { status: 400 });
 
-            packRewards.forEach(reward => {
-                if (reward.type === 'CC') {
-                    clan.spendablePoints = (clan.spendablePoints || 0) + reward.amount;
-                } else if (reward.type === 'UPGRADE') {
-                    clan.maxSlots = Math.min(13, (clan.maxSlots || 5) + (reward.value || 0));
-                } else if (reward.type === 'MULTIPLIER') {
-                    const expiry = new Date();
-                    expiry.setDate(expiry.getDate() + (reward.duration || 7));
-                    clan.multiplierExpiresAt = expiry;
-                    clan.activeMultiplier = reward.value || 2;
-                } else if (reward.type === 'VERIFIED') {
-                    // Handle Verified Badges inside Packs
-                    const parts = reward.id.split('_');
-                    const newTier = reward.visualConfig?.tier || parts[1] || 'basic';
-                    const days = parseInt(parts[2]) || 7;
-                    const currentTier = clan.activeCustomizations?.verifiedTier || 'none';
+            // 🛡️ SECURITY VERIFICATION: Validate IAP tokens with RevenueCat
+            const { appUserId, transactionId } = payload || body || {};
 
-                    // Only update visual/tier if it's an upgrade or same level
-                    if (VERIFIED_TIERS[newTier] >= VERIFIED_TIERS[currentTier]) {
-                        clan.activeCustomizations.verifiedTier = newTier;
-                        clan.activeCustomizations.verifiedBadgeXml = reward.visualConfig?.svgCode;
+            if (!appUserId || !transactionId) {
+                return NextResponse.json({ success: false, error: "TRANSMISSION REJECTED: Missing receipt tokens." }, { status: 400 });
+            }
+
+            try {
+                const rcResponse = await fetch(`https://api.revenuecat.com/v1/subscribers/${appUserId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${process.env.REVENUECAT_API_KEY}`,
+                        'Content-Type': 'application/json'
                     }
+                });
 
-                    // Always stack the duration
-                    const now = new Date();
-                    let expiry = (clan.verifiedUntil && clan.verifiedUntil > now) ? new Date(clan.verifiedUntil) : now;
-                    expiry.setDate(expiry.getDate() + days);
-                    clan.verifiedUntil = expiry;
-                } else if (reward.type === 'PERK' && reward.value === 'premium') {
-                    const expiry = (clan.verifiedUntil && clan.verifiedUntil > new Date()) ? new Date(clan.verifiedUntil) : new Date();
-                    expiry.setDate(expiry.getDate() + (reward.duration || 30));
-                    clan.verifiedUntil = expiry;
-                    clan.activeCustomizations.verifiedTier = 'premium';
-                } else {
-                    // Visual Items (Borders, Backgrounds, Badges, Watermarks)
-                    clan.specialInventory.push({
-                        itemId: reward.id,
-                        name: reward.name || reward.label,
-                        category: reward.type,
-                        visualConfig: reward.visualConfig,
-                        acquiredAt: new Date()
-                    });
+                if (!rcResponse.ok) {
+                    return NextResponse.json({ success: false, error: "VERIFICATION FAILURE: Validation server unreachable." }, { status: 400 });
                 }
-            });
+
+                const rcData = await rcResponse.json();
+                const nonSubscriptions = rcData.subscriber?.non_subscriptions || {};
+
+                const productPurchases = nonSubscriptions[type] || nonSubscriptions[packId];
+                if (!productPurchases || productPurchases.length === 0) {
+                    return NextResponse.json({ success: false, error: "VERIFICATION FAILURE: Purchase matching identifier not found." }, { status: 400 });
+                }
+
+                const transactionExists = productPurchases.some(p => p.id === transactionId);
+                if (!transactionExists) {
+                    return NextResponse.json({ success: false, error: "VERIFICATION FAILURE: Malformed purchase transaction token." }, { status: 400 });
+                }
+            } catch (verificationErr) {
+                console.error("RevenueCat transaction authorization failed:", verificationErr);
+                return NextResponse.json({ success: false, error: "VERIFICATION OFFLINE: Security processing error." }, { status: 500 });
+            }
+
+            if (packRewards) {
+                packRewards.forEach(reward => {
+                    if (reward.type === 'CC') {
+                        clan.spendablePoints = (clan.spendablePoints || 0) + reward.amount;
+                    } else if (reward.type === 'UPGRADE') {
+                        clan.maxSlots = Math.min(13, (clan.maxSlots || 5) + (reward.value || 0));
+                    } else if (reward.type === 'MULTIPLIER') {
+                        const expiry = new Date();
+                        expiry.setDate(expiry.getDate() + (reward.duration || 7));
+                        clan.multiplierExpiresAt = expiry;
+                        clan.activeMultiplier = reward.value || 2;
+                    } else if (reward.type === 'VERIFIED') {
+                        // Handle Verified Badges inside Packs
+                        const parts = reward.id.split('_');
+                        const newTier = reward.visualConfig?.tier || parts[1] || 'basic';
+                        const days = parseInt(parts[2]) || 7;
+                        const currentTier = clan.activeCustomizations?.verifiedTier || 'none';
+
+                        // Only update visual/tier if it's an upgrade or same level
+                        if (VERIFIED_TIERS[newTier] >= VERIFIED_TIERS[currentTier]) {
+                            clan.activeCustomizations.verifiedTier = newTier;
+                            clan.activeCustomizations.verifiedBadgeXml = reward.visualConfig?.svgCode;
+                        }
+
+                        // Always stack the duration
+                        const now = new Date();
+                        let expiry = (clan.verifiedUntil && clan.verifiedUntil > now) ? new Date(clan.verifiedUntil) : now;
+                        expiry.setDate(expiry.getDate() + days);
+                        clan.verifiedUntil = expiry;
+                    } else if (reward.type === 'PERK' && reward.value === 'premium') {
+                        const expiry = (clan.verifiedUntil && clan.verifiedUntil > new Date()) ? new Date(clan.verifiedUntil) : new Date();
+                        expiry.setDate(expiry.getDate() + (reward.duration || 30));
+                        clan.verifiedUntil = expiry;
+                        clan.activeCustomizations.verifiedTier = 'premium';
+                    } else {
+                        // Visual Items (Borders, Backgrounds, Badges, Watermarks)
+                        clan.specialInventory.push({
+                            itemId: reward.id,
+                            name: reward.name || reward.label,
+                            category: reward.type,
+                            visualConfig: reward.visualConfig,
+                            acquiredAt: new Date()
+                        });
+                    }
+                });
+            }
 
             if (!clan.purchasedPacks) clan.purchasedPacks = [];
             clan.purchasedPacks.push(pId);
@@ -180,6 +219,43 @@ export async function POST(req) {
 
         // --- ACTION: BUY CC TIERS (Direct IAP for coins) ---
         if (action === 'buy_coins') {
+            // 🛡️ SECURITY VERIFICATION: Validate IAP tokens with RevenueCat
+            const { appUserId, transactionId } = payload || body || {};
+
+            if (!appUserId || !transactionId) {
+                return NextResponse.json({ success: false, error: "TRANSMISSION REJECTED: Missing receipt tokens." }, { status: 400 });
+            }
+
+            try {
+                const rcResponse = await fetch(`https://api.revenuecat.com/v1/subscribers/${appUserId}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${process.env.REVENUECAT_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                if (!rcResponse.ok) {
+                    return NextResponse.json({ success: false, error: "VERIFICATION FAILURE: Validation server unreachable." }, { status: 400 });
+                }
+
+                const rcData = await rcResponse.json();
+                const nonSubscriptions = rcData.subscriber?.non_subscriptions || {};
+
+                const productPurchases = nonSubscriptions[type];
+                if (!productPurchases || productPurchases.length === 0) {
+                    return NextResponse.json({ success: false, error: "VERIFICATION FAILURE: Purchase matching identifier not found." }, { status: 400 });
+                }
+
+                const transactionExists = productPurchases.some(p => p.id === transactionId);
+                if (!transactionExists) {
+                    return NextResponse.json({ success: false, error: "VERIFICATION FAILURE: Malformed purchase transaction token." }, { status: 400 });
+                }
+            } catch (verificationErr) {
+                console.error("RevenueCat transaction authorization failed:", verificationErr);
+                return NextResponse.json({ success: false, error: "VERIFICATION OFFLINE: Security processing error." }, { status: 500 });
+            }
+
             const amount = parseInt(type.match(/\d+/)?.[0] || 0);
             const ccGained = amount / 10;
             clan.spendablePoints = (clan.spendablePoints || 0) + ccGained;

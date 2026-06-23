@@ -16,6 +16,7 @@ const ClanMessageSchema = new mongoose.Schema({
     text: { type: String, required: true },
     date: { type: Date, default: Date.now }
 });
+
 const InventoryItemSchema = new mongoose.Schema({
     itemId: { type: String, required: true },
     name: { type: String, required: true },
@@ -39,6 +40,7 @@ const InventoryItemSchema = new mongoose.Schema({
     acquiredAt: { type: Date, default: Date.now },
     expiresAt: { type: Date, default: null },
 });
+
 const ClanSchema = new mongoose.Schema({
     name: { type: String, required: true },
     tag: { type: String, required: true, unique: true, uppercase: true },
@@ -117,12 +119,21 @@ const ClanSchema = new mongoose.Schema({
     totalHypePointsReceived: { type: Number, default: 0 },
     consecutiveWeeksNoDerank: { type: Number, default: 0 },
     lastActive: { type: Date, default: Date.now },
+
     // 🛡️ NEW VERIFICATION FIELD FOR COLLABS LOGINS
     verifiedClan: { type: Boolean, default: false },
+    collabType: { type: String, enum: ['followers', 'referrals'], default: 'followers' },
+    collabPercentage: { type: Number, default: 20 },
+
+    // 💎 CONTINUOUS WEEKLY COLLAB PAYOUT
+    monthlyCollabAllowance: { type: Number, default: 0 },
+
     badges: [String],
 }, { timestamps: true });
+
 // Index for the War/Bounty system
 ClanSchema.index({ isInWar: 1, hasBounty: 1, rank: 1 });
+
 // --- 🛡️ MIDDLEWARE: Enforce 250 Message Limit ---
 ClanSchema.pre('save', function (next) {
     // If the messages array exists and has more than 250 items, 
@@ -132,6 +143,7 @@ ClanSchema.pre('save', function (next) {
     }
     next();
 });
+
 // Hot reload safe export
 if (process.env.NODE_ENV === "development") {
     delete mongoose.models.Clan;
