@@ -10,9 +10,11 @@ if (!cached) {
 }
 
 export default async function connectDB() {
+    const start = Date.now();
     // 1. Check if the connection is already active
     if (cached.conn) {
         if (mongoose.connection.readyState === 1) {
+            console.log(`DB ready in ${Date.now() - start}ms`);
             // Intentionally quiet to keep logs clean, or use: console.log("🟢 Cached Link Active");
             return cached.conn;
         }
@@ -35,11 +37,11 @@ export default async function connectDB() {
          * This limits THIS SPECIFIC instance. 
          * Note: Vercel may spin up multiple instances (Lambdas) simultaneously.
          */
-        maxPoolSize: 3,
-        minPoolSize: 1,
+        maxPoolSize: 2,
+        minPoolSize: 0,
         /* * IDLE CLEANUP: 60 seconds.
          */
-        maxIdleTimeMS: 180000,
+        maxIdleTimeMS: 30000,
         serverSelectionTimeoutMS: 10000,
         socketTimeoutMS: 20000,
         family: 4
@@ -49,6 +51,7 @@ export default async function connectDB() {
     console.log("📡 Initializing new MongoDB connection (Pool: 4)...");
 
     cached.promise = mongoose.connect(process.env.MONGODB_URI, opts).then((mongooseInstance) => {
+        console.log(`DB ready in ${Date.now() - start}ms`);
         console.log("✅ MongoDB connected successfully");
         cached.isLoading = false;
         return mongooseInstance;
