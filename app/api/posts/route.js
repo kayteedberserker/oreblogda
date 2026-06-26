@@ -30,23 +30,23 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
     const VALID_GENRES = ["Shonen", "Seinen", "Romance", "Isekai", "Psychological", "Ecchi", "Action", "Slice of Life", "Manga", "Fantasy", "Sci-Fi", "Comedy", "Manhwa"];
 
     try {
-        const prompt = `
+        const systemPrompt = `
             TASK: Moderate and Tag this 'Diary Entry' for 'Oreblogda' (Anime/Gaming blog).
             
             MODERATION RULES: 
-            - If the post includes ${clanId} and it's not null, the action should always be approved no matter what the post is or if any rules are breached. 
+            - If the post includes ${clanId} and it's not null, these rules should be lax, be more lax on posts that include clanId. 
             - Reject real-life nudity or extreme real-life gore.
             - Allow animated/stylized gore (anime style).
             - Allow adult jokes and "Ecchi" content, especially if the category is 'Memes'.
-            - Reject content completely unrelated to anime, gaming, or nerd culture.
+            - Reject content completely unrelated to anime, gaming, or nerd culture, i.e a news on poitics should be rejected, while a meme on superman can be approved?.
 
             STRICT CATEGORY RULES for posts without clanId/clanId is null:
             - 'News' is strictly for Anime/Gaming News.
-            - 'Polls' is strictly for posts with polls.
+            - 'Polls' is strictly for posts with polls/ message is asking for opinions.
             - 'Fanart' category should also be lax and can be used for general content without much context as long as there is an image/video attached to the post and the media is anime/gaming related, which doesn't fit the meme category. 
             - CRITICAL: If there is no ${mediaUrl} or if ${mediaUrl} is an empty array or null attached to a post with category FANART the post should be rejected, the purpose of the fan art category is for art in means of pictures or videos so if that isn't available the post isn't approved
             - 'Memes' is strictly for memes.
-            - 'Gaming' is strictly for anything gaming-related.
+            - 'Gaming' is for anything gaming-related. It can be news, memes, polls, review as long as its related to a game.
             - 'Review' is a general category for anime/gaming related content.
             - CRITICAL: A meme post MUST be in 'Memes' category. If a meme is found in 'News' or 'Review', REJECT it for "incorrect category".
             - CRITICAL: If a meme is in 'Gaming', it MUST be a gaming-related meme, else REJECT it.
@@ -57,7 +57,7 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
             2. INTELLIGENT INFERENCE: If a character is mentioned but the Anime name is MISSING, you MUST include the Anime name from the VALID_ANIMES list. 
                (e.g., If "Itachi" is mentioned, add "Naruto". If "Rengoku" is mentioned, add "Demon Slayer". If "Gojo" is mentioned, add "JJK").
             3. Identify the Genre/Theme based on the "vibe" and characters.
-            4. Use these lists for primary tags: ANIME: ${VALID_ANIMES.join(", ")}, GENRES: ${VALID_GENRES.join(", ")}
+            4. Use these lists for primary tags: ANIME: ${VALID_ANIMES.join(", ")}, GENRES: ${VALID_GENRES.join(", ")}. If you the tags are not included in those lists then you can also include it.
             
             // ⚡️ NEW: ENTITY RESOLUTION & FORMATTING RULES
             5. CHARACTER CANONICALIZATION: If you identify a character, you MUST output their full, official canonical name, regardless of what they are called in the post. 
