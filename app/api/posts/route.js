@@ -17,148 +17,143 @@ import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
 
 // ----------------------
-// AI MODERATOR & AUTO-TAGGER (UPDATED FOR @google/genai)
+// AI MODERATOR & AUTO-TAGGER (UPDATED FOR @google/genai SYSTEM INSTRUCTIONS)
 // ----------------------
 async function runAIModerator(title, message, clanId, category, mediaUrl, mediaType) {
-    const API_KEY = process.env.GEMINI_API_KEY;
-    if (!API_KEY) return { action: "flag", reason: "AI Config Error", interests: [] };
+  const API_KEY = process.env.GEMINI_API_KEY;
+  if (!API_KEY) return { action: "flag", reason: "AI Config Error", interests: [] };
 
-    // This is the correct initialization for @google/genai
-    const ai = new GoogleGenAI({ apiKey: API_KEY });
+  // This is the correct initialization for @google/genai
+  const ai = new GoogleGenAI({ apiKey: API_KEY });
 
-    const VALID_ANIMES = ["Naruto", "One Piece", "Bleach", "Dragon Ball Z", "Hunter x Hunter", "JJK", "Solo Leveling", "My Hero Academia", "Hell's Paradise", "Demon Slayer", "AOT", "Chainsaw Man", "Death Note", "Fullmetal Alchemist", "Code Geass", "Steins;Gate", "Berserk", "Vinland Saga", "Monster", "Vagabond", "Baki", "Nana", "Horimiya", "Fruits Basket", "Ouran High", "Haikyuu", "Blue Lock", "One Punch Man"];
-    const VALID_GENRES = ["Shonen", "Seinen", "Romance", "Isekai", "Psychological", "Ecchi", "Action", "Slice of Life", "Manga", "Fantasy", "Sci-Fi", "Comedy", "Manhwa"];
+  const VALID_ANIMES = ["Naruto", "One Piece", "Bleach", "Dragon Ball Z", "Hunter x Hunter", "JJK", "Solo Leveling", "My Hero Academia", "Hell's Paradise", "Demon Slayer", "AOT", "Chainsaw Man", "Death Note", "Fullmetal Alchemist", "Code Geass", "Steins;Gate", "Berserk", "Vinland Saga", "Monster", "Vagabond", "Baki", "Nana", "Horimiya", "Fruits Basket", "Ouran High", "Haikyuu", "Blue Lock", "One Punch Man"];
+  const VALID_GENRES = ["Shonen", "Seinen", "Romance", "Isekai", "Psychological", "Ecchi", "Action", "Slice of Life", "Manga", "Fantasy", "Sci-Fi", "Comedy", "Manhwa"];
 
-    try {
-        const systemPrompt = `
-            TASK: Moderate and Tag this 'Diary Entry' for 'Oreblogda' (Anime/Gaming blog).
-            
-            MODERATION RULES: 
-            - If the post includes ${clanId} and it's not null, these rules should be lax, be more lax on posts that include clanId. 
-            - Reject real-life nudity or extreme real-life gore.
-            - Allow animated/stylized gore (anime style).
-            - Allow adult jokes and "Ecchi" content, especially if the category is 'Memes'.
-            - Reject content completely unrelated to anime, gaming, or nerd culture, i.e a news on poitics should be rejected, while a meme on superman can be approved?.
+  try {
+    // 1. SYSTEM INSTRUCTIONS: Pure rules, no user content variables injected here.
+    const systemPrompt = `
+TASK: Moderate and Tag this 'Diary Entry' for 'Oreblogda' (Anime/Gaming blog).
 
-            STRICT CATEGORY RULES for posts without clanId/clanId is null:
-            - 'News' is strictly for Anime/Gaming News.
-            - 'Polls' is strictly for posts with polls/ message is asking for opinions.
-            - 'Fanart' category should also be lax and can be used for general content without much context as long as there is an image/video attached to the post and the media is anime/gaming related, which doesn't fit the meme category. 
-            - CRITICAL: If there is no ${mediaUrl} or if ${mediaUrl} is an empty array or null attached to a post with category FANART the post should be rejected, the purpose of the fan art category is for art in means of pictures or videos so if that isn't available the post isn't approved
-            - 'Memes' is strictly for memes.
-            - 'Gaming' is for anything gaming-related. It can be news, memes, polls, review as long as its related to a game.
-            - 'Review' is a general category for anime/gaming related content.
-            - CRITICAL: A meme post MUST be in 'Memes' category. If a meme is found in 'News' or 'Review', REJECT it for "incorrect category".
-            - CRITICAL: If a meme is in 'Gaming', it MUST be a gaming-related meme, else REJECT it.
-            - CRITICAL: Reject any post that doesnt have enough context or relevant information, like if a post has title and message that doesnt have meaning, even if not related to the post a post must have a clear title and message.
+MODERATION RULES: 
+- If the post includes a clanId (not null), these rules should be lax. Be more lax on posts that include clanId. Current Clan ID context: ${clanId || 'None'}.
+- Reject real-life nudity or extreme real-life gore.
+- Allow animated/stylized gore (anime style).
+- Allow adult jokes and "Ecchi" content, especially if the category is 'Memes'.
+- Reject content completely unrelated to anime, gaming, or nerd culture, i.e a news on politics should be rejected, while a meme on superman can be approved.
 
-            TAGGING & INFERENCE TASK (CRITICAL):
-            1. Identify the Anime/Game mentioned or shown. 
-            2. INTELLIGENT INFERENCE: If a character is mentioned but the Anime name is MISSING, you MUST include the Anime name from the VALID_ANIMES list. 
-               (e.g., If "Itachi" is mentioned, add "Naruto". If "Rengoku" is mentioned, add "Demon Slayer". If "Gojo" is mentioned, add "JJK").
-            3. Identify the Genre/Theme based on the "vibe" and characters.
-            4. Use these lists for primary tags: ANIME: ${VALID_ANIMES.join(", ")}, GENRES: ${VALID_GENRES.join(", ")}. If you the tags are not included in those lists then you can also include it.
-            
-            // ⚡️ NEW: ENTITY RESOLUTION & FORMATTING RULES
-            5. CHARACTER CANONICALIZATION: If you identify a character, you MUST output their full, official canonical name, regardless of what they are called in the post. 
-               - If the post says "Sasuke" or "sasuke", you output "sasuke uchiha".
-               - If the post says "Luffy" or "Straw Hat", you output "monkey d. luffy".
-               - If the post says "Gojo", you output "satoru gojo".
-            6. SEPARATE ENTITIES: If a specific character is found, you MUST output BOTH the character's full canonical name AND the root franchise/anime name as two separate tags in the array.
-            7. LOWERCASE ENFORCEMENT: All tags inside the 'interests' array MUST be strictly lowercase to ensure database consistency.
+STRICT CATEGORY RULES for posts without clanId/clanId is null:
+- 'News' is strictly for Anime/Gaming News.
+- 'Polls' is strictly for posts with polls/ message is asking for opinions.
+- 'Fanart' category should also be lax and can be used for general content without much context as long as there is an image/video attached to the post and the media is anime/gaming related, which doesn't fit the meme category. 
+- CRITICAL: If there is no media file attached or if mediaUrl is an empty array or null attached to a post with category FANART the post should be rejected. The purpose of the fan art category is for art in means of pictures or videos so if that isn't available the post isn't approved. Current Media Context: ${mediaUrl || 'None'}.
+- 'Memes' is strictly for memes.
+- 'Gaming' is for anything gaming-related. It can be news, memes, polls, review as long as its related to a game.
+- 'Review' is a general category for anime/gaming related content.
+- CRITICAL: A meme post MUST be in 'Memes' category. If a meme is found in 'News' or 'Review', REJECT it for "incorrect category".
+- CRITICAL: If a meme is in 'Gaming', it MUST be a gaming-related meme, else REJECT it.
+- CRITICAL: Reject any post that doesn't have enough context or relevant information. A post must have a clear, meaningful title and message.
 
-            INPUT:
-            Title: "${title}" | Message: "${message}" | Category: "${category}"
-        `;
+TAGGING & INFERENCE TASK (CRITICAL):
+1. Identify the Anime/Game mentioned or shown. 
+2. INTELLIGENT INFERENCE: If a character is mentioned but the Anime name is MISSING, you MUST include the Anime name from the VALID_ANIMES list. 
+(e.g., If "Itachi" is mentioned, add "Naruto". If "Rengoku" is mentioned, add "Demon Slayer". If "Gojo" is mentioned, add "JJK").
+3. Identify the Genre/Theme based on the "vibe" and characters.
+4. Use these lists for primary tags: ANIME: ${VALID_ANIMES.join(", ")}, GENRES: ${VALID_GENRES.join(", ")}. If the appropriate tags are not included in those lists, you can also generate and include them.
 
-        // The new SDK uses a flatter 'contents' structure
-        const contents = [];
-        const userParts = [{ text: prompt }];
+// ⚡️ ENTITY RESOLUTION & FORMATTING RULES
+5. CHARACTER CANONICALIZATION: If you identify a character, you MUST output their full, official canonical name, regardless of what they are called in the post. 
+- If the post says "Sasuke" or "sasuke", you output "sasuke uchiha".
+- If the post says "Luffy" or "Straw Hat", you output "monkey d. luffy".
+- If the post says "Gojo", you output "satoru gojo".
+6. SEPARATE ENTITIES: If a specific character is found, you MUST output BOTH the character's full canonical name AND the root franchise/anime name as two separate tags in the array.
+7. LOWERCASE ENFORCEMENT: All tags inside the 'interests' array MUST be strictly lowercase to ensure database consistency.
+`;
 
-        if (mediaUrl && mediaUrl.includes("cloudinary")) {
-            const isVideo = mediaType === "video" || mediaUrl.match(/\.(mp4|mov|webm|mkv)$/i);
-            const isImage = mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i);
+    // 2. USER PAYLOAD: Only containing the raw inputs to be processed.
+    const userParts = [{ text: `Title: "${title}"\nMessage: "${message}"\nCategory: "${category}"` }];
 
-            if (isVideo || isImage) {
-                let mediaRes = null;
-                for (let i = 0; i < 3; i++) {
-                    try {
-                        const headRes = await fetch(mediaUrl, { method: 'HEAD' });
-                        const contentLength = headRes.headers.get('content-length');
-                        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB limit for buffer
+    if (mediaUrl && mediaUrl.includes("cloudinary")) {
+      const isVideo = mediaType === "video" || mediaUrl.match(/\.(mp4|mov|webm|mkv)$/i);
+      const isImage = mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i);
 
-                        if (contentLength && parseInt(contentLength) > MAX_FILE_SIZE) {
-                            console.warn("Media too large for AI processing buffer, skipping media attachment.");
-                            break;
-                        }
+      if (isVideo || isImage) {
+        let mediaRes = null;
+        for (let i = 0; i < 3; i++) {
+          try {
+            const headRes = await fetch(mediaUrl, { method: 'HEAD' });
+            const contentLength = headRes.headers.get('content-length');
+            const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB limit for buffer
 
-                        mediaRes = await fetch(mediaUrl);
-                        if (mediaRes.ok) break;
-                    } catch (e) {
-                        console.log(`Fetch attempt ${i + 1} failed, retrying...`);
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 1500));
-                }
-
-                if (mediaRes && mediaRes.ok) {
-                    const arrayBuffer = await mediaRes.arrayBuffer();
-                    const base64Data = Buffer.from(arrayBuffer).toString("base64");
-
-                    if (base64Data.length > 0) {
-                        userParts.push({
-                            inlineData: {
-                                data: base64Data,
-                                mimeType: isVideo ? "video/mp4" : "image/jpeg"
-                            }
-                        });
-                    }
-                }
+            if (contentLength && parseInt(contentLength) > MAX_FILE_SIZE) {
+              console.warn("Media too large for AI processing buffer, skipping media attachment.");
+              break;
             }
+
+            mediaRes = await fetch(mediaUrl);
+            if (mediaRes.ok) break;
+          } catch (e) {
+            console.log(`Fetch attempt ${i + 1} failed, retrying...`);
+          }
+          await new Promise(resolve => setTimeout(resolve, 1500));
         }
 
-        // Push the parts into the contents array
-        contents.push({ role: 'user', parts: userParts });
+        if (mediaRes && mediaRes.ok) {
+          const arrayBuffer = await mediaRes.arrayBuffer();
+          const base64Data = Buffer.from(arrayBuffer).toString("base64");
 
-        // Enforce strict JSON output via Schema
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash-lite",
-            contents: contents,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: "OBJECT",
-                    properties: {
-                        action: {
-                            type: "STRING",
-                            description: "Must be exactly 'approve', 'reject', or 'flag'"
-                        },
-                        reason: { type: "STRING" },
-                        interests: {
-                            type: "ARRAY",
-                            items: { type: "STRING" },
-                            description: "Array of strictly lowercase tags including canonical character names and genres."
-                        }
-                    },
-                    required: ["action", "reason", "interests"]
-                }
-            }
-        });
-
-        // We can now safely parse directly because the API guarantees standard JSON format
-        const parsedResult = JSON.parse(response.text);
-
-        if (!parsedResult.interests) parsedResult.interests = [];
-        return parsedResult;
-
-    } catch (err) {
-        console.error("❌ 2026 Moderator Error:", err.message);
-        const isRateLimit = err.message.includes("429") || err.message.includes("Resource");
-        return {
-            action: "flag",
-            reason: isRateLimit ? "Automatic Check failed - Pending" : "Service unavailable",
-            interests: []
-        };
+          if (base64Data.length > 0) {
+            userParts.push({
+              inlineData: {
+                data: base64Data,
+                mimeType: isVideo ? "video/mp4" : "image/jpeg"
+              }
+            });
+          }
+        }
+      }
     }
+
+    const contents = [{ role: 'user', parts: userParts }];
+
+    // 3. GENERATE CONTENT: Configuration payload structure handles system instruction routing.
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-flash-lite",
+      contents: contents,
+      config: {
+        systemInstruction: systemPrompt, // <-- Fed directly here to the system instruction configuration block
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: "OBJECT",
+          properties: {
+            action: {
+              type: "STRING",
+              description: "Must be exactly 'approve', 'reject', or 'flag'"
+            },
+            reason: { type: "STRING" },
+            interests: {
+              type: "ARRAY",
+              items: { type: "STRING" },
+              description: "Array of strictly lowercase tags including canonical character names and genres."
+            }
+          },
+          required: ["action", "reason", "interests"]
+        }
+      }
+    });
+
+    const parsedResult = JSON.parse(response.text);
+    if (!parsedResult.interests) parsedResult.interests = [];
+    return parsedResult;
+
+  } catch (err) {
+    console.error("❌ 2026 Moderator Error:", err.message);
+    const isRateLimit = err.message.includes("429") || err.message.includes("Resource");
+    return {
+      action: "flag",
+      reason: isRateLimit ? "Automatic Check failed - Pending" : "Service unavailable",
+      interests: []
+    };
+  }
 }
 
 // Helper to add CORS headers
