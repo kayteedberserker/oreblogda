@@ -37,10 +37,12 @@ export async function GET(req) {
                     username: 1,
                     profilePic: 1, // 🔹 Returns the whole object { url: '...' }
                     country: 1,
-                    _id: 1
+                    _id: 1,
+                    deviceId: 1 // ⚡️ ADDED: Critical so the frontend Moderator Editor can save the ID
                 }
             }
-        ])
+        ]);
+
         return NextResponse.json({ success: true, users });
 
     } catch (error) {

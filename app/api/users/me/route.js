@@ -29,7 +29,7 @@ export async function GET(req) {
             UserStreak.findOne({ userId: user._id }).lean(),
             Post.countDocuments({ $or: [{ authorId: fingerprint }, { authorId: user._id }] }) // Support both ID types
         ]);
-        const formattedStreak = { streak: streakDoc?.streak || 0, lastPostDate: streakDoc?.lastPostDate || null, expiresAt: streakDoc?.expiresAt || null, canRestore: !streakDoc && (user.lastStreak > 0), recoverableStreak: user.lastStreak || 0 };
+        const formattedStreak = { streak: streakDoc?.streak || 0, lastPostDate: streakDoc?.lastPostDate || null, frozenUntil: streakDoc?.frozenUntil || null, expiresAt: streakDoc?.expiresAt || null, canRestore: !streakDoc && (user.lastStreak > 0), recoverableStreak: user.lastStreak || 0 };
         return NextResponse.json({ user, streak: formattedStreak, totalPosts }, { status: 200 });
     } catch (err) { console.error("Sync Error:", err); return NextResponse.json({ message: "Error" }, { status: 500 }); }
 }

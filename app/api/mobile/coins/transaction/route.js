@@ -6,24 +6,21 @@ import Clan from '@/app/models/ClanModel';
 import ClanTopup from '@/app/models/ClanTopup';
 import MobileUser from '@/app/models/MobileUserModel';
 import { NextResponse } from 'next/server';
-import nodemailer from 'nodemailer'; // Assuming you have this imported for your emails
+import nodemailer from 'nodemailer';
 
 const OC_VALUES = {
     'daily_login': 10,
     'daily_login_7': 50,
     "1kpostevent": 1000,
-    'streak_restore': 50,
     'create_clan': 250,
     'extra_slot': 20,
     'clan_war': 20,
 };
 
-// ⚡️ NEW: Peak Level Calculation Logic
-// Level 1 now strictly requires at least 1 purchased coin.
 const PEAK_THRESHOLDS = [1, 1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
 
 const calculatePeakLevel = (totalPurchased) => {
-    if (!totalPurchased || totalPurchased < 1) return 0; // 0 = No Peak Badge
+    if (!totalPurchased || totalPurchased < 1) return 0;
     if (totalPurchased < 1000) return 1;
     if (totalPurchased < 5000) return 2;
     if (totalPurchased < 10000) return 3;
@@ -33,15 +30,12 @@ const calculatePeakLevel = (totalPurchased) => {
     if (totalPurchased < 250000) return 7;
     if (totalPurchased < 500000) return 8;
     if (totalPurchased < 1000000) return 9;
-    return 10; // Max level
+    return 10;
 };
 
-// --- GET HANDLER: FETCH BALANCE & INFO ---
 export async function GET(req) {
     try {
         await connectDB();
-
-        // Extract deviceId from URL query parameters
         const { searchParams } = new URL(req.url);
         const deviceId = searchParams.get('deviceId');
 
@@ -54,7 +48,6 @@ export async function GET(req) {
             return NextResponse.json({ error: 'User not found' }, { status: 404 });
         }
 
-        // Always calculate the accurate peak level just in case
         const currentPeak = calculatePeakLevel(user.totalPurchasedCoins || 0);
 
         return NextResponse.json({
@@ -65,7 +58,7 @@ export async function GET(req) {
             inventory: user.inventory || [],
             doubleStreakUntil: user.doubleStreakUntil,
             totalPurchasedCoins: user.totalPurchasedCoins || 0,
-            peakLevel: currentPeak // ⚡️ Return peak info so the app context updates instantly
+            peakLevel: currentPeak
         });
 
     } catch (error) {
@@ -74,16 +67,13 @@ export async function GET(req) {
     }
 }
 
-// 🏆 Transaction Title Thresholds
 const TITLE_THRESHOLDS = {
-    // For Buying Coins (IAP)
     totalPurchasedCoins: [
         { limit: 1000, name: "Patron", tier: "COMMON" },
         { limit: 10000, name: "Ore-Magnate", tier: "RARE" },
         { limit: 50000, name: "The Exalted", tier: "EPIC" },
         { limit: 100000, name: "System Benefactor", tier: "LEGENDARY" }
     ],
-    // For Spending Coins (Shop/Inventory)
     lifetimeCoinsSpent: [
         { limit: 1, name: "First Blood", tier: "COMMON" },
         { limit: 5000, name: "Shop regular", tier: "RARE" },
@@ -92,7 +82,6 @@ const TITLE_THRESHOLDS = {
     ]
 };
 
-// 🛠 Helper to check and award titles using parallel notification stack
 async function checkTitleUnlocks(user, field, currentCount) {
     const thresholds = TITLE_THRESHOLDS[field];
     if (!thresholds) return null;
@@ -106,11 +95,8 @@ async function checkTitleUnlocks(user, field, currentCount) {
                 $addToSet: { unlockedTitles: earnedTitle }
             });
 
-            // 🔔 Handle Notifications for Title Unlock
             if (user.pushToken) {
                 const titleMsg = `🏆 NEW TITLE: You have received the "${earnedTitle.name}" TITLE!`;
-
-                // UI Pill
                 await sendPillParallel(
                     [user.pushToken],
                     "Title Earned",
@@ -131,20 +117,13 @@ async function checkTitleUnlocks(user, field, currentCount) {
     return null;
 }
 
-// Ensure you have these environment variables set:
-// REVENUECAT_API_KEY (Your v1 Secret Key)
-// MAILEREMAIL, MAILERPASS
-
 export async function POST(req) {
     try {
         await connectDB();
         const body = await req.json();
 
-        // ⚡️ Added expiresInDays to the destructured body
         const { deviceId, action, type, packId, coinType, itemId, price, name, category, rarity, visualConfig, rewards, payload, expiresInDays } = body;
 
-        // Note: For complex multi-user transactions like 'transfer', findOne is okay, 
-        // but for individual updates, findOneAndUpdate is safer.
         const user = await MobileUser.findOne({ deviceId });
         if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
@@ -166,7 +145,6 @@ export async function POST(req) {
                 return NextResponse.json({ error: 'Target shinobi not found' }, { status: 404 });
             }
 
-            // Perform atomic updates
             user.coins -= transferAmount;
             recipient.coins = (recipient.coins || 0) + transferAmount;
 
@@ -195,19 +173,81 @@ export async function POST(req) {
 
         // --- ACTION: BUY ITEM ---
         if (action === 'buy_item') {
-            const isCC = coinType === 'CC' || body.currency === 'CC';
+            let finalPrice = price;
+            let targetItemId = itemId;
+            let isCC = coinType === 'CC' || body.currency === 'CC';
+
+            // =======================================================================
+            // ⚡️ STREAK INTERCEPTIONS (USER ONLY OVERRIDES)
+            // =======================================================================
+            if (targetItemId === 'streak_freeze' || targetItemId === 'streak_restore') {
+                isCC = false; // Guard guarantee
+            }
+
+            if (targetItemId === 'streak_freeze') {
+                finalPrice = 50; // Lock structural fee to 50 OC
+            }
+            else if (targetItemId === 'streak_restore') {
+                const streakScore = user.lastStreak || 0;
+                if (streakScore <= 0) {
+                    return NextResponse.json({ error: "No broken streak available to restore in neural logs." }, { status: 400 });
+                }
+
+                // 🛡️ TWICE-WEEKLY LIMIT ENFORCEMENT
+                const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+                const recentRestoresCount = user.coinTransactionHistory?.filter(tx =>
+                    tx.type === 'STREAK_RESTORE' && tx.date && new Date(tx.date) >= sevenDaysAgo
+                ).length || 0;
+
+                if (recentRestoresCount >= 2) {
+                    return NextResponse.json({ error: "Weekly limit exceeded. Max 2 restores allowed per rolling 7 days." }, { status: 429 });
+                }
+
+                // Progressive Pricing Scale Mapped to 1 OC = $0.005 parity
+                if (streakScore <= 15) finalPrice = 100;       // 1 - 15 posts ($0.49)
+                else if (streakScore <= 50) finalPrice = 300;  // 16 - 50 posts ($1.49)
+                else if (streakScore <= 100) finalPrice = 600; // 51 - 100 posts ($2.99)
+                else finalPrice = 1000;                        // 101+ posts ($4.99 Cap)
+            }
+
             const balanceKey = isCC ? 'clanCoins' : 'coins';
 
-            if ((user[balanceKey] || 0) < price) {
+            if ((user[balanceKey] || 0) < finalPrice) {
                 return NextResponse.json({ error: `Insufficient ${isCC ? 'CC' : 'OC'}` }, { status: 400 });
             }
 
-            // Tracking lifetime spend for Titles (Usually tracked in OC)
-            let spendIncrement = !isCC ? price : 0;
+            let spendIncrement = !isCC ? finalPrice : 0;
+            const existingItemIndex = user.inventory?.findIndex(i => i.itemId === targetItemId);
 
-            const existingItemIndex = user.inventory?.findIndex(i => i.itemId === itemId);
-
+            // Item Stacking / Extension logic
             if (existingItemIndex > -1) {
+                // Stackable count items like Hype or Streak modifiers can pile up
+                if (targetItemId === 'streak_freeze' || targetItemId === 'streak_restore') {
+                    const updatedUser = await MobileUser.findOneAndUpdate(
+                        { deviceId, "inventory.itemId": targetItemId },
+                        {
+                            $inc: {
+                                [balanceKey]: -finalPrice,
+                                lifetimeCoinsSpent: spendIncrement,
+                                "inventory.$.itemCount": 1
+                            }
+                        },
+                        { new: true }
+                    );
+
+                    // Manually track inside ledger history for the rolling cap filter
+                    updatedUser.coinTransactionHistory.push({
+                        action: "SPENT",
+                        type: targetItemId.toUpperCase(),
+                        amount: finalPrice,
+                        date: new Date()
+                    });
+                    await updatedUser.save();
+
+                    await checkTitleUnlocks(updatedUser, "lifetimeCoinsSpent", updatedUser.lifetimeCoinsSpent);
+                    return NextResponse.json({ success: true, balance: updatedUser.coins, clanBalance: updatedUser.clanCoins, inventory: updatedUser.inventory });
+                }
+
                 if (!expiresInDays) {
                     return NextResponse.json({ error: 'Already owned permanently' }, { status: 400 });
                 } else {
@@ -218,29 +258,20 @@ export async function POST(req) {
 
                     newExpiryDate.setDate(newExpiryDate.getDate() + parseInt(expiresInDays));
 
-                    // Atomic update for extension
                     const updatedUser = await MobileUser.findOneAndUpdate(
-                        { deviceId, "inventory.itemId": itemId },
+                        { deviceId, "inventory.itemId": targetItemId },
                         {
-                            $inc: { [balanceKey]: -price, lifetimeCoinsSpent: spendIncrement },
+                            $inc: { [balanceKey]: -finalPrice, lifetimeCoinsSpent: spendIncrement },
                             $set: { "inventory.$.expiresAt": newExpiryDate }
                         },
                         { new: true }
                     );
 
-                    // 🏆 Check Titles with fresh data
                     await checkTitleUnlocks(updatedUser, "lifetimeCoinsSpent", updatedUser.lifetimeCoinsSpent);
-
-                    return NextResponse.json({
-                        success: true,
-                        balance: updatedUser.coins,
-                        clanBalance: updatedUser.clanCoins,
-                        inventory: updatedUser.inventory
-                    });
+                    return NextResponse.json({ success: true, balance: updatedUser.coins, clanBalance: updatedUser.clanCoins, inventory: updatedUser.inventory });
                 }
             }
 
-            // Logic for NOT owned
             let expiryDate = null;
             if (expiresInDays) {
                 expiryDate = new Date();
@@ -248,14 +279,15 @@ export async function POST(req) {
             }
 
             const newItem = {
-                itemId,
-                name: name || 'Unnamed Item',
-                category,
-                rarity,
+                itemId: targetItemId,
+                name: targetItemId === 'streak_freeze' ? 'Streak Freeze' : (targetItemId === 'streak_restore' ? 'Streak Restore' : (name || 'Unnamed Item')),
+                category: targetItemId === 'streak_freeze' || targetItemId === 'streak_restore' ? 'STREAK_MODIFIER' : category,
+                rarity: targetItemId === 'streak_freeze' ? 'Rare' : (targetItemId === 'streak_restore' ? 'Epic' : rarity || 'Common'),
+                url: body.url,
                 visualConfig: {
                     svgCode: visualConfig?.svgCode || '',
                     lottieUrl: visualConfig?.lottieUrl || '',
-                    primaryColor: visualConfig?.primaryColor || visualConfig?.color || '#22c55e',
+                    primaryColor: visualConfig?.primaryColor || visualConfig?.color || (targetItemId === 'streak_freeze' ? '#3b82f6' : '#ef4444'),
                     secondaryColor: visualConfig?.secondaryColor || null,
                     animationType: visualConfig?.animationType || null,
                     duration: visualConfig?.duration,
@@ -265,18 +297,30 @@ export async function POST(req) {
                     snakeLength: visualConfig?.snakeLength,
                     isAnimated: visualConfig?.isAnimated || !!(visualConfig?.animated || visualConfig?.animationType)
                 },
+                description: body.description || null, // ⚡️ ADD THIS LINE
+                isConsumable: targetItemId.includes("streak") ? true : false,
+                itemCount: 1,
                 acquiredAt: new Date(),
                 expiresAt: expiryDate
             };
+            console.log(newItem, "is the new item")
 
             const updatedUser = await MobileUser.findOneAndUpdate(
                 { deviceId },
                 {
-                    $inc: { [balanceKey]: -price, lifetimeCoinsSpent: spendIncrement },
+                    $inc: { [balanceKey]: -finalPrice, lifetimeCoinsSpent: spendIncrement },
                     $push: { inventory: newItem }
                 },
                 { new: true }
             );
+
+            updatedUser.coinTransactionHistory.push({
+                action: "SPENT",
+                type: targetItemId.toUpperCase(),
+                amount: finalPrice,
+                date: new Date()
+            });
+            await updatedUser.save();
 
             await checkTitleUnlocks(updatedUser, "lifetimeCoinsSpent", updatedUser.lifetimeCoinsSpent);
 
@@ -288,111 +332,8 @@ export async function POST(req) {
             });
         }
 
-        // --- ACTION: PURCHASE PACK ---
-        if (action === 'purchase_pack') {
-            const packData = rewards || payload?.rewards;
-            if (!packData) return NextResponse.json({ error: 'Pack data missing' }, { status: 400 });
-
-            if (user.purchasedPacks?.includes(packId)) {
-                return NextResponse.json({ error: 'Pack already purchased' }, { status: 400 });
-            }
-
-            // 🛡️ SECURITY VERIFICATION: Validate IAP tokens with RevenueCat
-            const { appUserId, transactionId } = payload || body || {};
-
-            if (!appUserId || !transactionId) {
-                return NextResponse.json({ error: "TRANSMISSION REJECTED: Missing receipt tokens." }, { status: 400 });
-            }
-
-            try {
-                const rcResponse = await fetch(`https://api.revenuecat.com/v1/subscribers/${appUserId}`, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${process.env.REVENUECAT_API_KEY}`,
-                        'Content-Type': 'application/json'
-                    }
-                });
-
-                if (!rcResponse.ok) {
-                    return NextResponse.json({ error: "VERIFICATION FAILURE: Validation server unreachable." }, { status: 400 });
-                }
-
-                const rcData = await rcResponse.json();
-                const nonSubscriptions = rcData.subscriber?.non_subscriptions || {};
-
-                // Frontend might pass the package identifier in 'type' or 'packId'
-                const productPurchases = nonSubscriptions[type] || nonSubscriptions[packId];
-                if (!productPurchases || productPurchases.length === 0) {
-                    return NextResponse.json({ error: "VERIFICATION FAILURE: Purchase matching identifier not found." }, { status: 400 });
-                }
-
-                const transactionExists = productPurchases.some(p => p.id === transactionId);
-                if (!transactionExists) {
-                    return NextResponse.json({ error: "VERIFICATION FAILURE: Malformed purchase transaction token." }, { status: 400 });
-                }
-            } catch (verificationErr) {
-                console.error("RevenueCat transaction authorization failed:", verificationErr);
-                return NextResponse.json({ error: "VERIFICATION OFFLINE: Security processing error." }, { status: 500 });
-            }
-
-            // Since packs have multiple different reward types, we'll keep the loop but save once at the end
-            packData.forEach(reward => {
-                if (reward.type === 'OC') {
-                    user.coins = (user.coins || 0) + reward.amount;
-                }
-                if (reward.type === 'MULTIPLIER') {
-                    const now = user.doubleStreakUntil && user.doubleStreakUntil > new Date()
-                        ? new Date(user.doubleStreakUntil)
-                        : new Date();
-                    now.setDate(now.getDate() + (reward.duration || 7));
-                    user.doubleStreakUntil = now;
-                }
-
-                const inventoryCategories = ['WATERMARK', 'BADGE', 'BORDER', 'GLOW', 'BACKGROUND'];
-                if (inventoryCategories.includes(reward.type)) {
-                    const alreadyHasItem = user.inventory.some(inv => inv.itemId === reward.id);
-                    if (!alreadyHasItem) {
-                        let expiryDate = null;
-                        if (reward.expiresInDays) {
-                            expiryDate = new Date();
-                            expiryDate.setDate(expiryDate.getDate() + parseInt(reward.expiresInDays));
-                        }
-
-                        user.inventory.push({
-                            itemId: reward.id,
-                            name: reward.name,
-                            category: reward.type,
-                            visualConfig: {
-                                svgCode: reward.visualConfig?.svgCode || '',
-                                lottieUrl: reward.visualConfig?.lottieUrl || '',
-                                primaryColor: reward.visualConfig?.primaryColor || '#ffffff',
-                                secondaryColor: reward.visualConfig?.secondaryColor || null,
-                                animationType: reward.visualConfig?.animationType || null,
-                                duration: reward.visualConfig?.duration || 3000,
-                                isAnimated: reward.visualConfig?.isAnimated || false
-                            },
-                            acquiredAt: new Date(),
-                            expiresAt: expiryDate
-                        });
-                    }
-                }
-            });
-
-            if (!user.purchasedPacks) user.purchasedPacks = [];
-            user.purchasedPacks.push(packId);
-
-            await user.save();
-            return NextResponse.json({
-                success: true,
-                balance: user.coins,
-                inventory: user.inventory,
-                doubleStreakUntil: user.doubleStreakUntil
-            });
-        }
-
         // --- ACTION: BUY COINS (IAP) ---
         if (action === 'buy_coins') {
-            // 🛡️ SECURITY VERIFICATION: Validate IAP tokens with RevenueCat
             const { appUserId, transactionId } = payload || body || {};
 
             if (!appUserId || !transactionId) {
@@ -448,37 +389,30 @@ export async function POST(req) {
                 { new: true }
             );
 
-            // Recalculate Peak Level based on fresh data
             updatedUser.peakLevel = calculatePeakLevel(updatedUser.totalPurchasedCoins);
             await updatedUser.save();
 
-            // ⚡️ SHARP FIX: Dynamic Collab Revenue Processing (Followers vs Referrals)
             try {
-                const clansToReward = new Map(); // Ensures we don't reward the same clan twice for one user
+                const clansToReward = new Map();
 
-                // 1. Scan for Follower-Mode Clans
                 const activeMemberships = await ClanFollower.find({ userId: updatedUser._id });
                 for (const membership of activeMemberships) {
                     const clan = await Clan.findOne({ tag: membership.clanTag });
-                    // Only reward if verified and explicitly set to 'followers' (or default missing)
                     if (clan && clan.verifiedClan && (!clan.collabType || clan.collabType === 'followers')) {
                         clansToReward.set(clan._id.toString(), clan);
                     }
                 }
 
-                // 2. Scan for Referral-Mode Clans 
                 if (updatedUser.referredBy) {
                     const referringLeader = await MobileUser.findOne({ referralCode: updatedUser.referredBy });
                     if (referringLeader) {
                         const referralClan = await Clan.findOne({ leader: referringLeader._id });
-                        // Only reward if verified and explicitly set to 'referrals'
                         if (referralClan && referralClan.verifiedClan && referralClan.collabType === 'referrals') {
                             clansToReward.set(referralClan._id.toString(), referralClan);
                         }
                     }
                 }
 
-                // 3. Dispatch Ledger Updates and Push Notifications
                 for (const clan of clansToReward.values()) {
                     await ClanTopup.create({
                         userId: updatedUser._id,
@@ -486,14 +420,12 @@ export async function POST(req) {
                         amount: amount
                     });
 
-                    // Financial Splitting Logic: Deduct 30% App Store cut first
                     const netCoins = amount * 0.7;
                     const currentCollabPercentage = clan.collabPercentage !== undefined
                         ? clan.collabPercentage
                         : (clan.collabType === 'referrals' ? 40 : 20);
                     const finalLeaderShare = Math.floor(netCoins * (currentCollabPercentage / 100));
 
-                    // Lookup leader for real-time notification
                     const leaderUser = await MobileUser.findById(clan.leader);
                     if (leaderUser && leaderUser.pushToken) {
                         const messageSubtext = clan.collabType === 'referrals'
@@ -519,10 +451,8 @@ export async function POST(req) {
                 console.error("Failed handling dynamic collab notification ledger loop:", clanLogErr);
             }
 
-            // 🏆 Check Titles
             await checkTitleUnlocks(updatedUser, "totalPurchasedCoins", updatedUser.totalPurchasedCoins);
 
-            // Email Logic
             try {
                 const transporter = nodemailer.createTransport({
                     service: "gmail",
@@ -558,8 +488,6 @@ export async function POST(req) {
 
         // --- ACTION: CLAIM ---
         if (action === 'claim') {
-            console.log(`Processing claim for user ${user.username} with claim type: ${type}`);
-            // 1. Handle Event claims separately (Non-daily login claims)
             if (type !== 'daily_login' && type !== 'daily_login_7') {
                 const amount = OC_VALUES[type];
                 if (!amount) return NextResponse.json({ error: 'Invalid type' }, { status: 400 });
@@ -575,56 +503,42 @@ export async function POST(req) {
                 return NextResponse.json({ success: true, newBalance: user.coins });
             }
 
-            // 2. Handle Scheduled Daily Login Reward Engine
             const today = new Date().setHours(0, 0, 0, 0);
             if (user.lastClaimedDate && new Date(user.lastClaimedDate).setHours(0, 0, 0, 0) === today) {
                 return NextResponse.json({ error: 'Already claimed today' }, { status: 400 });
             }
 
             user.lastClaimedDate = new Date();
-            // Server-side continuous rotation layout logic
             user.consecutiveStreak = (user.consecutiveStreak >= 7) ? 1 : (user.consecutiveStreak || 0) + 1;
 
-            // Helper function to inject the strict FREE Hype item structure
             const pushFreeHype = (usr) => {
                 if (!usr.inventory) usr.inventory = [];
-
-                // Check if the user already has a 'hype_free' item in their inventory
                 const existingHype = usr.inventory.find(item => item.itemId === 'hype_free');
 
                 if (existingHype) {
-                    // If it exists, simply increment the itemCount
                     existingHype.itemCount = (existingHype.itemCount || 1) + 1;
                 } else {
-                    // If it doesn't exist, create it with itemCount set to 1
-                    const newFreeHypeProduct = {
+                    usr.inventory.push({
                         itemId: `hype_free`,
                         name: `Free Hype`,
                         category: 'HYPE',
                         rarity: 'RARE',
                         hypeType: 'FREE',
-                        visualConfig: {
-                            primaryColor: '#22c55e',
-                            isAnimated: false
-                        },
+                        visualConfig: { primaryColor: '#22c55e', isAnimated: false },
                         itemCount: 1,
+                        isConsumable: true,
                         acquiredAt: new Date(),
-                        expiresAt: null,
-                        isConsumable: true
-                    };
-                    usr.inventory.push(newFreeHypeProduct);
+                        expiresAt: null
+                    });
                 }
             };
 
-            // 3. Process rewards purely by looking up the calculated consecutive streak day
             const currentDay = user.consecutiveStreak;
 
             if (currentDay === 7) {
-                // Day 7 grants BOTH 10 OC and 1 FREE Hype item
                 user.coins = (user.coins || 0) + 10;
                 pushFreeHype(user);
-            }
-            else {
+            } else {
                 user.coins = (user.coins || 0) + 5;
             }
 
@@ -644,9 +558,7 @@ export async function POST(req) {
 
             const updatedUser = await MobileUser.findOneAndUpdate(
                 { deviceId },
-                {
-                    $inc: { coins: -amount, lifetimeCoinsSpent: amount }
-                },
+                { $inc: { coins: -amount, lifetimeCoinsSpent: amount } },
                 { new: true }
             );
 
@@ -659,10 +571,7 @@ export async function POST(req) {
             const amount = OC_VALUES[type];
             const updatedUser = await MobileUser.findOneAndUpdate(
                 { deviceId },
-                {
-                    // Merged duplicate $inc objects into one valid structure
-                    $inc: { coins: amount, lifetimeCoinsSpent: -amount }
-                },
+                { $inc: { coins: amount, lifetimeCoinsSpent: -amount } },
                 { new: true }
             );
 

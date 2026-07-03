@@ -12,12 +12,23 @@ export async function awardAura(userId, amount) {
         const user = await MobileUser.findById(userId);
         if (!user) return null;
 
+        // ⚡️ Check Personal Aura Multiplier (Independent of Clan)
+        let totalMultiplier = 1;
+        const now = new Date();
+
+        if (user.auraMultiplierUntil && new Date(user.auraMultiplierUntil) > now) {
+            // E.g., Active personal buff adds 0.5x, making it a 1.5x multiplier
+            totalMultiplier += 0.5;
+        }
+
+        const finalAuraAmount = Math.round(amount * totalMultiplier);
+
         // 1. Calculate what their rank IS currently
         const oldRank = calculateAuraRank(user.aura);
 
         // 2. Add the new Aura
-        user.aura += amount;
-        user.weeklyAura += amount;
+        user.aura += finalAuraAmount;
+        user.weeklyAura += finalAuraAmount;
 
         // 3. Calculate what their rank is NOW
         const newRank = calculateAuraRank(user.aura);
@@ -78,9 +89,12 @@ export async function awardAura(userId, amount) {
                 flavorText = `FARM ${auraNeeded} MORE AURA TO RANK UP.`;
             }
 
+            // ⚡️ Let the user know they got a multiplier boost
+            const multiplierNotice = totalMultiplier > 1 ? ` (x${totalMultiplier.toFixed(1)} Boost Active!)` : "";
+
             // ⚡️ Send the accumulating pill with the dynamic flavor text
             await createMessagePill({
-                text: `+${amount} Aura Gained. ${flavorText}`,
+                text: `+${finalAuraAmount} Aura Gained${multiplierNotice}. ${flavorText}`,
                 type: 'aura_gain',
                 targetAudience: 'user',
                 targetId: user._id.toString(),

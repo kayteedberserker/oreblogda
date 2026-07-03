@@ -20,22 +20,31 @@ const ClanMessageSchema = new mongoose.Schema({
 const InventoryItemSchema = new mongoose.Schema({
     itemId: { type: String, required: true },
     name: { type: String, required: true },
-    category: {
+    category: { type: String, required: true },
+    rarity: {
         type: String,
-        required: true
+        default: 'Common'
     },
+    description: { type: String, default: null }, // ⚡️ Fixed typo from 'descriptiom'
+    hypeType: { type: String, default: null },
+    url: { type: String, default: null },
     visualConfig: {
         svgCode: { type: String },
+        lottieUrl: { type: String }, // ⚡️ Added Lottie support
         primaryColor: { type: String },
         secondaryColor: { type: String, default: null },
-        animationType: {
-            type: String,
-            default: "singleSnake"
-        },
+        animationType: { type: String, default: "singleSnake" },
+        opacity: { type: Number },
+        zoom: { type: Number },
+        scale: { type: Number },
+        rotation: { type: String },
+        offsetY: { type: Number },
         duration: { type: Number, default: 3000 },
         snakeLength: { type: Number, default: 120 },
         isAnimated: { type: Boolean, default: false }
     },
+    itemCount: { type: Number, default: 1 },
+    isConsumable: { type: Boolean, default: false },
     isEquipped: { type: Boolean, default: false },
     acquiredAt: { type: Date, default: Date.now },
     expiresAt: { type: Date, default: null },
@@ -43,6 +52,8 @@ const InventoryItemSchema = new mongoose.Schema({
 
 const ClanSchema = new mongoose.Schema({
     name: { type: String, required: true },
+    canonicalName: { type: String, default: null, index: true },
+    canonicalTag: { type: String, default: null, index: true },
     tag: { type: String, required: true, unique: true, uppercase: true },
     description: { type: String, default: "" },
 
@@ -141,12 +152,13 @@ const ClanSchema = new mongoose.Schema({
 
     // 💎 CONTINUOUS WEEKLY COLLAB PAYOUT
     monthlyCollabAllowance: { type: Number, default: 0 },
+    nameLockedUntil: { type: Date, default: null },
 
     badges: [String],
 }, { timestamps: true });
 
 // Index for the War/Bounty system
-ClanSchema.index({ isInWar: 1, hasBounty: 1, rank: 1 });
+ClanSchema.index({ isInWar: 1, hasBounty: 1, rank: 1, canonicalName: 1, verifiedClan: 1, nameLockedUntil: 1 });
 
 // --- 🛡️ MIDDLEWARE: Enforce 250 Message Limit ---
 ClanSchema.pre('save', function (next) {

@@ -14,16 +14,23 @@ export async function awardClanPoints(post, actionPoints, type = null) {
 
     // --- 💎 MULTIPLIER LOGIC (VERIFIED + ITEM) ---
     const clanDoc = await Clan.findOne({ tag: clanTag })
-        .select('totalPoints verifiedUntil activeMultiplier multiplierExpiresAt badges consecutiveWeeksNoDerank');
+        // ⚡️ UPDATED: Added activeCustomizations to access the verifiedTier
+        .select('totalPoints verifiedUntil activeCustomizations activeMultiplier multiplierExpiresAt badges consecutiveWeeksNoDerank');
 
     if (!clanDoc) return;
 
     let totalMultiplier = 1;
     const now = new Date();
 
-    // 1. Check if the clan is verified (1.5x boost)
+    // 1. Check if the clan is verified and apply Tier-specific boost
     if (clanDoc.verifiedUntil && new Date(clanDoc.verifiedUntil) > now) {
-        totalMultiplier += 0.5;
+        const tier = clanDoc.activeCustomizations?.verifiedTier;
+        if (tier === 'premium') {
+            totalMultiplier += 0.5; // Premium: 1.5x Clan Points
+        } else if (tier === 'standard') {
+            totalMultiplier += 0.2; // Standard: 1.2x Clan Points
+        }
+        // Basic tier gets 1.0x (no boost)
     }
 
     // 2. Check for an active item multiplier (e.g., 2x, 3x)

@@ -185,6 +185,15 @@ default: Date.now
 rejectionReason: { type: String, default: "" },
 isAdminPost: { type: Boolean, default: false },
 
+// ⚡️ NEW: Post Boost Economy Field
+boostedUntil: { type: Date, default: null, index: true },
+// Add this around the same place as your boostedUntil field
+resurrectedAt: {
+type: Date,
+default: null,
+index: true
+},
+
 expiresAt: {
 type: Date,
 index: { expires: 0 }
@@ -218,8 +227,6 @@ next();
 8. HOT RELOAD SAFE EXPORT
 ===================================================== */
 
-if (process.env.NODE_ENV === "development") {
-delete mongoose.models.Post;
-}
-
-export default mongoose.models.Post || mongoose.model("Post", postSchema);
+// Removed the development hot-reload delete logic as per best practices
+const Post = mongoose.models.Post || mongoose.model("Post", postSchema);
+export default Post;

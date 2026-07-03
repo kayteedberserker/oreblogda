@@ -1,4 +1,6 @@
+import { createMessagePill } from "@/app/lib/messagePillService";
 import connectDB from "@/app/lib/mongodb";
+import MessagePillModel from "@/app/models/MessagePillModel";
 import { NextResponse } from "next/server";
 
 // ============================================================================
@@ -12,6 +14,7 @@ export async function GET(req) {
         const { searchParams } = new URL(req.url);
         const userId = searchParams.get("userId");
         const clanId = searchParams.get("clanId");
+        const deviceId = searchParams.get("deviceId"); // ⚡️ ADDED DEVICE ID
 
         const now = new Date();
 
@@ -24,18 +27,22 @@ export async function GET(req) {
             audienceConditions.push({ targetAudience: 'user', targetId: userId });
         }
 
+        // ⚡️ If the frontend passed a deviceId, check for messages tied to their device
+        if (deviceId) {
+            audienceConditions.push({ targetAudience: 'user', targetId: deviceId });
+        }
+
         // If the frontend passed a clanId, check for clan-wide broadcasts
         if (clanId) {
             audienceConditions.push({ targetAudience: 'clan', targetId: clanId });
         }
 
-        // ⚡️ The Master Query - Upgraded to Aggregation Pipeline for Deduplication
+        // ⚡️ The Master Query - Aggregation Pipeline for Deduplication
         const activePills = await MessagePillModel.aggregate([
             // 1. Filter out expired, inactive, and wrong audience
             {
                 $match: {
                     isActive: true,
-                    // Use $and to combine the expiration logic with the audience logic safely
                     $and: [
                         {
                             $or: [
@@ -58,14 +65,11 @@ export async function GET(req) {
                 $group: {
                     _id: {
                         $cond: {
-                            // If groupId exists and is not an empty string, use it as the unique key
                             if: { $and: [{ $ne: ["$groupId", null] }, { $ne: ["$groupId", ""] }] },
                             then: { $concat: ["group_", "$groupId"] },
-                            // Else fallback to grouping by type and link (defaulting link to "nolink" if null)
                             else: { $concat: ["typelink_", "$type", "_", { $ifNull: ["$link", "nolink"] }] }
                         }
                     },
-                    // Grabs the highest priority/newest document for this group
                     doc: { $first: "$$ROOT" }
                 }
             },
@@ -73,7 +77,7 @@ export async function GET(req) {
             {
                 $replaceRoot: { newRoot: "$doc" }
             },
-            // 5. Re-sort the final unique list because $group messes up the original sort order
+            // 5. Re-sort the final unique list
             {
                 $sort: { priority: -1, createdAt: -1 }
             },
@@ -83,7 +87,6 @@ export async function GET(req) {
             }
         ]);
 
-        // Note: Aggregation returns plain JavaScript objects, so no need for .lean()
         return NextResponse.json({ success: true, pills: activePills }, { status: 200 });
 
     } catch (err) {
@@ -95,9 +98,6 @@ export async function GET(req) {
 // ============================================================================
 // ✍️ POST: Create a New Message Pill (Admin or System Triggered)
 // ============================================================================
-import { createMessagePill } from "@/app/lib/messagePillService";
-import MessagePillModel from "@/app/models/MessagePillModel";
-
 export async function POST(req) {
     try {
         const body = await req.json();
@@ -106,13 +106,10 @@ export async function POST(req) {
             return NextResponse.json({ success: false, message: "Text is required" }, { status: 400 });
         }
 
-        // Just pass the body directly to your new service!
         const newPill = await createMessagePill(body);
-
         if (!newPill) throw new Error("Service returned null");
 
         return NextResponse.json({ success: true, pill: newPill }, { status: 201 });
-
     } catch (err) {
         return NextResponse.json({ success: false, message: "Creation Error" }, { status: 500 });
     }

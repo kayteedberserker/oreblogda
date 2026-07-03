@@ -10,154 +10,208 @@ import MobileUser from "@/app/models/MobileUserModel";
 import Newsletter from "@/app/models/Newsletter";
 import Post from "@/app/models/PostModel";
 import userModel from "@/app/models/UserModel";
-import { GoogleGenAI } from "@google/genai";
 import { v2 as cloudinary } from "cloudinary";
 import geoip from "geoip-lite";
+import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 import nodemailer from "nodemailer";
+// At the top of your file
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
-// ----------------------
-// AI MODERATOR & AUTO-TAGGER (UPDATED FOR @google/genai)
-// ----------------------
+// Initialize the R2 Client
+const r2Client = new S3Client({
+    region: "auto",
+    endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    },
+});
+
+const { OpenAI } = require("openai");
+const { GoogleGenAI } = require("@google/genai");
+
+// Initialize both clients with global configurations
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
 async function runAIModerator(title, message, clanId, category, mediaUrl, mediaType) {
-    const API_KEY = process.env.GEMINI_API_KEY;
-    if (!API_KEY) return { action: "flag", reason: "AI Config Error", interests: [] };
+    // Clean string interpolations so the model never parses literal nulls
+    const safeClanId = clanId ? clanId.toString() : "NONE";
+    const safeMediaUrl = mediaUrl || "NONE";
 
-    // This is the correct initialization for @google/genai
-    const ai = new GoogleGenAI({ apiKey: API_KEY });
+    // =========================================================
+    // 📥 STEP 1: FETCH MEDIA ONCE FOR BOTH PIPELINES
+    // =========================================================
+    // We fetch the media stream here so we don't have to download it twice if both pipelines run
+    let mediaBase64 = null;
+    let mediaMime = null;
 
-    const VALID_ANIMES = ["Naruto", "One Piece", "Bleach", "Dragon Ball Z", "Hunter x Hunter", "JJK", "Solo Leveling", "My Hero Academia", "Hell's Paradise", "Demon Slayer", "AOT", "Chainsaw Man", "Death Note", "Fullmetal Alchemist", "Code Geass", "Steins;Gate", "Berserk", "Vinland Saga", "Monster", "Vagabond", "Baki", "Nana", "Horimiya", "Fruits Basket", "Ouran High", "Haikyuu", "Blue Lock", "One Punch Man"];
-    const VALID_GENRES = ["Shonen", "Seinen", "Romance", "Isekai", "Psychological", "Ecchi", "Action", "Slice of Life", "Manga", "Fantasy", "Sci-Fi", "Comedy", "Manhwa"];
+    if (mediaUrl) {
+        const isVideo = mediaType === "video" || mediaUrl.match(/\.(mp4|mov|webm|mkv)$/i);
+        const isImage = mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i);
 
-    try {
-        const prompt = `
-            TASK: Moderate and Tag this 'Diary Entry' for 'Oreblogda' (Anime/Gaming blog).
-            
-            MODERATION RULES: 
-            - If the post includes ${clanId} and it's not null, the action should always be approved no matter what the post is or if any rules are breached. 
-            - Reject real-life nudity or extreme real-life gore.
-            - Allow animated/stylized gore (anime style).
-            - Allow adult jokes and "Ecchi" content, especially if the category is 'Memes'.
-            - Reject content completely unrelated to anime, gaming, or nerd culture.
+        if (isVideo || isImage) {
+            let mediaRes = null;
+            // 2 fast attempts with a 500ms backoff so posting never lags
+            for (let i = 0; i < 2; i++) {
+                try {
+                    const headRes = await fetch(mediaUrl, { method: 'HEAD', signal: AbortSignal.timeout(1000) });
+                    const contentLength = headRes.headers.get('content-length');
+                    if (contentLength && parseInt(contentLength) > 10 * 1024 * 1024) break;
 
-            STRICT CATEGORY RULES for posts without clanId/clanId is null:
-            - 'News' is strictly for Anime/Gaming News.
-            - 'Polls' is strictly for posts with polls.
-            - 'Fanart' category should also be lax and can be used for general content without much context as long as there is an image/video attached to the post and the media is anime/gaming related, which doesn't fit the meme category. 
-            - CRITICAL: If there is no ${mediaUrl} or if ${mediaUrl} is an empty array or null attached to a post with category FANART the post should be rejected, the purpose of the fan art category is for art in means of pictures or videos so if that isn't available the post isn't approved
-            - 'Memes' is strictly for memes.
-            - 'Gaming' is strictly for anything gaming-related.
-            - 'Review' is a general category for anime/gaming related content.
-            - CRITICAL: A meme post MUST be in 'Memes' category. If a meme is found in 'News' or 'Review', REJECT it for "incorrect category".
-            - CRITICAL: If a meme is in 'Gaming', it MUST be a gaming-related meme, else REJECT it.
-            - CRITICAL: Reject any post that doesnt have enough context or relevant information, like if a post has title and message that doesnt have meaning, even if not related to the post a post must have a clear title and message.
-
-            TAGGING & INFERENCE TASK (CRITICAL):
-            1. Identify the Anime/Game mentioned or shown. 
-            2. INTELLIGENT INFERENCE: If a character is mentioned but the Anime name is MISSING, you MUST include the Anime name from the VALID_ANIMES list. 
-               (e.g., If "Itachi" is mentioned, add "Naruto". If "Rengoku" is mentioned, add "Demon Slayer". If "Gojo" is mentioned, add "JJK").
-            3. Identify the Genre/Theme based on the "vibe" and characters.
-            4. Use these lists for primary tags: ANIME: ${VALID_ANIMES.join(", ")}, GENRES: ${VALID_GENRES.join(", ")}
-            
-            // ⚡️ NEW: ENTITY RESOLUTION & FORMATTING RULES
-            5. CHARACTER CANONICALIZATION: If you identify a character, you MUST output their full, official canonical name, regardless of what they are called in the post. 
-               - If the post says "Sasuke" or "sasuke", you output "sasuke uchiha".
-               - If the post says "Luffy" or "Straw Hat", you output "monkey d. luffy".
-               - If the post says "Gojo", you output "satoru gojo".
-            6. SEPARATE ENTITIES: If a specific character is found, you MUST output BOTH the character's full canonical name AND the root franchise/anime name as two separate tags in the array.
-            7. LOWERCASE ENFORCEMENT: All tags inside the 'interests' array MUST be strictly lowercase to ensure database consistency.
-
-            INPUT:
-            Title: "${title}" | Message: "${message}" | Category: "${category}"
-        `;
-
-        // The new SDK uses a flatter 'contents' structure
-        const contents = [];
-        const userParts = [{ text: prompt }];
-
-        if (mediaUrl && mediaUrl.includes("cloudinary")) {
-            const isVideo = mediaType === "video" || mediaUrl.match(/\.(mp4|mov|webm|mkv)$/i);
-            const isImage = mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i);
-
-            if (isVideo || isImage) {
-                let mediaRes = null;
-                for (let i = 0; i < 3; i++) {
-                    try {
-                        const headRes = await fetch(mediaUrl, { method: 'HEAD' });
-                        const contentLength = headRes.headers.get('content-length');
-                        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB limit for buffer
-
-                        if (contentLength && parseInt(contentLength) > MAX_FILE_SIZE) {
-                            console.warn("Media too large for AI processing buffer, skipping media attachment.");
-                            break;
-                        }
-
-                        mediaRes = await fetch(mediaUrl);
-                        if (mediaRes.ok) break;
-                    } catch (e) {
-                        console.log(`Fetch attempt ${i + 1} failed, retrying...`);
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 1500));
+                    mediaRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(2000) });
+                    if (mediaRes.ok) break;
+                } catch (e) {
+                    console.log(`Media connection cycle ${i + 1} timed out, resetting connection...`);
                 }
+                await new Promise(resolve => setTimeout(resolve, 500));
+            }
 
-                if (mediaRes && mediaRes.ok) {
-                    const arrayBuffer = await mediaRes.arrayBuffer();
-                    const base64Data = Buffer.from(arrayBuffer).toString("base64");
-
-                    if (base64Data.length > 0) {
-                        userParts.push({
-                            inlineData: {
-                                data: base64Data,
-                                mimeType: isVideo ? "video/mp4" : "image/jpeg"
-                            }
-                        });
-                    }
-                }
+            if (mediaRes && mediaRes.ok) {
+                const arrayBuffer = await mediaRes.arrayBuffer();
+                mediaBase64 = Buffer.from(arrayBuffer).toString("base64");
+                mediaMime = isVideo ? "video/mp4" : "image/jpeg";
             }
         }
+    }
 
-        // Push the parts into the contents array
-        contents.push({ role: 'user', parts: userParts });
+    // =========================================================
+    // 🧠 STEP 2: DUAL-CIRCUIT EXECUTION HELPER
+    // =========================================================
+    // This executes OpenAI first, and safely falls back to Gemini if it fails.
+    async function runCircuit(systemPrompt, userText, schemaDefinition) {
+        try {
+            if (!process.env.OPENAI_API_KEY) throw new Error("OpenAI API key missing");
 
-        // Enforce strict JSON output via Schema
-        const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash-lite",
-            contents: contents,
-            config: {
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: "OBJECT",
-                    properties: {
-                        action: {
-                            type: "STRING",
-                            description: "Must be exactly 'approve', 'reject', or 'flag'"
-                        },
-                        reason: { type: "STRING" },
-                        interests: {
-                            type: "ARRAY",
-                            items: { type: "STRING" },
-                            description: "Array of strictly lowercase tags including canonical character names and genres."
-                        }
-                    },
-                    required: ["action", "reason", "interests"]
-                }
+            const userContent = [{ type: "text", text: userText }];
+
+            // OpenAI Vision format requires data URIs for raw base64
+            if (mediaBase64 && mediaMime.startsWith("image")) {
+                userContent.push({
+                    type: "image_url",
+                    image_url: { url: `data:${mediaMime};base64,${mediaBase64}` }
+                });
             }
-        });
 
-        // We can now safely parse directly because the API guarantees standard JSON format
-        const parsedResult = JSON.parse(response.text);
+            const openaiResponse = await openai.chat.completions.create({
+                model: "gpt-4o-mini",
+                messages: [
+                    { role: "system", content: systemPrompt },
+                    { role: "user", content: userContent }
+                ],
+                response_format: {
+                    type: "json_schema",
+                    json_schema: { name: "response", strict: true, schema: schemaDefinition }
+                },
+                temperature: 0.1
+            });
 
-        if (!parsedResult.interests) parsedResult.interests = [];
-        return parsedResult;
+            return JSON.parse(openaiResponse.choices[0].message.content);
 
-    } catch (err) {
-        console.error("❌ 2026 Moderator Error:", err.message);
-        const isRateLimit = err.message.includes("429") || err.message.includes("Resource");
+        } catch (openaiError) {
+            console.warn(`⚠️ OpenAI exception (${openaiError.message}). Diverting to Gemini Fallback Circuit...`);
+
+            try {
+                const API_KEY = process.env.GEMINI_API_KEY;
+                if (!API_KEY) throw new Error("Gemini API key missing");
+
+                const ai = new GoogleGenAI({ apiKey: API_KEY });
+                const userParts = [{ text: userText }];
+
+                if (mediaBase64) {
+                    userParts.push({ inlineData: { data: mediaBase64, mimeType: mediaMime } });
+                }
+
+                const geminiResponse = await ai.models.generateContent({
+                    model: "gemini-2.5-flash-lite",
+                    contents: [{ role: 'user', parts: userParts }],
+                    config: {
+                        responseMimeType: "application/json",
+                        responseSchema: schemaDefinition,
+                        systemInstruction: systemPrompt
+                    }
+                });
+
+                return JSON.parse(geminiResponse.text);
+
+            } catch (geminiError) {
+                console.error("❌ Dual Circuit Crash:", geminiError.message);
+                throw new Error("Both automated AI platforms failed to resolve verification");
+            }
+        }
+    }
+
+    // The shared user payload text sent to both pipelines
+    const payloadText = `Clan ID: ${safeClanId}\nAttached Media URL: ${safeMediaUrl}\nTitle: "${title}"\nMessage: "${message}"\nCategory: "${category}"`;
+
+    // =========================================================
+    // ⚖️ STEP 3: PIPELINE PHASE 1 - MODERATION ONLY
+    // =========================================================
+    const modSystemPrompt = `You are Oreblogda's moderation engine.
+        MODERATION RULES:
+        - Reject real-life nudity or extreme real-life gore. Allow stylized anime gore/ecchi.
+        - Reject content completely unrelated to anime, gaming, or nerd culture.
+        - 'News': Strictly anime/gaming news.
+        - 'Polls': Strictly polls.
+        - 'Fanart': MUST have media attached (Attached Media URL is not 'NONE'). Reject if missing.
+        - 'Memes': Strictly memes. Reject if categorized as News/Review/Gaming (unless gaming-meme).
+        - Reject posts lacking context or meaning in title/message.`;
+
+    const modSchema = {
+        type: "OBJECT",
+        properties: {
+            action: { type: "STRING", description: "Must be exactly 'approve', 'reject', or 'flag'" },
+            reason: { type: "STRING", description: "Brief reason explaining the decision" }
+        },
+        required: ["action", "reason"]
+    };
+
+    let modResult;
+    try {
+        modResult = await runCircuit(modSystemPrompt, payloadText, modSchema);
+    } catch (e) {
+        return { action: "flag", reason: "Automated engine failover timeout. Queued for standard review.", interests: [] };
+    }
+
+    // 🛑 If the post is rejected or flagged, return instantly. DO NOT waste money extracting tags.
+    if (modResult.action !== "approve") {
+        return { action: modResult.action, reason: modResult.reason, interests: [] };
+    }
+
+    // =========================================================
+    // 🏷️ STEP 4: PIPELINE PHASE 2 - TAG EXTRACTION (Only if Approved)
+    // =========================================================
+    const tagSystemPrompt = `You are Oreblogda's entity extraction engine. Output JSON.
+        TAGGING RULES:
+        1. Identify the Anime, Game, Genre, and Characters mentioned or shown.
+        2. Prefer official anime/game names. If recognized, output the official title. Do not invent names.
+        3. CHARACTER CANONICALIZATION: Output full official canonical names (e.g., 'Gojo' -> 'satoru gojo', 'Luffy' -> 'monkey d. luffy').
+        4. SEPARATE ENTITIES: Output BOTH the character's canonical name and the root franchise/anime name as separate tags.
+        5. LOWERCASE ENFORCEMENT: All tags MUST be strictly lowercase to ensure database consistency.`;
+
+    const tagSchema = {
+        type: "OBJECT",
+        properties: {
+            interests: {
+                type: "ARRAY",
+                items: { type: "STRING" },
+                description: "Array of strictly lowercase alphanumeric tags."
+            }
+        },
+        required: ["interests"]
+    };
+
+    try {
+        const tagResult = await runCircuit(tagSystemPrompt, payloadText, tagSchema);
         return {
-            action: "flag",
-            reason: isRateLimit ? "Automatic Check failed - Pending" : "Service unavailable",
-            interests: []
+            action: "approve",
+            reason: modResult.reason,
+            interests: tagResult.interests || []
         };
+    } catch (e) {
+        // If the moderation passed but the tagging engine faulted, approve the post but return empty tags so the user isn't blocked.
+        return { action: "approve", reason: modResult.reason + " (Tagging timeout)", interests: [] };
     }
 }
 
@@ -325,6 +379,55 @@ function resolveClanDisplayRank(points = 0) {
     return "Wandering Ronin";
 }
 
+// ⚡️ HELPER: Escapes special characters for safe regex injection
+const escapeRegex = (string) => {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+};
+
+// ⚡️ HELPER: Diversity Pass
+const applyDiversityPass = (posts, maxConsecutive = 2) => {
+    const result = [];
+    const heldBack = [];
+
+    for (const post of posts) {
+        const authorId = (post.authorUserId || post.authorId)?.toString();
+        const clanId = (post.clanTag || post.clanId)?.toString();
+        const category = post.category?.toLowerCase();
+
+        const recent = result.slice(-maxConsecutive);
+
+        const isAuthorSpam = authorId && recent.filter(p => (p.authorUserId || p.authorId)?.toString() === authorId).length >= maxConsecutive;
+        const isClanSpam = clanId && recent.filter(p => (p.clanTag || p.clanId)?.toString() === clanId).length >= maxConsecutive;
+        const isCategorySpam = category && recent.filter(p => p.category?.toLowerCase() === category).length >= maxConsecutive;
+
+        if (isAuthorSpam || isClanSpam || isCategorySpam) {
+            heldBack.push(post);
+        } else {
+            result.push(post);
+
+            if (heldBack.length > 0) {
+                const safeIndex = heldBack.findIndex(hp => {
+                    const hpAuthorId = (hp.authorUserId || hp.authorId)?.toString();
+                    const hpClanId = (hp.clanTag || hp.clanId)?.toString();
+                    const hpCategory = hp.category?.toLowerCase();
+                    const hpRecent = result.slice(-maxConsecutive);
+
+                    const hpAuthSpam = hpAuthorId && hpRecent.filter(p => (p.authorUserId || p.authorId)?.toString() === hpAuthorId).length >= maxConsecutive;
+                    const hpClanSpam = hpClanId && hpRecent.filter(p => (p.clanTag || p.clanId)?.toString() === hpClanId).length >= maxConsecutive;
+                    const hpCatSpam = hpCategory && hpRecent.filter(p => p.category?.toLowerCase() === hpCategory).length >= maxConsecutive;
+
+                    return !hpAuthSpam && !hpClanSpam && !hpCatSpam;
+                });
+
+                if (safeIndex !== -1) {
+                    result.push(heldBack.splice(safeIndex, 1)[0]);
+                }
+            }
+        }
+    }
+    return result.concat(heldBack);
+};
+
 export async function GET(req) {
     await connectDB();
     try {
@@ -339,7 +442,6 @@ export async function GET(req) {
         const deviceId = req.headers.get("x-user-deviceId") || "";
         const userCountry = req.headers.get("x-user-country") || "Global";
 
-        // ⚡️ NEW: Force all incoming static preferences to lowercase immediately
         const favAnimes = req.headers.get("x-user-animes")?.split(",").map(s => s.trim().toLowerCase()).filter(Boolean) || [];
         const favGenres = req.headers.get("x-user-genres")?.split(",").map(s => s.trim().toLowerCase()).filter(Boolean) || [];
         const favCharacter = req.headers.get("x-user-character")?.trim().toLowerCase() || "";
@@ -352,79 +454,48 @@ export async function GET(req) {
         const skip = (page - 1) * limit;
 
         const targetAuthor = author || authorId;
-
-        // ⚡️ CONFIGURATION: Set point requirement to filter out casual single-hype posts from trending status
         const TRENDING_THRESHOLD = 1000;
 
-        // 🧠 FETCH DYNAMIC USER AFFINITY
+        const now = new Date();
+        const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
+
+        // 🧠 FETCH DYNAMIC USER AFFINITY & FEED LEARNING PROFILE
         let safeAffinity = {};
         let safeAuthorAffinity = {};
         let safeCountryAffinity = {};
 
+        let dynamicWeights = {
+            fresh: 0.35,
+            author: 0.20,
+            clan: 0.15,
+            interest: 0.15,
+            trending: 0.10,
+            explore: 0.05
+        };
+
         if (deviceId && !targetAuthor) {
-            // We use .lean() to ensure Mongoose Maps are returned as standard JSON objects
-            const userProfile = MobileUser.findOne({ deviceId })
-                .select("affinityScores authorAffinity countryAffinity")
+            const userProfile = await MobileUser.findOne({ deviceId })
+                .select("affinityScores authorAffinity countryAffinity feedLearning")
                 .lean();
 
             if (userProfile) {
                 safeAffinity = userProfile.affinityScores || {};
                 safeAuthorAffinity = userProfile.authorAffinity || {};
                 safeCountryAffinity = userProfile.countryAffinity || {};
+
+                if (userProfile.feedLearning?.poolWeights) {
+                    dynamicWeights = { ...dynamicWeights, ...userProfile.feedLearning.poolWeights };
+                }
             }
-        }
-
-        let query = {};
-
-        if (targetAuthor) {
-            // Check if it's an ID or a Username
-            const available = await Post.find({ authorId: targetAuthor }).limit(1);
-            if (available.length > 0) {
-                query.authorId = targetAuthor;
-            } else {
-                query.authorUserId = targetAuthor;
-            }
-        } else {
-            query.status = "approved";
-        }
-
-        if (clanIdParam) query.clanId = clanIdParam;
-        if (category) {
-            query.category = { $regex: category, $options: "i" };
-        }
-
-        let total = 0;
-
-        // ⚡️ UPDATED: Time Window Logic with Fallback checks
-        if (last24Hours) {
-            const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
-            query.createdAt = { $gte: yesterday };
-            total = await Post.countDocuments(query);
-        } else if (!targetAuthor) {
-            // Step-wise fallback: 30 days, 60 days, 6 months, 1 year, 10 years (all-time)
-            const timeWindows = [30, 60, 180, 365, 3650];
-
-            for (const days of timeWindows) {
-                const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-                query.createdAt = { $gte: cutoffDate };
-                total = await Post.countDocuments(query);
-
-                // If posts are found in this window, break the loop and use this query
-                if (total > 0) break;
-            }
-        } else {
-            total = await Post.countDocuments(query);
         }
 
         let followedClanTags = [];
-        let viewerClanTags = []; // Tags of clans the user is an actual member/leader of
+        let viewerClanTags = [];
 
-        if (viewerId && !targetAuthor) {
-            // ⚡️ FOLLOWERS: Fetch clans the user follows
+        if (viewerId) {
             const follows = await ClanFollower.find({ userId: viewerId }).select("clanTag").lean();
             followedClanTags = follows.map(f => f.clanTag);
 
-            // Fetch the user's actual clan memberships
             const memberships = await Clan.find({
                 $or: [
                     { leader: viewerId },
@@ -432,128 +503,243 @@ export async function GET(req) {
                     { members: viewerId }
                 ]
             }).select("tag _id").lean();
-
-            // Map both the tag and the stringified ID in case the post references either
             viewerClanTags = memberships.map(c => c.tag).concat(memberships.map(c => c._id.toString()));
         }
 
+        let query = {};
+        let total = 0;
+        let authorOrConditions = null;
+
+        let basePoolQuery = { status: "approved" };
+        if (category) {
+            basePoolQuery.category = { $regex: category, $options: "i" };
+        }
+
+        // 🌟 TELEMETRY: IN-MEMORY CANDIDATE TRACKING WITH WEIGHTS
+        const candidateMap = new Map();
+        const addCandidate = (postId, type, reason = null, weight = 1) => {
+            const id = postId.toString();
+            if (!candidateMap.has(id)) {
+                candidateMap.set(id, { _id: id, sources: [] });
+            }
+
+            const sources = candidateMap.get(id).sources;
+            if (!sources.some(s => s.type === type && s.reason === reason)) {
+                sources.push({ type, reason, weight });
+            }
+        };
+
+        // ============================================================================
+        // ⚡️ NEW PHASE 1: CANDIDATE POOL ARCHITECTURE
+        // ============================================================================
+        if (targetAuthor) {
+            if (mongoose.Types.ObjectId.isValid(targetAuthor)) {
+                authorOrConditions = [
+                    { authorUserId: new mongoose.Types.ObjectId(targetAuthor) },
+                    { authorId: targetAuthor }
+                ];
+                query.$or = authorOrConditions;
+            } else {
+                query.authorId = targetAuthor;
+            }
+            if (category) query.category = { $regex: category, $options: "i" };
+
+            // ⚡️ FIX: Apply the 24-hour time filter ALONGSIDE the author filter
+            if (last24Hours) {
+                const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+                const timeFilter = {
+                    $or: [
+                        { createdAt: { $gte: yesterday } },
+                        { resurrectedAt: { $gte: yesterday } }
+                    ]
+                };
+
+                if (query.$or) {
+                    // If we already have an $or (the author ID checks), wrap both in an $and
+                    query = { $and: [{ $or: query.$or }, timeFilter] };
+                } else {
+                    // Otherwise, just append the time filter
+                    query.$or = timeFilter.$or;
+                }
+            }
+
+            total = await Post.countDocuments(query);
+
+        } else if (clanIdParam) {
+            query.clanId = clanIdParam;
+            query.status = "approved";
+            if (category) query.category = { $regex: category, $options: "i" };
+            total = await Post.countDocuments(query);
+
+        } else {
+            // 🌐 GLOBAL FEED: PARALLEL CANDIDATE POOLING
+            const poolBudget = 1000;
+            const POOL_CONFIG = {
+                freshPool: Math.floor(poolBudget * dynamicWeights.fresh),
+                authorPool: Math.floor(poolBudget * dynamicWeights.author),
+                clanPool: Math.floor(poolBudget * dynamicWeights.clan),
+                interestPool: Math.floor(poolBudget * dynamicWeights.interest),
+                trendingPool: Math.floor(poolBudget * dynamicWeights.trending),
+                explorePool: Math.floor(poolBudget * dynamicWeights.explore) // 🌟 Fully dynamic now
+            };
+
+            const topAuthors = Object.entries(safeAuthorAffinity)
+                .filter(([, score]) => score >= 10)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 15)
+                .map(([id]) => id);
+
+            const activeClanTags = [...new Set([...followedClanTags, ...viewerClanTags])];
+            const interestRegexes = userInterests.map(i => new RegExp(`^${escapeRegex(i)}$`, "i"));
+
+            const [
+                freshPool,
+                authorPool,
+                clanPool,
+                trendingPool,
+                interestPool,
+                explorePool
+            ] = await Promise.all([
+                Post.find(basePoolQuery).sort({ createdAt: -1 }).limit(POOL_CONFIG.freshPool).select("_id").lean(),
+
+                topAuthors.length > 0
+                    ? Post.find({
+                        ...basePoolQuery,
+                        $or: [
+                            { authorUserId: { $in: topAuthors.map(id => mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id) } },
+                            { authorId: { $in: topAuthors } }
+                        ]
+                    }).sort({ createdAt: -1 }).limit(POOL_CONFIG.authorPool).select("_id authorUserId authorId").lean()
+                    : Promise.resolve([]),
+
+                activeClanTags.length > 0
+                    ? Post.find({
+                        ...basePoolQuery,
+                        $or: [{ clanId: { $in: activeClanTags } }, { clanTag: { $in: activeClanTags } }]
+                    }).sort({ createdAt: -1 }).limit(POOL_CONFIG.clanPool).select("_id clanId clanTag").lean()
+                    : Promise.resolve([]),
+
+                Post.find({
+                    ...basePoolQuery,
+                    $or: [
+                        { boostedUntil: { $gt: now } },
+                        { resurrectedAt: { $gte: fortyEightHoursAgo } },
+                        {
+                            createdAt: { $gte: fortyEightHoursAgo },
+                            $expr: {
+                                $or: [
+                                    { $gte: [{ $size: { $ifNull: ["$likes", []] } }, 50] },
+                                    { $gte: [{ $size: { $ifNull: ["$comments", []] } }, 20] },
+                                    { $gte: [{ $ifNull: ["$hypeCount", "$hypePoints", 0] }, 100] }
+                                ]
+                            }
+                        }
+                    ]
+                }).sort({ createdAt: -1 }).limit(POOL_CONFIG.trendingPool).select("_id").lean(),
+
+                interestRegexes.length > 0
+                    ? Post.find({
+                        ...basePoolQuery,
+                        interests: { $in: interestRegexes }
+                    }).sort({ createdAt: -1 }).limit(POOL_CONFIG.interestPool).select("_id interests").lean()
+                    : Promise.resolve([]),
+
+                Post.aggregate([
+                    { $match: basePoolQuery },
+                    { $sample: { size: POOL_CONFIG.explorePool } },
+                    { $project: { _id: 1 } }
+                ])
+            ]);
+
+            freshPool.forEach(p => addCandidate(p._id, "fresh", "recent", 1));
+            authorPool.forEach(p => {
+                const aId = (p.authorUserId || p.authorId)?.toString();
+                const weight = safeAuthorAffinity[aId] || 10;
+                addCandidate(p._id, "author", aId, weight);
+            });
+            clanPool.forEach(p => {
+                const cId = (p.clanTag || p.clanId)?.toString();
+                addCandidate(p._id, "clan", cId, 20);
+            });
+            trendingPool.forEach(p => addCandidate(p._id, "trending", "viral_or_boosted", 50));
+            interestPool.forEach(p => {
+                const rawTags = p.interests || [];
+                const matchedTag = rawTags.find(tag => userInterests.includes(tag.toLowerCase().trim()));
+                const cleanTag = matchedTag ? matchedTag.toLowerCase().trim() : null;
+                const weight = (cleanTag && safeAffinity[cleanTag]) ? safeAffinity[cleanTag] : 5;
+                addCandidate(p._id, "interest", matchedTag || "general_match", weight);
+            });
+            explorePool.forEach(p => addCandidate(p._id, "explore", "discovery", 1));
+
+            const mergedIds = [
+                ...freshPool, ...authorPool, ...clanPool, ...trendingPool, ...interestPool, ...explorePool
+            ].map(p => p._id.toString());
+
+            const uniqueCandidateIds = [...new Set(mergedIds)].map(id => new mongoose.Types.ObjectId(id));
+
+            query = { _id: { $in: uniqueCandidateIds } };
+            total = uniqueCandidateIds.length;
+        }
+
+        // ============================================================================
+        // ⚡️ AGGREGATION & SCORING PIPELINE
+        // ============================================================================
         let posts;
 
         if (targetAuthor) {
-            posts = await Post.find(query)
-                .sort({ isAdminPost: -1, createdAt: -1 })
-                .skip(skip)
-                .limit(limit)
-                .lean();
+            posts = await Post.aggregate([
+                { $match: query },
+                { $addFields: { effectiveDate: { $max: ["$createdAt", { $ifNull: ["$resurrectedAt", "$createdAt"] }] } } },
+                { $sort: { boostedUntil: -1, isAdminPost: -1, effectiveDate: -1 } },
+                { $skip: skip },
+                { $limit: limit }
+            ]);
         } else {
             const CONFIG = {
-                likeWeight: 2.0,
-                commentWeight: 4.0,
-                hypeBaseWeight: 10.0,
-                hypeDecayRate: 0.15, // ⚡️ NEW: How fast hype loses its algorithmic power over time
-
-                freshnessBoost: 20,
-                freshnessWindow: 3,
-                gravityPower: 1.2,
-
-                // 🧠 EXPLORATION PHASE: Static preferences vastly reduced so dynamic affinity takes the lead
-                staticPrefBonus: 3,
-                staticLocalBonus: 4,
-                clanBonus: 20,
-                affinityMultiplier: 1.0,
-
-                // ⚡️ NEW: Clan Badge & Verification Weights
-                tierBasicWeight: 4,
-                tierEpicWeight: 7,
-                tierLegendaryWeight: 10,
-                tierFollowerMultiplier: 1.5, // Enhances badge bonus if the user follows the clan
-                partnerClanBonus: 20,      // Massive boost for verified app partners (applies to followers)
-
+                likeWeight: 2.0, commentWeight: 4.0, hypeBaseWeight: 10.0, hypeDecayRate: 0.15,
+                freshnessBoost: 20, freshnessWindow: 3, gravityPower: 1.2, staticPrefBonus: 3,
+                staticLocalBonus: 4, clanBonus: 20, affinityMultiplier: 1.0, tierBasicWeight: 4,
+                tierEpicWeight: 7, tierLegendaryWeight: 10, tierFollowerMultiplier: 1.5,
+                partnerClanBonus: 20, postBoostMultiplier: 3.0, boostIgnitionScore: 15,
                 trendingThreshold: TRENDING_THRESHOLD
             };
 
-            const now = new Date();
-
             const pipeline = [
                 { $match: query },
-                { $sort: { isAdminPost: -1, createdAt: -1 } },
-                { $limit: 1000 },
-
-                // ⚡️ NEW: Lookup Clan data dynamically to assess Verification & Badges
+                { $addFields: { effectiveDate: { $max: ["$createdAt", { $ifNull: ["$resurrectedAt", "$createdAt"] }] } } },
                 {
                     $lookup: {
                         from: "clans",
                         let: { postClanId: "$clanId" },
                         pipeline: [
-                            {
-                                $match: {
-                                    $expr: {
-                                        $or: [
-                                            { $eq: ["$tag", "$$postClanId"] },
-                                            { $eq: [{ $toString: "$_id" }, "$$postClanId"] }
-                                        ]
-                                    }
-                                }
-                            },
-                            {
-                                $project: {
-                                    verifiedClan: 1,
-                                    "activeCustomizations.verifiedTier": 1,
-                                    verifiedUntil: 1
-                                }
-                            }
+                            { $match: { $expr: { $or: [{ $eq: ["$tag", "$$postClanId"] }, { $eq: [{ $toString: "$_id" }, "$$postClanId"] }] } } },
+                            { $project: { verifiedClan: 1, "activeCustomizations.verifiedTier": 1, verifiedUntil: 1 } }
                         ],
                         as: "clanInfo"
                     }
                 },
                 { $unwind: { path: "$clanInfo", preserveNullAndEmptyArrays: true } },
-
                 {
                     $addFields: {
-                        ageInHours: {
-                            $max: [0.5, { $divide: [{ $subtract: [now, "$createdAt"] }, 3600000] }]
-                        },
+                        ageInHours: { $max: [0.5, { $divide: [{ $subtract: [now, "$effectiveDate"] }, 3600000] }] },
                         commentsCount: { $size: { $ifNull: ["$comments", []] } },
                         likesCount: { $size: { $ifNull: ["$likes", []] } },
-                        hypePointsCount: {
-                            $cond: {
-                                if: { $eq: [{ $type: { $ifNull: ["$hypePoints", 0] } }, "array"] },
-                                then: { $size: { $ifNull: ["$hypePoints", []] } },
-                                else: { $ifNull: ["$hypePoints", 0] }
-                            }
-                        },
-                        // ⚡️ NEW: Lowercase the post's interests dynamically so `$setIntersection` can match the lowercased headers
+                        hypePointsCount: { $ifNull: ["$hypeCount", "$hypePoints", 0] },
+                        isActiveBoost: { $cond: [{ $and: [{ $ne: ["$boostedUntil", null] }, { $gt: ["$boostedUntil", now] }] }, true, false] },
                         matchCount: {
                             $size: {
                                 $setIntersection: [
-                                    {
-                                        $map: {
-                                            input: { $ifNull: ["$interests", []] },
-                                            as: "t",
-                                            in: { $toLower: { $trim: { input: "$$t" } } }
-                                        }
-                                    },
+                                    { $map: { input: { $ifNull: ["$interests", []] }, as: "t", in: { $toLower: { $trim: { input: "$$t" } } } } },
                                     userInterests
                                 ]
                             }
                         },
-                        isViewerFollowingClan: {
-                            $or: [
-                                { $in: ["$clanId", followedClanTags] },
-                                { $in: ["$clanTag", followedClanTags] }
-                            ]
-                        },
-                        hasValidBadge: {
-                            $and: [
-                                { $ne: ["$clanInfo.verifiedUntil", null] },
-                                { $gt: ["$clanInfo.verifiedUntil", now] }
-                            ]
-                        }
+                        isViewerFollowingClan: { $or: [{ $in: ["$clanId", followedClanTags] }, { $in: ["$clanTag", followedClanTags] }] },
+                        hasValidBadge: { $and: [{ $ne: ["$clanInfo.verifiedUntil", null] }, { $gt: ["$clanInfo.verifiedUntil", now] }] }
                     }
                 },
                 {
                     $addFields: {
-                        // 🧠 1. DYNAMIC TAG AFFINITY
                         tagAffinityTotal: {
                             $sum: {
                                 $map: {
@@ -561,22 +747,14 @@ export async function GET(req) {
                                     as: "rawTag",
                                     in: {
                                         $let: {
-                                            vars: {
-                                                cleanTag: { $toLower: { $trim: { input: "$$rawTag" } } }
-                                            },
+                                            vars: { cleanTag: { $toLower: { $trim: { input: "$$rawTag" } } } },
                                             in: {
                                                 $let: {
                                                     vars: {
                                                         dynamicScore: { $ifNull: [{ $getField: { field: "$$cleanTag", input: { $literal: safeAffinity } } }, 0] },
                                                         isStaticMatch: { $in: ["$$cleanTag", userInterests] }
                                                     },
-                                                    in: {
-                                                        $cond: [
-                                                            { $gt: ["$$dynamicScore", 0] },
-                                                            "$$dynamicScore", // Prioritize organic affinity
-                                                            { $cond: ["$$isStaticMatch", CONFIG.staticPrefBonus, 0] } // Fallback to reduced static pref
-                                                        ]
-                                                    }
+                                                    in: { $cond: [{ $gt: ["$$dynamicScore", 0] }, "$$dynamicScore", { $cond: ["$$isStaticMatch", CONFIG.staticPrefBonus, 0] }] }
                                                 }
                                             }
                                         }
@@ -584,34 +762,17 @@ export async function GET(req) {
                                 }
                             }
                         },
-                        // 🧠 2. DYNAMIC AUTHOR AFFINITY
-                        authorAffinityScore: {
-                            $ifNull: [{ $getField: { field: { $toString: { $ifNull: ["$authorUserId", "$authorId"] } }, input: { $literal: safeAuthorAffinity } } }, 0]
-                        },
-                        // 🧠 3. DYNAMIC COUNTRY AFFINITY
+                        authorAffinityScore: { $ifNull: [{ $getField: { field: { $toString: { $ifNull: ["$authorUserId", "$authorId"] } }, input: { $literal: safeAuthorAffinity } } }, 0] },
                         countryAffinityScore: {
                             $let: {
                                 vars: {
                                     dynCountry: { $ifNull: [{ $getField: { field: { $ifNull: ["$country", "Global"] }, input: { $literal: safeCountryAffinity } } }, 0] },
                                     isStaticCountry: { $eq: ["$country", userCountry] }
                                 },
-                                in: {
-                                    $cond: [
-                                        { $gt: ["$$dynCountry", 0] },
-                                        "$$dynCountry",
-                                        { $cond: ["$$isStaticCountry", CONFIG.staticLocalBonus, 0] }
-                                    ]
-                                }
+                                in: { $cond: [{ $gt: ["$$dynCountry", 0] }, "$$dynCountry", { $cond: ["$$isStaticCountry", CONFIG.staticLocalBonus, 0] }] }
                             }
                         },
-                        // ⚡️ HYPE DECAY ENGINE: Old posts lose hype weight aggressively
-                        decayedHypeWeight: {
-                            $divide: [
-                                CONFIG.hypeBaseWeight,
-                                { $max: [1, { $multiply: ["$ageInHours", CONFIG.hypeDecayRate] }] }
-                            ]
-                        },
-
+                        decayedHypeWeight: { $divide: [CONFIG.hypeBaseWeight, { $max: [1, { $multiply: ["$ageInHours", CONFIG.hypeDecayRate] }] }] },
                         clanTierBonus: {
                             $cond: [
                                 "$hasValidBadge",
@@ -621,35 +782,27 @@ export async function GET(req) {
                                             { case: { $eq: ["$clanInfo.activeCustomizations.verifiedTier", "legendary"] }, then: CONFIG.tierLegendaryWeight },
                                             { case: { $eq: ["$clanInfo.activeCustomizations.verifiedTier", "epic"] }, then: CONFIG.tierEpicWeight },
                                             { case: { $eq: ["$clanInfo.activeCustomizations.verifiedTier", "basic"] }, then: CONFIG.tierBasicWeight }
-                                        ],
-                                        default: 0
+                                        ], default: 0
                                     }
-                                },
-                                0
+                                }, 0
                             ]
                         },
-                        partnerClanBonusVal: {
-                            $cond: [
-                                { $and: ["$isViewerFollowingClan", { $eq: ["$clanInfo.verifiedClan", true] }] },
-                                CONFIG.partnerClanBonus,
-                                0
-                            ]
-                        }
+                        partnerClanBonusVal: { $cond: [{ $and: ["$isViewerFollowingClan", { $eq: ["$clanInfo.verifiedClan", true] }] }, CONFIG.partnerClanBonus, 0] }
                     }
                 },
                 {
                     $addFields: {
                         engagementScore: {
-                            $add: [
-                                { $multiply: [{ $ifNull: ["$likesCount", 0] }, CONFIG.likeWeight] },
-                                { $multiply: ["$commentsCount", CONFIG.commentWeight] },
-                                // ⚡️ Apply the newly decayed Hype Weight
+                            $multiply: [
                                 {
-                                    $multiply: [
-                                        { $sqrt: { $ifNull: ["$hypePointsCount", 0] } },
-                                        "$decayedHypeWeight"
+                                    $add: [
+                                        { $cond: ["$isActiveBoost", CONFIG.boostIgnitionScore, 0] },
+                                        { $multiply: [{ $ifNull: ["$likesCount", 0] }, CONFIG.likeWeight] },
+                                        { $multiply: ["$commentsCount", CONFIG.commentWeight] },
+                                        { $multiply: [{ $sqrt: { $ifNull: ["$hypePointsCount", 0] } }, "$decayedHypeWeight"] }
                                     ]
-                                }
+                                },
+                                { $cond: ["$isActiveBoost", CONFIG.postBoostMultiplier, 1] }
                             ]
                         },
                         relevanceBonus: {
@@ -658,50 +811,35 @@ export async function GET(req) {
                                 { $multiply: ["$authorAffinityScore", CONFIG.affinityMultiplier] },
                                 { $multiply: ["$countryAffinityScore", CONFIG.affinityMultiplier] },
                                 { $cond: ["$isViewerFollowingClan", CONFIG.clanBonus, 0] },
-                                {
-                                    $cond: [
-                                        "$isViewerFollowingClan",
-                                        { $multiply: ["$clanTierBonus", CONFIG.tierFollowerMultiplier] },
-                                        "$clanTierBonus"
-                                    ]
-                                },
+                                { $cond: ["$isViewerFollowingClan", { $multiply: ["$clanTierBonus", CONFIG.tierFollowerMultiplier] }, "$clanTierBonus"] },
                                 "$partnerClanBonusVal"
                             ]
                         },
-                        noveltyScore: {
-                            $cond: [{ $lt: ["$ageInHours", CONFIG.freshnessWindow] }, CONFIG.freshnessBoost, 0]
-                        }
+                        noveltyScore: { $cond: [{ $lt: ["$ageInHours", CONFIG.freshnessWindow] }, CONFIG.freshnessBoost, 0] }
                     }
                 },
-                {
-                    $addFields: {
-                        finalScore: {
-                            $divide: [
-                                { $add: ["$engagementScore", "$relevanceBonus", "$noveltyScore"] },
-                                { $pow: ["$ageInHours", CONFIG.gravityPower] }
-                            ]
-                        }
-                    }
-                },
-                {
-                    $sort: {
-                        isAdminPost: -1,
-                        finalScore: -1,
-                        createdAt: -1
-                    }
-                },
-                { $skip: skip },
-                { $limit: limit }
+                { $addFields: { finalScore: { $divide: [{ $add: ["$engagementScore", "$relevanceBonus", "$noveltyScore"] }, { $pow: ["$ageInHours", CONFIG.gravityPower] }] } } },
+                { $sort: { isAdminPost: -1, finalScore: -1, effectiveDate: -1 } }
             ];
 
             posts = await Post.aggregate(pipeline);
+
+            // ⚡️ DIVERSITY PASS: Applied on the FULL ranked pool BEFORE pagination
+            if (posts.length > 0) {
+                posts = applyDiversityPass(posts, 2);
+            }
+
+            // 🚀 IN-MEMORY PAGINATION
+            posts = posts.slice(skip, skip + limit);
         }
 
+        // ============================================================================
+        // 📦 POPULATION & SERIALIZATION
+        // ============================================================================
         let userMap = {};
         let clanMap = {};
 
         try {
-            // ⚡️ FIXED: Stringify IDs before the Set to ensure true de-duplication
             const uniqueAuthorIds = [...new Set(posts.map(p => (p.authorUserId || p.authorId)?.toString()).filter(Boolean))];
             const uniqueClanTags = [...new Set(posts.map(p => (p.clanTag || p.clanId)?.toString()).filter(Boolean))];
 
@@ -710,67 +848,42 @@ export async function GET(req) {
 
                 users.forEach(u => {
                     const userIdStr = u._id.toString();
-
-                    const rankInfo = typeof resolveUserRankServer === 'function'
-                        ? resolveUserRankServer(u.currentRankLevel || 1)
-                        : { rankName: "Rookie" };
-
-                    const auraInfo = typeof getAuraVisualsServer === 'function'
-                        ? getAuraVisualsServer(u.previousRank || 0)
-                        : null;
-
+                    const rankInfo = typeof resolveUserRankServer === 'function' ? resolveUserRankServer(u.currentRankLevel || 1) : { rankName: "Rookie" };
+                    const auraInfo = typeof getAuraVisualsServer === 'function' ? getAuraVisualsServer(u.previousRank || 0) : null;
                     const inv = Array.isArray(u.inventory) ? u.inventory : (Array.isArray(u.specialInventory) ? u.specialInventory : []);
 
                     userMap[userIdStr] = {
-                        name: u.username,
-                        image: u.profilePic?.url || null,
-                        streak: u.lastStreak || 0,
-                        rank: u.previousRank || 0,
-                        peakLevel: u.peakLevel || 0,
-                        inventory: inv,
-                        rankLevel: u.currentRankLevel || 1,
-                        aura: u.aura || 0,
-                        displayRank: rankInfo.rankName,
+                        name: u.username, image: u.profilePic?.url || null, streak: u.lastStreak || 0,
+                        rank: u.previousRank || 0, peakLevel: u.peakLevel || 0, inventory: inv,
+                        rankLevel: u.currentRankLevel || 1, aura: u.aura || 0, displayRank: rankInfo.rankName,
                         auraVisuals: auraInfo,
                         equippedGlow: inv.find(i => (i.category === 'GLOW' || i.category === 'NAME_GLOW') && i.isEquipped) || null,
                         equippedBadges: inv.filter(i => i.category === 'BADGE' && i.isEquipped).slice(0, 3) || [],
-                        equippedTitle: u.equippedTitle || null
+                        equippedTitle: u.equippedTitle || null, nameLockedUntil: u.nameLockedUntil || null
                     };
                 });
             }
 
             if (uniqueClanTags.length > 0) {
                 const clans = await Clan.find({
-                    $or: [
-                        { tag: { $in: uniqueClanTags } },
-                        { _id: { $in: uniqueClanTags.filter(id => id.length === 24) } }
-                    ]
+                    $or: [{ tag: { $in: uniqueClanTags } }, { _id: { $in: uniqueClanTags.filter(id => id.length === 24) } }]
                 }).lean();
 
                 clans.forEach(c => {
-                    const enrichedClan = {
-                        ...c,
-                        displayRank: resolveClanDisplayRank(c.totalPoints || 0)
-                    };
-
+                    const enrichedClan = { ...c, displayRank: typeof resolveClanDisplayRank === 'function' ? resolveClanDisplayRank(c.totalPoints || 0) : "Rank 1" };
                     if (c.tag) clanMap[c.tag] = enrichedClan;
                     if (c._id) clanMap[c._id.toString()] = enrichedClan;
                 });
             }
-        } catch (popErr) {
-            console.error("Bulk Population Error:", popErr);
-        }
+        } catch (popErr) { console.error("Bulk Population Error:", popErr); }
 
         const serializedPosts = posts.map((p) => {
             const aId = (p.authorUserId || p.authorId)?.toString();
             const cTag = (p.clanTag || p.clanId)?.toString();
 
-            // Clean message for the feed excerpt
-            const rawMessage = p.message || "";
-            const feedMessage = rawMessage
+            const feedMessage = (p.message || "")
                 .replace(/s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs, "$1$2$3$4$5$6$8$10")
-                .replace(/\n+/g, ' ')
-                .trim();
+                .replace(/\n+/g, ' ').trim();
 
             const postLikes = p.likes || [];
             const hasLiked = deviceId ? postLikes.some(like => (like?.fingerprint === deviceId || like === deviceId)) : false;
@@ -779,50 +892,31 @@ export async function GET(req) {
             let pollVoteStatus = null;
             if (p.poll && p.voters?.length > 0) {
                 const voterMatch = p.voters.find(v => (v.fingerprint === deviceId || v === deviceId));
-                pollVoteStatus = {
-                    hasVoted: !!voterMatch,
-                    userVotedOptions: voterMatch?.selectedOptions || []
-                };
+                pollVoteStatus = { hasVoted: !!voterMatch, userVotedOptions: voterMatch?.selectedOptions || [] };
             }
 
-            const finalHypeCount = p.hypePointsCount ?? (Array.isArray(p.hypePoints) ? p.hypePoints.length : (p.hypePoints || 0));
+            const finalHypeCount = p.hypeCount ?? p.hypePoints ?? 0;
             const isTrending = finalHypeCount >= TRENDING_THRESHOLD;
+            const isBoosted = Boolean(p.boostedUntil && new Date(p.boostedUntil).getTime() > Date.now());
+            const isResurrected = Boolean(p.resurrectedAt && new Date(p.resurrectedAt) > fortyEightHoursAgo);
+            const isFollowingClan = Boolean(cTag && followedClanTags.includes(cTag));
+            const telemetrySources = candidateMap.get(p._id.toString())?.sources || [];
 
             return {
-                ...p,
-                clanInfo: undefined,
-                isViewerFollowingClan: undefined,
-                hasValidBadge: undefined,
-                clanTierBonus: undefined,
-                partnerClanBonusVal: undefined,
-
+                ...p, clanInfo: undefined, isViewerFollowingClan: undefined, hasValidBadge: undefined, clanTierBonus: undefined, partnerClanBonusVal: undefined,
                 _id: p._id.toString(),
                 message: typeof normalizePostContent === 'function' ? normalizePostContent(p.message) : p.message,
                 feedExcerpt: feedMessage.length > 150 ? feedMessage.slice(0, 150) + "..." : feedMessage,
                 formattedViews: typeof formatViewsServer === 'function' ? formatViewsServer(p.viewsCount ?? p.views ?? 0) : (p.viewsCount || 0),
-                likesCount: p.likesCount ?? (p.likes?.length || 0),
-                commentsCount: p.commentsCount ?? (p.comments?.length || 0),
-                hypePointsCount: finalHypeCount,
-                isTrending,
+                likesCount: p.likesCount ?? (p.likes?.length || 0), commentsCount: p.commentsCount ?? (p.comments?.length || 0), hypePointsCount: finalHypeCount,
+                isTrending, isBoosted, isResurrected, isFollowingClan, candidateSources: telemetrySources,
                 discussionCount: typeof calculateDiscussionCount === 'function' ? calculateDiscussionCount(p.comments || []) : 0,
-                hasLiked,
-                hasViewed,
-                poll: p.poll ? {
-                    ...p.poll,
-                    ...pollVoteStatus
-                } : p.poll,
-                authorData: userMap[aId] || null,
-                clanData: clanMap[cTag] || null
+                hasLiked, hasViewed, poll: p.poll ? { ...p.poll, ...pollVoteStatus } : p.poll,
+                authorData: userMap[aId] || null, clanData: clanMap[cTag] || null
             };
         });
 
-        return NextResponse.json({
-            posts: serializedPosts,
-            total,
-            page,
-            limit
-        }, { status: 200 });
-
+        return NextResponse.json({ posts: serializedPosts, total, page, limit }, { status: 200 });
     } catch (err) {
         console.error("GET Feed Error:", err);
         return NextResponse.json({ message: "Failed to fetch posts" }, { status: 500 });
@@ -892,7 +986,7 @@ export async function POST(req) {
             mediaUrl, mediaType,
             media,
             hasPoll,
-            pollMultiple, pollOptions, category, fingerprint,
+            pollMultiple, pollOptions, category, fingerprint, useR2,
             mediaPending,  // 🌟 Present ONLY in new client builds
             totalFiles     // 🌟 Present ONLY in new client builds
         } = body;
@@ -980,46 +1074,56 @@ export async function POST(req) {
         // 🛣️ PATH A: New client build initializing background media upload operations
         if (mediaPending) {
             const timestamp = Math.round(new Date().getTime() / 1000);
-
-            // 🌐 Dynamically extract the exact server domain base route
-            const host = req.headers.get("host") || "localhost:3000";
-            const protocol = host.includes("localhost") ? "http" : "https";
-            const activeServerBase = `${protocol}://${host}`;
-
-            const notificationUrl = `${activeServerBase}/api/webhooks/cloudinary`;
-
-            // 🌟 Generate an array of signatures to cover each exact file index
             const signDataArray = [];
-            for (let i = 0; i < totalFiles; i++) {
-                const contextString = `postId=${newPost._id.toString()}|fileIndex=${i}`;
 
-                const paramsToSign = {
-                    timestamp,
-                    folder: "posts",
-                    context: contextString,
-                    notification_url: notificationUrl
-                };
+            if (useR2) {
+                // 🌟 NEW R2 PIPELINE
+                for (let i = 0; i < totalFiles; i++) {
+                    // 🌟 FIX: Use the fallback finalMediaArray with optional chaining to prevent crashes
+                    const ext = finalMediaArray[i]?.type === "video" ? "mp4" : "jpg";
+                    const objectKey = `posts/${newPost._id}/file_${i}.${ext}`;
 
-                const signature = cloudinary.utils.api_sign_request(
-                    paramsToSign,
-                    process.env.CLOUDINARY_API_SECRET
-                );
+                    const command = new PutObjectCommand({
+                        Bucket: process.env.R2_BUCKET_NAME,
+                        Key: objectKey,
+                    });
 
-                signDataArray.push({
-                    signature,
-                    timestamp,
-                    folder: "posts",
-                    context: contextString,
-                    notificationUrl: notificationUrl,
-                    apiKey: process.env.CLOUDINARY_API_KEY,
-                    cloudName: process.env.CLOUDINARY_CLOUD_NAME,
-                });
+                    const presignedUrl = await getSignedUrl(r2Client, command, { expiresIn: 3600 });
+
+                    signDataArray.push({
+                        engine: "r2",
+                        uploadUrl: presignedUrl,
+                        objectKey: objectKey,
+                        // Pass the final public URL so the frontend knows what to save later
+                        publicUrl: `https://media.oreblogda.com/${objectKey}`
+                    });
+                }
+            } else {
+                // 🌟 LEGACY CLOUDINARY PIPELINE (Unchanged)
+                const host = req.headers.get("host") || "localhost:3000";
+                const protocol = host.includes("localhost") ? "http" : "https";
+                const notificationUrl = `${protocol}://${host}/api/webhooks/cloudinary`;
+
+                for (let i = 0; i < totalFiles; i++) {
+                    const contextString = `postId=${newPost._id.toString()}|fileIndex=${i}`;
+                    const paramsToSign = {
+                        timestamp, folder: "posts", context: contextString, notification_url: notificationUrl
+                    };
+                    const signature = cloudinary.utils.api_sign_request(paramsToSign, process.env.CLOUDINARY_API_SECRET);
+
+                    signDataArray.push({
+                        engine: "cloudinary",
+                        signature, timestamp, folder: "posts", context: contextString,
+                        notificationUrl, apiKey: process.env.CLOUDINARY_API_KEY,
+                        cloudName: process.env.CLOUDINARY_CLOUD_NAME,
+                    });
+                }
             }
 
             return addCorsHeaders(NextResponse.json({
                 message: "Post initialized. Awaiting media assets.",
                 post: newPost,
-                signData: signDataArray // 🌟 Now passing an array to the client
+                signData: signDataArray
             }, { status: 201 }));
         }
 

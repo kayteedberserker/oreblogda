@@ -1,9 +1,17 @@
 import connectDB from "@/app/lib/mongodb";
+import ClanFollower from "@/app/models/ClanFollower";
+import Clan from '@/app/models/ClanModel';
+import ClanWar from "@/app/models/ClanWar"; // ⚡️ ADDED: For war tracking
+import MessagePillModel from "@/app/models/MessagePillModel";
 import MobileUser from "@/app/models/MobileUserModel";
+import QuizEvent from "@/app/models/QuizEvent";
+import ShoutoutEvent from "@/app/models/ShoutoutEvent";
+import Tournament from "@/app/models/Tournament";
 import UserStreak from "@/app/models/UserStreak";
 import mongoose from 'mongoose';
 import { NextResponse } from "next/server";
 
+// ... (VersionSchema, calculatePeakLevel, addCorsHeaders, OPTIONS remain the same) ...
 const VersionSchema = new mongoose.Schema({
     key: { type: String, default: 'latest_app_version' },
     appVersion: { type: String, required: true },
@@ -39,7 +47,7 @@ export async function OPTIONS() { return addCorsHeaders(new NextResponse(null, {
 export async function POST(req) {
     try {
         await connectDB();
-        const { deviceId, pushToken, platform } = await req.json();
+        const { deviceId, pushToken, platform, referredBy, userId, clanId } = await req.json();
 
         if (!deviceId) return addCorsHeaders(NextResponse.json({ error: "Missing deviceId" }, { status: 400 }));
 
@@ -61,7 +69,6 @@ export async function POST(req) {
         let validInventory = user.inventory || [];
         let inventoryNeedsUpdate = false;
 
-        // Clean expired inventory items
         if (validInventory.length > 0) {
             validInventory = validInventory.filter(item => {
                 if (item.expiresAt && new Date(item.expiresAt) < now) {
@@ -76,44 +83,28 @@ export async function POST(req) {
         let updateQuery = { $set: { lastActive: now } };
         let hasReturned = false;
 
-        // =======================================================================
-        // ⚡️ RETURNER REWARD PROTOCOL (28+ Days Inactive)
-        // =======================================================================
         if (!isNewUser && user.lastActive) {
             const daysSinceLastActive = (now.getTime() - new Date(user.lastActive).getTime()) / (1000 * 60 * 60 * 24);
 
             if (daysSinceLastActive >= 28) {
                 hasReturned = true;
 
-                // 1. Double Streak for 7 days
                 const doubleStreakDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
                 updateQuery.$set.doubleStreakUntil = doubleStreakDate;
-                user.doubleStreakUntil = doubleStreakDate; // Update memory for response
+                user.doubleStreakUntil = doubleStreakDate;
 
-                // 2. Grant 2 Free Hypes
                 const existingHype = validInventory.find(item => item.itemId === 'hype_free');
                 if (existingHype) {
                     existingHype.itemCount = (existingHype.itemCount || 1) + 2;
                 } else {
                     validInventory.push({
-                        itemId: `hype_free`,
-                        name: `Free Hype`,
-                        category: 'HYPE',
-                        rarity: 'RARE',
-                        hypeType: 'FREE',
-                        visualConfig: {
-                            primaryColor: '#22c55e',
-                            isAnimated: false
-                        },
-                        itemCount: 2,
-                        acquiredAt: now,
-                        expiresAt: null,
-                        isConsumable: true
+                        itemId: `hype_free`, name: `Free Hype`, category: 'HYPE', rarity: 'RARE',
+                        hypeType: 'FREE', visualConfig: { primaryColor: '#22c55e', isAnimated: false },
+                        itemCount: 2, acquiredAt: now, expiresAt: null, isConsumable: true
                     });
                 }
                 inventoryNeedsUpdate = true;
 
-                // 3. Grant "Resurrected" Title
                 user.unlockedTitles = user.unlockedTitles || [];
                 const hasResurrectedTitle = user.unlockedTitles.some(t => t.name === 'Resurrected');
 
@@ -121,7 +112,6 @@ export async function POST(req) {
                     const resTitle = { name: 'Resurrected', tier: 'Epic' };
                     user.unlockedTitles.push(resTitle);
                     user.equippedTitle = resTitle;
-
                     updateQuery.$set.unlockedTitles = user.unlockedTitles;
                     updateQuery.$set.equippedTitle = resTitle;
                 }
@@ -143,64 +133,300 @@ export async function POST(req) {
             updateQuery.$set.activityLog = newActivityLog;
         }
 
-        const [updateResult, streakDoc, versionConfig] = await Promise.all([
+        const audienceConditions = [{ targetAudience: 'global' }];
+        if (user._id) audienceConditions.push({ targetAudience: 'user', targetId: user._id.toString() });
+        if (deviceId) audienceConditions.push({ targetAudience: 'user', targetId: deviceId });
+        if (clanId) audienceConditions.push({ targetAudience: 'clan', targetId: clanId });
+
+        const [
+            updateResult,
+            streakDoc,
+            versionConfig,
+            activeShoutouts,
+            activeQuizzes,
+            activeTournaments,
+            activePills,
+            userClanData // ⚡️ ADDED: Fetches user clan logic in parallel
+        ] = await Promise.all([
             MobileUser.updateOne({ _id: user._id }, updateQuery),
             UserStreak.findOne({ userId: user._id }).lean(),
-            VersionModel.findOne({ key: 'latest_app_version' }).lean()
+            VersionModel.findOne({ key: 'latest_app_version' }).lean(),
+            ShoutoutEvent.find({ expiresAt: { $gt: now } }).lean(),
+            QuizEvent.find({ status: { $in: ["COMING_SOON", "LIVE"] } }).lean(),
+            Tournament.find({ status: { $in: ["REGISTRATION", "LIVE"] } }).lean(),
+            MessagePillModel.aggregate([
+                { $match: { isActive: true, $and: [{ $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }] }, { $or: audienceConditions }] } },
+                { $sort: { priority: -1, createdAt: -1 } },
+                { $group: { _id: { $cond: { if: { $and: [{ $ne: ["$groupId", null] }, { $ne: ["$groupId", ""] }] }, then: { $concat: ["group_", "$groupId"] }, else: { $concat: ["typelink_", "$type", "_", { $ifNull: ["$link", "nolink"] }] } } }, doc: { $first: "$$ROOT" } } },
+                { $replaceRoot: { newRoot: "$doc" } },
+                { $sort: { priority: -1, createdAt: -1 } },
+                { $limit: 25 }
+            ]),
+            // ⚡️ IIFE to resolve User Clan Data without creating a messy scope
+            (async () => {
+                if (!user._id) return null;
+                const clan = await Clan.findOne({
+                    $or: [{ leader: user._id }, { viceLeader: user._id }, { members: user._id }]
+                }).select("tag name leader rank viceLeader spendablePoints joinRequests latestMessage messages").lean();
+
+                if (!clan) return null;
+
+                let userRole = "member";
+                if (clan.leader?.toString() === user._id.toString()) userRole = "leader";
+                else if (clan.viceLeader?.toString() === user._id.toString()) userRole = "viceleader";
+
+                const [pendingWars, negotiatingWars] = await Promise.all([
+                    ClanWar.countDocuments({ status: 'PENDING', defenderTag: clan.tag }),
+                    ClanWar.countDocuments({ status: 'NEGOTIATING', $or: [{ challengerTag: clan.tag }, { defenderTag: clan.tag }] })
+                ]);
+
+                return {
+                    tag: clan.tag,
+                    name: clan.name,
+                    role: userRole,
+                    clanId: clan._id,
+                    rank: clan.rank,
+                    cCoins: clan.spendablePoints || 0,
+                    fullData: clan.joinRequests?.length || 0,
+                    latestMessageAt: clan.latestMessage?.createdAt || clan.messages?.[clan.messages?.length - 1]?.date || null,
+                    totalWarActions: pendingWars + negotiatingWars
+                };
+            })()
         ]);
 
-        const rawEvents = [];
-        const activeEvents = rawEvents.filter(event => !event.endsAt || new Date(event.endsAt) > now).map(event => ({
-            ...event,
-            isComing: event.startsAt && new Date(event.startsAt) > now,
-            status: (event.startsAt && new Date(event.startsAt) > now) ? 'coming_soon' : 'active'
+        // ... (Moderator lookup and event formatting remain unchanged) ...
+        const allModDeviceIds = new Set();
+        [...activeShoutouts, ...activeQuizzes, ...activeTournaments].forEach(event => {
+            if (event.moderatedBy) {
+                event.moderatedBy.forEach(id => allModDeviceIds.add(id));
+            }
+        });
+
+        const moderatorUsers = await MobileUser.find({
+            deviceId: { $in: Array.from(allModDeviceIds) }
+        }, 'deviceId username profilePic country').lean();
+
+        const modMap = {};
+        moderatorUsers.forEach(mod => {
+            modMap[mod.deviceId] = {
+                deviceId: mod.deviceId,
+                username: mod.username,
+                country: mod.country,
+                profilePic: mod.profilePic || null
+            };
+        });
+
+        const formattedShoutouts = activeShoutouts.map(e => ({
+            ...e,
+            id: e._id.toString(),
+            type: "SHOUTOUT",
+            imageUrl: e.media?.url || null,
+            targetUrl: e.externalLink || null,
+            isModerator: e.leaderDeviceId === deviceId || (e.moderatedBy || []).includes(deviceId),
+            moderatorDetails: (e.moderatedBy || []).map(id => modMap[id]).filter(Boolean),
+            startsAt: e.createdAt,
+            endsAt: e.expiresAt,
+            status: "active"
         }));
 
+        const formattedQuizzes = activeQuizzes.map(e => {
+            const isCompleted = e.status === "COMPLETED" || e.status === "CANCELLED";
+            const isModerator = e.leaderDeviceId === deviceId || (e.moderatedBy || []).includes(deviceId);
+
+            const safeQuestions = (e.quizQuestions || []).map(q => {
+                const safeQ = { ...q };
+                if (!isCompleted && !isModerator) {
+                    delete safeQ.correctOptionIndex;
+                }
+                return safeQ;
+            });
+
+            const userEntry = (e.leaderboard || []).find(l => l.deviceId === deviceId);
+            const userResponses = userEntry?.responses || [];
+            const prefilledAnswers = {};
+            userResponses.forEach(r => {
+                prefilledAnswers[r.questionIndex] = r.selectedOptionIndex;
+            });
+
+            return {
+                ...e,
+                id: e._id.toString(),
+                type: "QUIZ",
+                isModerator,
+                moderatorDetails: (e.moderatedBy || []).map(id => modMap[id]).filter(Boolean),
+                startsAt: e.scheduledStartTime,
+                endsAt: e.expiresAt,
+                status: e.status.toLowerCase(),
+                quizQuestions: safeQuestions,
+                currentStreamIndex: e.currentStreamIndex ?? 0,
+                deliveryMode: e.deliveryMode || "BATCH",
+                streamGapMinutes: e.streamGapMinutes || null,
+                acknowledgeCount: e.acknowledgeCount || 0,
+                acknowledgedBy: e.acknowledgedBy || [],
+                participants: e.participants || [],
+                leaderboard: e.leaderboard || [],
+                userResponses: prefilledAnswers
+            };
+        });
+
+        const formattedTournaments = activeTournaments.map(tournament => {
+            const today = new Date();
+            const startOfWeek = new Date(today);
+            const day = startOfWeek.getDay();
+            const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
+            startOfWeek.setDate(diff);
+            startOfWeek.setHours(0, 0, 0, 0);
+
+            const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+            const weeklyMatches = tournament.matches.filter(m => new Date(m.scheduledAt) >= startOfWeek);
+            const monthlyMatches = tournament.matches.filter(m => new Date(m.scheduledAt) >= startOfMonth);
+
+            const aggregateMatches = (matchesToAggregate) => {
+                const calcMap = {};
+                matchesToAggregate.forEach(matchItem => {
+                    if (matchItem.status !== "COMPLETED" || !matchItem.trackPerformance || !matchItem.results) return;
+                    matchItem.results.forEach((res) => {
+                        if (!calcMap[res.targetId]) {
+                            calcMap[res.targetId] = {
+                                targetId: res.targetId,
+                                displayName: res.displayName,
+                                totalMatchesPlayed: 0,
+                                totalKills: 0,
+                                highestPlacement: res.position,
+                                finalAccumulatedScore: 0
+                            };
+                        }
+                        const cache = calcMap[res.targetId];
+                        cache.totalMatchesPlayed += 1;
+                        cache.totalKills += res.kills;
+                        cache.finalAccumulatedScore += res.calculatedScore;
+                        if (res.position < cache.highestPlacement) cache.highestPlacement = res.position;
+                    });
+                });
+                return Object.values(calcMap).sort((a, b) => b.finalAccumulatedScore - a.finalAccumulatedScore);
+            };
+
+            const weeklyLeaderboard = aggregateMatches(weeklyMatches);
+            const monthlyLeaderboard = aggregateMatches(monthlyMatches);
+
+            const enrichedMatches = tournament.matches.map(match => {
+                let matchLeaderboard = [];
+                if (match.status === "COMPLETED") {
+                    matchLeaderboard = match.results.sort((a, b) => b.calculatedScore - a.calculatedScore);
+                } else {
+                    matchLeaderboard = match.participants.map(player => ({
+                        targetId: player.deviceId,
+                        displayName: player.username,
+                        position: "-",
+                        kills: 0,
+                        calculatedScore: 0
+                    }));
+                }
+                return {
+                    ...match,
+                    liveMatchLeaderboard: matchLeaderboard
+                };
+            });
+
+            return {
+                ...tournament,
+                id: tournament._id.toString(),
+                type: "TOURNAMENT",
+                isModerator: tournament.leaderDeviceId === deviceId || (tournament.moderatedBy || []).includes(deviceId),
+                moderatorDetails: (tournament.moderatedBy || []).map(id => modMap[id]).filter(Boolean),
+                status: tournament.status.toLowerCase(),
+                matches: enrichedMatches,
+                weeklyLeaderboard,
+                monthlyLeaderboard
+            };
+        });
+
+        const dynamicEvents = [...formattedShoutouts, ...formattedQuizzes, ...formattedTournaments];
         const systemVersion = versionConfig || { appVersion: "1.0.0", runtimeVersion: "v1", critical: false };
 
-        // =======================================================================
-        // ⚡️ CRITICAL PAYLOAD OPTIMIZATION: UNCONDITIONALLY STRIP SVGS
-        // =======================================================================
         const safeInventoryPayload = validInventory.map(item => {
             const safeItem = item.toObject ? item.toObject() : { ...item };
-
-            // Completely destroy the SVG string payload to prevent network truncation crashes
-            if (safeItem.visualConfig) {
-                safeItem.visualConfig = { ...safeItem.visualConfig };
-                delete safeItem.visualConfig.svgCode;
-            }
-
-            // Catching any edge cases where it's stored in visualData instead
-            if (safeItem.visualData) {
-                safeItem.visualData = { ...safeItem.visualData };
-                delete safeItem.visualData.svgCode;
-            }
-
+            if (safeItem.visualConfig) { safeItem.visualConfig = { ...safeItem.visualConfig }; delete safeItem.visualConfig.svgCode; }
+            if (safeItem.visualData) { safeItem.visualData = { ...safeItem.visualData }; delete safeItem.visualData.svgCode; }
             return safeItem;
         });
+
+        // =======================================================================
+        // ⚡️ DYNAMIC CLAN REFERRAL MATCHING ENGINE
+        // =======================================================================
+        let referredClan = null;
+        if (referredBy) {
+            const referrer = await MobileUser.findOne({ referralCode: referredBy }).lean();
+
+            if (referrer) {
+                const clan = await Clan.findOne({
+                    $or: [{ leader: referrer._id }, { viceLeader: referrer._id }, { members: referrer._id }]
+                }).lean();
+
+                if (clan) {
+                    let isAlreadyFollowingOrMember = false;
+
+                    if (userId && mongoose.Types.ObjectId.isValid(userId)) {
+                        const followerRecord = await ClanFollower.findOne({
+                            clanTag: clan.tag,
+                            userId: userId
+                        }).lean();
+
+                        if (followerRecord) {
+                            isAlreadyFollowingOrMember = true;
+                        }
+
+                        if (!isAlreadyFollowingOrMember) {
+                            if (
+                                clan.leader?.toString() === userId ||
+                                clan.viceLeader?.toString() === userId ||
+                                clan.members?.some(m => m.toString() === userId)
+                            ) {
+                                isAlreadyFollowingOrMember = true;
+                            }
+                        }
+                    }
+
+                    if (!isAlreadyFollowingOrMember) {
+                        const colors = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899"];
+                        let hash = 0;
+                        for (let i = 0; i < clan.tag.length; i++) {
+                            hash = clan.tag.charCodeAt(i) + ((hash << 5) - hash);
+                        }
+                        const dynamicColor = colors[Math.abs(hash) % colors.length];
+
+                        referredClan = {
+                            name: clan.name,
+                            tag: clan.tag,
+                            description: clan.description || "You've been linked via a direct alliance referral. Sync immediately to access dedicated pools and shared clan multipliers.",
+                            color: dynamicColor,
+                            rank: clan.rank || 1,
+                            referrerName: referrer.username || "Unknown Author",
+                            referrerImage: referrer.profilePic?.url || null
+                        };
+                    }
+                }
+            }
+        }
 
         return addCorsHeaders(NextResponse.json({
             success: true,
             system: { appVersion: systemVersion.appVersion, runtimeVersion: systemVersion.runtimeVersion, critical: systemVersion.critical },
-            // ⚡️ Added `hasReturned` to the activity block for your frontend check
             activity: { recorded: shouldLog, pushTokenUpdated: !!pushToken, hasReturned },
             user: { ...user, country: user.country || "Unknown", securityLevel: user.securityLevel || 0, inventory: safeInventoryPayload },
             coins: {
-                balance: user.coins || 0,
-                tokens: user.tokens || 0,
-                clanBalance: user.clanCoins || 0,
-                totalPurchasedCoins: user.totalPurchasedCoins || 0,
-                peakLevel: calculatePeakLevel(user.totalPurchasedCoins || 0),
-                doubleStreakUntil: user.doubleStreakUntil || null
+                balance: user.coins || 0, tokens: user.tokens || 0, clanBalance: user.clanCoins || 0, totalPurchasedCoins: user.totalPurchasedCoins || 0,
+                peakLevel: calculatePeakLevel(user.totalPurchasedCoins || 0), doubleStreakUntil: user.doubleStreakUntil || null
             },
             streak: {
-                streak: streakDoc?.streak || 0,
-                lastPostDate: streakDoc?.lastPostDate || null,
-                expiresAt: streakDoc?.expiresAt || null,
-                canRestore: !streakDoc && (user.lastStreak > 0),
-                recoverableStreak: user.lastStreak || 0
+                streak: streakDoc?.streak || 0, lastPostDate: streakDoc?.lastPostDate || null, expiresAt: streakDoc?.expiresAt || null,
+                frozenUntil: streakDoc?.frozenUntil || null, canRestore: !streakDoc && (user.lastStreak > 0), recoverableStreak: user.lastStreak || 0
             },
-            events: activeEvents
+            events: dynamicEvents,
+            referredClan,
+            pills: activePills,
+            userClan: userClanData // ⚡️ ADDED: Passing clan data back to the frontend
         }));
 
     } catch (err) {

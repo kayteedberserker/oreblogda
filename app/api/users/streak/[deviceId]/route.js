@@ -1,14 +1,14 @@
-import { NextResponse } from "next/server";
 import connectDB from "@/app/lib/mongodb";
-import UserStreak from "@/app/models/UserStreak";
 import MobileUser from "@/app/models/MobileUserModel";
+import UserStreak from "@/app/models/UserStreak";
+import { NextResponse } from "next/server";
 
 export async function GET(req, { params }) {
     await connectDB();
     const resolvedParams = await params;
-    
+
     const { deviceId } = resolvedParams;
-    
+
     // 🛡️ Security Check (Optional but recommended since your frontend sends the secret)
     const secret = req.headers.get("x-oreblogda-secret");
     if (secret !== "thisismyrandomsuperlongsecretkey") {
@@ -28,10 +28,10 @@ export async function GET(req, { params }) {
             streak: streakDoc?.streak || 0,
             lastPostDate: streakDoc?.lastPostDate || null,
             // 🔹 Crucial for Frontend Notifications
-            expiresAt: streakDoc?.expiresAt || null, 
-            
+            expiresAt: streakDoc?.expiresAt || null,
+            frozenUntil: streakDoc?.frozenUntil || null,
             // Logic: Can restore if NO active streak doc exists, but user has a recorded lastStreak > 0
-            canRestore: !streakDoc && (user.lastStreak > 0), 
+            canRestore: !streakDoc && (user.lastStreak > 0),
             recoverableStreak: user.lastStreak || 0
         }, { status: 200 });
 

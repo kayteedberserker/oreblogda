@@ -235,339 +235,6 @@ async function checkTitleUnlocks(user, field, currentCount) {
     return null;
 }
 
-// ----------------------
-// PATCH: Handle Likes, Views, Shares, Votes
-// ----------------------
-export async function PATCH(req, { params }) {
-    await connectDB();
-    const resolvedParams = await params;
-    const { id } = resolvedParams;
-
-    try {
-        const body = await req.json();
-
-        const { action, payload, fingerprint } = body;
-        const ip = getClientIp(req);
-        const isBot = await isBotRequest(req, ip);
-
-        // --- 1. VOTE LOGIC ---
-        if (action === "vote") {
-            const { selectedOptions } = payload; // Array of indices
-
-            // Support legacy string voters + new objects
-            const hasVoted = await Post.findOne({
-                _id: id,
-                $or: [
-                    { "voters": fingerprint },  // Legacy string
-                    { "voters.fingerprint": fingerprint }  // New object
-                ]
-            });
-
-            if (hasVoted) {
-                return addCorsHeaders(NextResponse.json({ message: "Already voted or post missing" }, { status: 400 }));
-            }
-
-            // Atomically increment votes + store voter object
-            const incUpdates = {};
-            for (const index of selectedOptions) {
-                incUpdates[`poll.options.${index}.votes`] = 1;
-            }
-            const updatedPost = await Post.findByIdAndUpdate(
-                id,
-                {
-                    $push: { voters: { fingerprint, selectedOptions } },
-                    $inc: incUpdates // Use $inc to atomically increment
-                },
-                { new: true }
-            );
-
-            if (!updatedPost) {
-                return addCorsHeaders(NextResponse.json({ message: "Post not found" }, { status: 404 }));
-            }
-
-            // 🧠 AFFINITY: +5 for Voting
-            await updateUserAffinityByFingerprint(fingerprint, updatedPost, 5);
-
-            // ✨ AURA LOGIC: +5 for Voting
-            if (updatedPost.authorId !== fingerprint) {
-                const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
-
-                if (author) {
-                    // ⚡️ Replaced manual $inc with centralized Aura Manager
-                    await awardAura(author._id, 5);
-
-                    // 🛡️ CLAN: Only if the post is a Clan Post
-                    await awardClanPoints(updatedPost, 10);
-                    const msg = `Someone voted on your post: "${updatedPost.title.substring(0, 15)}..."`;
-
-                    if (author.pushToken) {
-                        const tokens = [author.pushToken];
-
-                        // 🔔 GROUPING ADDED: Uses "vote_<PostID>" so votes stack
-                        await sendPillParallel(
-                            tokens,
-                            `New Vote! ✅ on post: "${updatedPost.title.substring(0, 10)}..."`,
-                            msg,
-                            {
-                                postId: updatedPost._id.toString(),
-                                type: "post_detail",
-                                mediaUrl: updatedPost.mediaUrl, // 🌟 INJECTED MEDIA URL FOR RICH NOTIFICATIONS
-                                authorPfp: author.profilePic?.url // 🌟 INJECTED AUTHOR PFP
-                            },
-                            {
-                                type: 'post_vote',
-                                targetAudience: 'user',
-                                targetId: author._id.toString(),
-                                singleUser: true,
-                                link: `/post/${updatedPost.slug}`,
-                                priority: 2
-                            }
-                        );
-                    }
-                }
-            }
-
-            return addCorsHeaders(NextResponse.json({ message: "Vote added" }, { status: 200 }));
-        }
-
-        // --- 2. LIKE LOGIC ---
-        if (action === "like") {
-            const updatedPost = await Post.findOneAndUpdate(
-                {
-                    _id: id,
-                    "likes.fingerprint": { $ne: fingerprint } // Still check fingerprints for dupes
-                },
-                {
-                    $inc: { likeCount: 1 }, // Increment total count
-                    $push: {
-                        likes: {
-                            $each: [{ fingerprint, date: new Date() }],
-                            $slice: -600 // Keep only the 600 most recent likes
-                        }
-                    }
-                },
-                { new: true }
-            );
-
-            if (!updatedPost) {
-                return addCorsHeaders(NextResponse.json({ message: "Already liked" }, { status: 400 }));
-            }
-
-            // 🧠 AFFINITY: +10 for Liking
-            await updateUserAffinityByFingerprint(fingerprint, updatedPost, 10);
-
-            // ✨ AURA & CLAN LOGIC
-            if (updatedPost.authorId !== fingerprint) {
-                // ⚡️ INCREMENT STATS: Incrementing author's total global likes
-                const author = await MobileUser.findOneAndUpdate(
-                    { deviceId: updatedPost.authorId },
-                    { $inc: { totalLikes: 1 } },
-                    { new: true }
-                );
-
-                if (author) {
-                    // ⚡️ Centralized Aura Manager
-                    await awardAura(author._id, 5);
-                    await awardClanPoints(updatedPost, 10, 'like');
-
-                    // 🏆 TITLE LOGIC: Check for Like Milestone
-                    await checkTitleUnlocks(author, "totalLikes", author.totalLikes || 0);
-
-                    // Handle Notifications
-                    const msg = `Someone liked your post: "${updatedPost.title.substring(0, 15)}..."`;
-
-                    if (author.pushToken) {
-                        const tokens = [author.pushToken];
-                        await sendPillParallel(
-                            tokens,
-                            `New Like on post: "${updatedPost.title.substring(0, 10)}..."`,
-                            msg,
-                            {
-                                postId: updatedPost._id.toString(),
-                                type: "post_detail",
-                                mediaUrl: updatedPost.mediaUrl, // 🌟 INJECTED MEDIA URL FOR RICH NOTIFICATIONS
-                                authorPfp: author.profilePic?.url // 🌟 INJECTED AUTHOR PFP
-                            },
-                            {
-                                type: 'post_like',
-                                targetAudience: 'user',
-                                targetId: author._id.toString(),
-                                singleUser: true,
-                                link: `/post/${updatedPost.slug}`,
-                                priority: 2
-                            }
-                        );
-                    }
-
-                    // Milestone Notifications (Trending)
-                    const milestones = [5, 10, 25, 50, 100];
-                    if (milestones.includes(updatedPost.likes.length)) {
-                        const mMsg = `🔥 Trending! Your post reached ${updatedPost.likes.length} likes!`;
-
-                        if (author.pushToken) {
-                            await sendPillParallel(
-                                [author.pushToken],
-                                `Going Viral!"`,
-                                mMsg,
-                                {
-                                    postId: updatedPost._id.toString(),
-                                    type: "post_detail",
-                                    mediaUrl: updatedPost.mediaUrl, // 🌟 INJECTED MEDIA URL FOR RICH NOTIFICATIONS
-                                    authorPfp: author.profilePic?.url // 🌟 INJECTED AUTHOR PFP
-                                },
-                                {
-                                    type: 'event',
-                                    targetAudience: 'user',
-                                    targetId: author._id.toString(),
-                                    singleUser: true,
-                                    link: `/post/${updatedPost.slug}`,
-                                    priority: 2
-                                }
-                            );
-                        }
-                    }
-                }
-            }
-
-            return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
-        }
-
-        // --- 3. SHARE LOGIC ---
-        if (action === "share") {
-            const updatedPost = await Post.findByIdAndUpdate(id, { $inc: { shares: 1 } }, { new: true });
-
-            // 🧠 AFFINITY: +15 for Sharing (Huge signal they like this content)
-            if (updatedPost) {
-                await updateUserAffinityByFingerprint(fingerprint, updatedPost, 15);
-            }
-
-            // ✨ AURA LOGIC: +3 for Sharing
-            if (updatedPost && updatedPost.authorId !== fingerprint) {
-                // ⚡️ INCREMENT STATS: Incrementing author's total global shares
-                const author = await MobileUser.findOneAndUpdate(
-                    { deviceId: updatedPost.authorId },
-                    { $inc: { totalShares: 1 } },
-                    { new: true }
-                );
-                if (author) {
-                    // ⚡️ Centralized Aura Manager
-                    await awardAura(author._id, 3);
-                    await awardClanPoints(updatedPost, 20, 'share');
-
-                    // 🏆 TITLE LOGIC: Check for Share Milestone
-                    await checkTitleUnlocks(author, "totalShares", author.totalShares || 0);
-                }
-            }
-
-            return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
-        }
-
-        // --- 4. VIEW LOGIC ---
-        if (action === "view") {
-            let country = "Unknown", city = "Unknown", timezone = "Unknown";
-
-            if (!isBot && fingerprint) {
-                try {
-                    const geoRes = await fetch(`https://ipinfo.io/${ip}/json`);
-                    const geoData = await geoRes.json();
-                    country = geoData.country || "Unknown";
-                    city = geoData.city || "Unknown";
-                    timezone = geoData.timezone || "Unknown";
-                } catch (err) { console.log("Geo lookup failed"); }
-
-                const updatedPost = await Post.findOneAndUpdate(
-                    { _id: id, viewsFingerprints: { $ne: fingerprint } },
-                    {
-                        $inc: { views: 1 },
-                        $push: {
-                            viewsFingerprints: {
-                                $each: [fingerprint],
-                                $slice: -500
-                            },
-                            viewsData: {
-                                $each: [{
-                                    visitorId: fingerprint,
-                                    ip, country, city,
-                                    timezone,
-                                    timestamp: new Date()
-                                }],
-                                $slice: -100
-                            }
-                        }
-                    },
-                    { new: true }
-                );
-
-                if (updatedPost) {
-                    // 🧠 AFFINITY: +1 for purely scrolling past/viewing
-                    await updateUserAffinityByFingerprint(fingerprint, updatedPost, 1);
-
-                    // ⚡️ INCREMENT STATS: Incrementing author's total global views
-                    const author = await MobileUser.findOneAndUpdate(
-                        { deviceId: updatedPost.authorId },
-                        { $inc: { totalViews: 1 } },
-                        { new: true }
-                    );
-
-                    if (author) {
-                        // ✨ AURA LOGIC: +2 Aura for every 5 unique views
-                        if (updatedPost.views % 5 === 0) {
-                            // ⚡️ Centralized Aura Manager
-                            await awardAura(author._id, 2);
-                            await awardClanPoints(updatedPost, 5, 'view');
-                        }
-
-                        // 🏆 TITLE LOGIC: Check for View Milestone
-                        await checkTitleUnlocks(author, "totalViews", author.totalViews || 0);
-                    }
-
-                    return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
-                }
-            }
-
-            // Return the post if already viewed or bot
-            const post = await Post.findById(id);
-            return addCorsHeaders(NextResponse.json(post, { status: 200 }));
-        }
-
-        // --- 5. WATCH COMPLETE LOGIC ---
-        if (action === "watch_complete") {
-            const post = await Post.findById(id);
-            if (post && fingerprint && !isBot) {
-                // 🧠 AFFINITY: +8 for watching a video all the way through
-                await updateUserAffinityByFingerprint(fingerprint, post, 8);
-            }
-            return addCorsHeaders(NextResponse.json({ message: "Watch logged" }, { status: 200 }));
-        }
-
-        // 🧠 NEW: SKIP LOGIC (Minor Penalty)
-        if (action === "skip") {
-            const post = await Post.findById(id);
-            if (post && fingerprint && !isBot) {
-                // Minor penalty for skipping without engaging
-                await updateUserAffinityByFingerprint(fingerprint, post, -2);
-            }
-            return addCorsHeaders(NextResponse.json({ message: "Skip logged" }, { status: 200 }));
-        }
-
-        // 🧠 NEW: NOT INTERESTED LOGIC (Major Penalty)
-        if (action === "not_interested") {
-            const post = await Post.findById(id);
-            if (post && fingerprint && !isBot) {
-                // Heavy penalty to drastically reduce this tag/author priority
-                await updateUserAffinityByFingerprint(fingerprint, post, -50);
-            }
-            return addCorsHeaders(NextResponse.json({ message: "Preference updated" }, { status: 200 }));
-        }
-
-        return addCorsHeaders(NextResponse.json({ message: "Invalid action" }, { status: 400 }));
-
-    } catch (err) {
-        console.error("PATCH error:", err);
-        return addCorsHeaders(NextResponse.json({ message: "Server error", error: err.message }, { status: 500 }));
-    }
-}
-
 // Server-side helper to resolve Clan display rank titles based on total points
 function resolveClanDisplayRank(points = 0) {
     if (points >= 300000) return "The Akatsuki";
@@ -726,38 +393,38 @@ export async function GET(req, { params }) {
     }
 }
 
-async function updateUserAffinityByFingerprint(fingerprint, post, weight) {
+// 🚀 SCALING: In-memory IP Cache to save rate limits
+const ipCache = new Map();
+
+// ----------------------
+// 🧠 UNIFIED HELPER: Telemetry, Affinity, Decay, & Optimization
+// ----------------------
+async function processTelemetryAndAffinity(fingerprint, post, candidateSources, action, weight) {
     if (!fingerprint || !post) return;
+
     try {
+        const user = await MobileUser.findOne({ deviceId: fingerprint })
+            .select('affinityScores authorAffinity countryAffinity feedLearning');
+        if (!user) return;
+
+        // --- A. AFFINITY UPDATES (Dynamic Ranking Signal) ---
+        // We still update these dynamically because they govern what the user SEES (Ranking)
         const tagWeight = weight;
         const authorWeight = Math.round(weight * 0.5);
         const countryWeight = Math.round(weight * 0.25);
 
-        // 1. Fetch ONLY the affinity fields to save bandwidth and memory
-        const user = await MobileUser.findOne({ deviceId: fingerprint }).select('affinityScores authorAffinity countryAffinity');
-        if (!user) return;
-
-        // 2. Safely parse existing maps/objects
         let affinityScores = user.affinityScores ? (user.affinityScores instanceof Map ? Object.fromEntries(user.affinityScores) : user.affinityScores) : {};
         let authorAffinity = user.authorAffinity ? (user.authorAffinity instanceof Map ? Object.fromEntries(user.authorAffinity) : user.authorAffinity) : {};
         let countryAffinity = user.countryAffinity ? (user.countryAffinity instanceof Map ? Object.fromEntries(user.countryAffinity) : user.countryAffinity) : {};
 
-        // 3. Smart Update & Prune Helper (Limits size + prevents sorting on every single action)
         const updateAndTrim = (obj, key, addWeight, limit) => {
             if (!key) return obj;
-
-            // 🌟 FIX: Sanitize the key to escape '.' and '$' characters which crash Mongoose/MongoDB maps
             const sanitizedKey = key.replace(/\./g, '_').replace(/\$/g, '');
             if (!sanitizedKey) return obj;
 
-            const current =
-                typeof obj[sanitizedKey] === "number"
-                    ? obj[sanitizedKey]
-                    : 0;
-
+            const current = typeof obj[sanitizedKey] === "number" ? obj[sanitizedKey] : 0;
             obj[sanitizedKey] = current + addWeight;
 
-            // Only sort and slice if we exceed the limit by 10 to save heavy CPU cycles
             if (Object.keys(obj).length > limit + 10) {
                 const sortedEntries = Object.entries(obj).sort((a, b) => b[1] - a[1]).slice(0, limit);
                 return Object.fromEntries(sortedEntries);
@@ -765,28 +432,369 @@ async function updateUserAffinityByFingerprint(fingerprint, post, weight) {
             return obj;
         };
 
-        // 4. Process & Cap Affinities
         if (post.interests && Array.isArray(post.interests)) {
             post.interests.forEach(tag => {
-                if (tag) affinityScores = updateAndTrim(affinityScores, tag.trim().toLowerCase(), tagWeight, 50); // Keep top 50 Tags
+                if (tag) affinityScores = updateAndTrim(affinityScores, tag.trim().toLowerCase(), tagWeight, 50);
             });
         }
-
         const targetAuthor = post.authorUserId ? post.authorUserId.toString() : post.authorId;
         if (targetAuthor && targetAuthor !== fingerprint) {
-            authorAffinity = updateAndTrim(authorAffinity, targetAuthor, authorWeight, 30); // Keep top 30 Authors
+            authorAffinity = updateAndTrim(authorAffinity, targetAuthor, authorWeight, 30);
         }
-
         if (post.country && post.country !== "Global" && post.country !== "Unknown") {
-            countryAffinity = updateAndTrim(countryAffinity, post.country, countryWeight, 10); // Keep top 10 Countries
+            countryAffinity = updateAndTrim(countryAffinity, post.country, countryWeight, 10);
         }
 
-        // 5. Save the pruned dictionaries back to the database using $set
-        await MobileUser.updateOne(
-            { _id: user._id },
-            { $set: { affinityScores, authorAffinity, countryAffinity } }
-        );
+        // --- B. TELEMETRY INCREMENTS (🌟 UPDATED: FIXED POOL CONFIDENCE) ---
+        // We use static confidence to govern how the algorithm LEARNS (Attribution)
+        const actionMap = {
+            'view': 'impressions', 'like': 'likes', 'share': 'shares',
+            'vote': 'votes', 'watch_complete': 'watch_complete',
+            'skip': 'skips', 'not_interested': 'skips',
+            'comment': 'comments',
+            'hype': 'votes'
+        };
+        const metric = actionMap[action];
+        const validPools = ['fresh', 'author', 'clan', 'interest', 'trending', 'explore'];
+        const incUpdates = {};
+
+        if (metric && Array.isArray(candidateSources) && candidateSources.length > 0) {
+
+            // 1. Extract Unique Pool Types (Prevents double-counting if a post had 2 interest tags)
+            const uniqueTypes = [...new Set(candidateSources.map(s => s.type).filter(t => validPools.includes(t)))];
+
+            if (uniqueTypes.length > 0) {
+                // 2. Static Pool Confidence Tiers
+                const POOL_CONFIDENCE = {
+                    explore: 1,
+                    fresh: 1,
+                    clan: 2,
+                    trending: 4,
+                    interest: 4,
+                    author: 4
+                }
+
+                let totalConfidence = 0;
+
+                // 3. Map to confidence scores and sum them up
+                const scoredSources = uniqueTypes.map(type => {
+                    const conf = POOL_CONFIDENCE[type] || 1;
+                    totalConfidence += conf;
+                    return { type, conf };
+                });
+
+                // 4. Normalize to 1.0 and increment
+                scoredSources.forEach(source => {
+                    const normalizedFraction = parseFloat((source.conf / totalConfidence).toFixed(3));
+
+                    if (!isNaN(normalizedFraction) && normalizedFraction > 0) {
+                        incUpdates[`feedLearning.sourceStats.${source.type}.${metric}`] = normalizedFraction;
+                    }
+                });
+            }
+        }
+
+        // --- C. OPTIMIZATION & DECAY CHECK ---
+        let setUpdates = { affinityScores, authorAffinity, countryAffinity };
+
+        if (user.feedLearning) {
+            const lastOpt = user.feedLearning.lastOptimizedAt || new Date(0);
+            const stats = user.feedLearning.sourceStats || {};
+
+            let totalImpressions = 0;
+            validPools.forEach(pool => { totalImpressions += (stats[pool]?.impressions || 0); });
+
+            // Exactly 1 impression is distributed, so we increment the total by 1
+            if (metric === 'impressions' && Object.keys(incUpdates).length > 0) {
+                totalImpressions += 1;
+            }
+
+            const twentyFourHours = 24 * 60 * 60 * 1000;
+
+            if (Date.now() - lastOpt.getTime() >= twentyFourHours && totalImpressions >= 100) {
+                // 1. DECAY OLD AFFINITIES
+                const decayMap = (mapObj, factor = 0.98) => {
+                    for (let key in mapObj) {
+                        mapObj[key] = Math.max(0.1, Number((mapObj[key] * factor).toFixed(2)));
+                        if (mapObj[key] < 1) delete mapObj[key];
+                    }
+                };
+                decayMap(setUpdates.affinityScores);
+                decayMap(setUpdates.authorAffinity);
+                decayMap(setUpdates.countryAffinity);
+
+                // 2. RATE-BASED POOL SCORING
+                let totalScore = 0;
+                const rawScores = {};
+
+                validPools.forEach(pool => {
+                    const s = stats[pool] || {};
+                    const imp = (s.impressions || 0) + (incUpdates[`feedLearning.sourceStats.${pool}.impressions`] || 0);
+                    let score = 0;
+
+                    if (imp < 20) {
+                        score = 50;
+                    } else {
+                        const likeRate = ((s.likes || 0) + (incUpdates[`feedLearning.sourceStats.${pool}.likes`] || 0)) / imp;
+                        const voteRate = ((s.votes || 0) + (incUpdates[`feedLearning.sourceStats.${pool}.votes`] || 0)) / imp;
+                        const watchRate = ((s.watch_complete || 0) + (incUpdates[`feedLearning.sourceStats.${pool}.watch_complete`] || 0)) / imp;
+                        const commentRate = ((s.comments || 0) + (incUpdates[`feedLearning.sourceStats.${pool}.comments`] || 0)) / imp;
+                        const shareRate = ((s.shares || 0) + (incUpdates[`feedLearning.sourceStats.${pool}.shares`] || 0)) / imp;
+                        const skipRate = ((s.skips || 0) + (incUpdates[`feedLearning.sourceStats.${pool}.skips`] || 0)) / imp;
+
+                        score = 10 + (likeRate * 50) + (voteRate * 50) + (watchRate * 80) +
+                            (commentRate * 100) + (shareRate * 150) + (skipRate * -60);
+                    }
+
+                    rawScores[pool] = Math.max(10, score);
+                    totalScore += rawScores[pool];
+                });
+
+                // 3. Exact Normalization (Fixing the edge case)
+                const newWeights = {};
+
+                // Set initial pure ratio
+                validPools.forEach(pool => newWeights[pool] = rawScores[pool] / totalScore);
+
+                // Enforce the clamping boundaries
+                let clampedTotal = 0;
+                validPools.forEach(pool => {
+                    newWeights[pool] = Math.max(0.05, Math.min(0.45, newWeights[pool]));
+                    clampedTotal += newWeights[pool];
+                });
+
+                // Divide by the new clamped boundary sum to safely guarantee exact 1.0 distribution
+                validPools.forEach(pool => {
+                    newWeights[pool] = parseFloat((newWeights[pool] / clampedTotal).toFixed(3));
+                });
+
+                setUpdates["feedLearning.poolWeights"] = newWeights;
+                setUpdates["feedLearning.lastOptimizedAt"] = new Date();
+
+                // 4. RESET STATS
+                Object.keys(incUpdates).forEach(key => delete incUpdates[key]);
+                validPools.forEach(pool => {
+                    setUpdates[`feedLearning.sourceStats.${pool}.impressions`] = 0;
+                    setUpdates[`feedLearning.sourceStats.${pool}.likes`] = 0;
+                    setUpdates[`feedLearning.sourceStats.${pool}.votes`] = 0;
+                    setUpdates[`feedLearning.sourceStats.${pool}.watch_complete`] = 0;
+                    setUpdates[`feedLearning.sourceStats.${pool}.comments`] = 0;
+                    setUpdates[`feedLearning.sourceStats.${pool}.shares`] = 0;
+                    setUpdates[`feedLearning.sourceStats.${pool}.skips`] = 0;
+                });
+                console.log(`[ML] Epoch closed. Re-optimized pools & decayed affinities for ${fingerprint}:`, newWeights);
+            }
+        }
+
+        // --- D. EXECUTE SINGLE ATOMIC UPDATE ---
+        const updateOperation = { $set: setUpdates };
+        if (Object.keys(incUpdates).length > 0) {
+            updateOperation.$inc = incUpdates;
+        }
+
+        await MobileUser.updateOne({ _id: user._id }, updateOperation);
+
     } catch (err) {
-        console.error("❌ Affinity Update Error:", err);
+        console.error("❌ Unified Telemetry Error:", err);
+    }
+}
+
+// ----------------------
+// PATCH: Handle Likes, Views, Shares, Votes
+// ----------------------
+export async function PATCH(req, { params }) {
+    await connectDB();
+    const resolvedParams = await params;
+    const { id } = resolvedParams;
+
+    try {
+        const body = await req.json();
+        const { action, payload, fingerprint, candidateSources = [] } = body;
+        console.log(candidateSources, "is the candidate source")
+        const ip = getClientIp(req);
+        const isBot = await isBotRequest(req, ip);
+
+        if (action === "vote") {
+            const { selectedOptions } = payload;
+            const hasVoted = await Post.findOne({ _id: id, $or: [{ "voters": fingerprint }, { "voters.fingerprint": fingerprint }] });
+
+            if (hasVoted) return addCorsHeaders(NextResponse.json({ message: "Already voted or post missing" }, { status: 400 }));
+
+            const incUpdates = {};
+            for (const index of selectedOptions) incUpdates[`poll.options.${index}.votes`] = 1;
+
+            const updatedPost = await Post.findByIdAndUpdate(
+                id, { $push: { voters: { fingerprint, selectedOptions } }, $inc: incUpdates }, { new: true }
+            );
+
+            if (!updatedPost) return addCorsHeaders(NextResponse.json({ message: "Post not found" }, { status: 404 }));
+
+            // ⚡️ Fire and Forget Telemetry
+            processTelemetryAndAffinity(fingerprint, updatedPost, candidateSources, "vote", 5);
+
+            if (updatedPost.authorId !== fingerprint) {
+                const author = await MobileUser.findOne({ deviceId: updatedPost.authorId });
+                if (author) {
+                    await awardAura(author._id, 5);
+                    await awardClanPoints(updatedPost, 10);
+                    const msg = `Someone voted on your post: "${updatedPost.title.substring(0, 15)}..."`;
+
+                    if (author.pushToken) {
+                        await sendPillParallel(
+                            [author.pushToken], `New Vote! ✅ on post: "${updatedPost.title.substring(0, 10)}..."`, msg,
+                            { postId: updatedPost._id.toString(), type: "post_detail", mediaUrl: updatedPost.mediaUrl, authorPfp: author.profilePic?.url },
+                            { type: 'post_vote', targetAudience: 'user', targetId: author._id.toString(), singleUser: true, link: `/post/${updatedPost.slug}`, priority: 2 }
+                        );
+                    }
+                }
+            }
+            return addCorsHeaders(NextResponse.json({ message: "Vote added" }, { status: 200 }));
+        }
+
+        if (action === "like") {
+            const updatedPost = await Post.findOneAndUpdate(
+                { _id: id, "likes.fingerprint": { $ne: fingerprint } },
+                { $inc: { likeCount: 1 }, $push: { likes: { $each: [{ fingerprint, date: new Date() }], $slice: -600 } } },
+                { new: true }
+            );
+
+            if (!updatedPost) return addCorsHeaders(NextResponse.json({ message: "Already liked" }, { status: 400 }));
+
+            // ⚡️ Fire and Forget Telemetry
+            processTelemetryAndAffinity(fingerprint, updatedPost, candidateSources, "like", 10);
+
+            if (updatedPost.authorId !== fingerprint) {
+                const author = await MobileUser.findOneAndUpdate(
+                    { deviceId: updatedPost.authorId }, { $inc: { totalLikes: 1 } }, { new: true }
+                );
+
+                if (author) {
+                    await awardAura(author._id, 5);
+                    await awardClanPoints(updatedPost, 10, 'like');
+                    await checkTitleUnlocks(author, "totalLikes", author.totalLikes || 0);
+
+                    if (author.pushToken) {
+                        await sendPillParallel(
+                            [author.pushToken], `New Like on post: "${updatedPost.title.substring(0, 10)}..."`, `Someone liked your post: "${updatedPost.title.substring(0, 15)}..."`,
+                            { postId: updatedPost._id.toString(), type: "post_detail", mediaUrl: updatedPost.mediaUrl, authorPfp: author.profilePic?.url },
+                            { type: 'post_like', targetAudience: 'user', targetId: author._id.toString(), singleUser: true, link: `/post/${updatedPost.slug}`, priority: 2 }
+                        );
+                    }
+
+                    const milestones = [5, 10, 25, 50, 100];
+                    if (milestones.includes(updatedPost.likes.length) && author.pushToken) {
+                        await sendPillParallel(
+                            [author.pushToken], `Going Viral!"`, `🔥 Trending! Your post reached ${updatedPost.likes.length} likes!`,
+                            { postId: updatedPost._id.toString(), type: "post_detail", mediaUrl: updatedPost.mediaUrl, authorPfp: author.profilePic?.url },
+                            { type: 'event', targetAudience: 'user', targetId: author._id.toString(), singleUser: true, link: `/post/${updatedPost.slug}`, priority: 2 }
+                        );
+                    }
+                }
+            }
+            return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
+        }
+
+        if (action === "share") {
+            const updatedPost = await Post.findByIdAndUpdate(id, { $inc: { shares: 1 } }, { new: true });
+
+            if (updatedPost) {
+                processTelemetryAndAffinity(fingerprint, updatedPost, candidateSources, "share", 15);
+            }
+
+            if (updatedPost && updatedPost.authorId !== fingerprint) {
+                const author = await MobileUser.findOneAndUpdate(
+                    { deviceId: updatedPost.authorId }, { $inc: { totalShares: 1 } }, { new: true }
+                );
+                if (author) {
+                    await awardAura(author._id, 3);
+                    await awardClanPoints(updatedPost, 20, 'share');
+                    await checkTitleUnlocks(author, "totalShares", author.totalShares || 0);
+                }
+            }
+            return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
+        }
+
+        if (action === "view") {
+            let country = "Unknown", city = "Unknown", timezone = "Unknown";
+
+            if (!isBot && fingerprint) {
+                // 🚀 NATIVE IP CACHE (Prevents DB thrashing and API limits)
+                const nowMs = Date.now();
+                if (ipCache.has(ip) && (nowMs - ipCache.get(ip).timestamp < 24 * 60 * 60 * 1000)) {
+                    const cached = ipCache.get(ip);
+                    country = cached.country; city = cached.city; timezone = cached.timezone;
+                } else {
+                    try {
+                        const geoRes = await fetch(`https://ipinfo.io/${ip}/json`);
+                        const geoData = await geoRes.json();
+                        country = geoData.country || "Unknown"; city = geoData.city || "Unknown"; timezone = geoData.timezone || "Unknown";
+                        ipCache.set(ip, { country, city, timezone, timestamp: nowMs });
+                        if (ipCache.size > 10000) ipCache.clear(); // Safe eviction
+                    } catch (err) { console.log("Geo lookup failed"); }
+                }
+
+                const updatedPost = await Post.findOneAndUpdate(
+                    { _id: id, viewsFingerprints: { $ne: fingerprint } },
+                    {
+                        $inc: { views: 1 },
+                        $push: {
+                            viewsFingerprints: { $each: [fingerprint], $slice: -500 },
+                            viewsData: { $each: [{ visitorId: fingerprint, ip, country, city, timezone, timestamp: new Date() }], $slice: -100 }
+                        }
+                    },
+                    { new: true }
+                );
+
+                if (updatedPost) {
+                    processTelemetryAndAffinity(fingerprint, updatedPost, candidateSources, "view", 1);
+                    const author = await MobileUser.findOneAndUpdate(
+                        { deviceId: updatedPost.authorId }, { $inc: { totalViews: 1 } }, { new: true }
+                    );
+
+                    if (author) {
+                        if (updatedPost.views % 5 === 0) {
+                            await awardAura(author._id, 2);
+                            await awardClanPoints(updatedPost, 5, 'view');
+                        }
+                        await checkTitleUnlocks(author, "totalViews", author.totalViews || 0);
+                    }
+                    return addCorsHeaders(NextResponse.json(updatedPost, { status: 200 }));
+                }
+            }
+
+            const post = await Post.findById(id);
+            processTelemetryAndAffinity(fingerprint, post, candidateSources, "view", 0);
+            return addCorsHeaders(NextResponse.json(post, { status: 200 }));
+        }
+
+        if (action === "watch_complete") {
+            const post = await Post.findById(id);
+            if (post && fingerprint && !isBot) {
+                processTelemetryAndAffinity(fingerprint, post, candidateSources, "watch_complete", 8);
+            }
+            return addCorsHeaders(NextResponse.json({ message: "Watch logged" }, { status: 200 }));
+        }
+
+        if (action === "skip") {
+            const post = await Post.findById(id);
+            if (post && fingerprint && !isBot) {
+                processTelemetryAndAffinity(fingerprint, post, candidateSources, "skip", -6);
+            }
+            return addCorsHeaders(NextResponse.json({ message: "Skip logged" }, { status: 200 }));
+        }
+
+        if (action === "not_interested") {
+            const post = await Post.findById(id);
+            if (post && fingerprint && !isBot) {
+                processTelemetryAndAffinity(fingerprint, post, candidateSources, "not_interested", -100);
+            }
+            return addCorsHeaders(NextResponse.json({ message: "Preference updated" }, { status: 200 }));
+        }
+
+        return addCorsHeaders(NextResponse.json({ message: "Invalid action" }, { status: 400 }));
+
+    } catch (err) {
+        console.error("PATCH error:", err);
+        return addCorsHeaders(NextResponse.json({ message: "Server error", error: err.message }, { status: 500 }));
     }
 }
