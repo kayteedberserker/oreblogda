@@ -20,16 +20,37 @@ export async function POST(req) {
         const targetLeader = await MobileUser.findOne({ deviceId }).lean();
 
         if (!targetClan) return NextResponse.json({ message: "Clan not found." }, { status: 404 });
-        if (targetLeader.deviceId !== deviceId) return NextResponse.json({ message: "Access Denied: Only Clan Leaders." }, { status: 403 });
+        if (!targetLeader || targetLeader.deviceId !== deviceId) return NextResponse.json({ message: "Access Denied: Only Clan Leaders." }, { status: 403 });
+
+        // ⚡️ FEATURE LOCK: PRIME / VERIFIED CLANS ONLY
+        if (!targetClan.verifiedClan) {
+            return NextResponse.json({ message: "This feature is currently locked for Prime Clans only." }, { status: 403 });
+        }
+
+        // ⚡️ LIMIT CHECK: MAX 5 PUBLIC QUIZZES GLOBALLY
+        if (visibility?.toUpperCase() === "PUBLIC") {
+            const activePublicCount = await QuizEvent.countDocuments({
+                visibility: "PUBLIC",
+                status: { $in: ["COMING_SOON", "LIVE"] }
+            });
+            if (activePublicCount >= 5) {
+                return NextResponse.json({ message: "The global limit for public events (5) has been reached. Try again later or set visibility to PRIVATE." }, { status: 429 });
+            }
+        }
 
         const duplicateConflict = await QuizEvent.findOne({ clanId, status: { $in: ["COMING_SOON", "LIVE"] } }).lean();
         if (duplicateConflict) return NextResponse.json({ message: "Your clan already has an active Quiz." }, { status: 409 });
 
         const now = new Date();
         const scheduledTime = new Date(scheduledStartTime);
-        const maxLifespan = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
-        if (scheduledTime < now || scheduledTime > maxLifespan) return NextResponse.json({ message: "Start time must be within the next 24 hours." }, { status: 400 });
+        // ⚡️ TIMELINE: 1 Hour Grace Period from Scheduled Time. 
+        // If not started within this window, the DB TTL automatically purges it.
+        const maxLifespan = new Date(scheduledTime.getTime() + 1 * 60 * 60 * 1000);
+
+        if (scheduledTime < now || scheduledTime > new Date(now.getTime() + 24 * 60 * 60 * 1000)) {
+            return NextResponse.json({ message: "Start time must be within the next 24 hours." }, { status: 400 });
+        }
 
         const newQuiz = await QuizEvent.create({
             clanId, clanName: targetClan.name, leaderDeviceId: deviceId, moderatedBy: [deviceId],
@@ -61,12 +82,15 @@ export async function PATCH(req) {
         if (!event) return NextResponse.json({ message: "Quiz not found." }, { status: 404 });
 
         const now = new Date();
+
+        // ⚡️ GLOBAL CHRONOLOGICAL CHECK: Organically completes quiz if time runs out
         if (event.status !== "COMPLETED" && event.status !== "CANCELLED") {
             const isTimeUp = event.endsAt && now > event.endsAt;
             const hasExceededFailsafe = now > event.expiresAt;
 
             if (isTimeUp || hasExceededFailsafe) {
                 event.status = event.quizQuestions.length > 0 && event.status === "LIVE" ? "COMPLETED" : "CANCELLED";
+                // ⚡️ TIMELINE: 12 Hours Leaderboard Viewing Period after completion
                 event.expiresAt = new Date(now.getTime() + 12 * 60 * 60 * 1000);
                 await event.save();
                 return NextResponse.json({ message: "This quiz has concluded." }, { status: 410 });
@@ -124,7 +148,6 @@ export async function PATCH(req) {
                 const user = await MobileUser.findOne({ deviceId }).lean();
                 if (user && !event.participants.find(p => p.deviceId === deviceId)) {
                     event.participants.push({ deviceId, username: user.username });
-                    event.leaderboard.push({ deviceId, username: user.username, score: 0, answeredQuestionIndexes: [], responses: [] });
                 }
 
                 await event.save();
@@ -138,16 +161,22 @@ export async function PATCH(req) {
 
                 event.status = "LIVE";
                 event.startedAt = now;
-                event.endsAt = new Date(now.getTime() + 2 * 60 * 60 * 1000);
 
+                // ⚡️ TIMELINE: Set Max Quiz Duration based on mode to calculate endsAt
                 if (event.deliveryMode === "STREAMED") {
+                    const streamGapMs = (event.streamGapMinutes || 5) * 60 * 1000;
+                    event.endsAt = new Date(now.getTime() + (event.quizQuestions.length * streamGapMs));
                     event.currentStreamIndex = 0;
                     event.quizQuestions[0].releasedAt = now;
-                    if (event.quizQuestions.length > 1 && event.streamGapMinutes) {
-                        event.quizQuestions[1].releasedAt = new Date(now.getTime() + event.streamGapMinutes * 60 * 1000);
+                    if (event.quizQuestions.length > 1) {
+                        event.quizQuestions[1].releasedAt = new Date(now.getTime() + streamGapMs);
                     }
+                } else {
+                    event.endsAt = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours default batch
                 }
 
+                // Remove the 1-hour grace period TTL and set the Leaderboard + Failsafe TTL
+                event.expiresAt = new Date(event.endsAt.getTime() + 12 * 60 * 60 * 1000);
                 await event.save();
 
                 if (event.acknowledgedBy && event.acknowledgedBy.length > 0) {
@@ -168,37 +197,52 @@ export async function PATCH(req) {
                 if (event.status !== "LIVE") return NextResponse.json({ message: "Quiz is not accepting answers." }, { status: 400 });
                 if (!username?.trim()) return NextResponse.json({ message: "Missing player name." }, { status: 400 });
 
-                let userEntry = event.leaderboard.find(l => l.deviceId === deviceId);
-                if (!userEntry) {
-                    event.leaderboard.push({ deviceId, username: username.trim(), score: 0, answeredQuestionIndexes: [], responses: [] });
-                    userEntry = event.leaderboard[event.leaderboard.length - 1];
-                }
-                if (!userEntry.responses) userEntry.responses = []; // Failsafe for legacy entries
-
                 if (event.deliveryMode === "BATCH") {
-                    if (userEntry.answeredQuestionIndexes.length > 0) return NextResponse.json({ message: "You have already finished." }, { status: 409 });
                     if (!Array.isArray(userAnswers)) return NextResponse.json({ message: "Invalid format." }, { status: 400 });
+
+                    let batchScore = 0;
+                    let batchIndexes = [];
+                    let batchResponses = [];
 
                     event.quizQuestions.forEach((q, idx) => {
                         if (userAnswers[idx] !== undefined && userAnswers[idx] !== -1) {
                             const isCorrect = userAnswers[idx] === q.correctOptionIndex;
-                            if (isCorrect) userEntry.score += 1;
-                            userEntry.answeredQuestionIndexes.push(idx);
-                            userEntry.responses.push({ questionIndex: idx, selectedOptionIndex: userAnswers[idx], isCorrect });
+                            if (isCorrect) batchScore += 1;
+                            batchIndexes.push(idx);
+                            batchResponses.push({ questionIndex: idx, selectedOptionIndex: userAnswers[idx], isCorrect });
                         }
                     });
+
+                    const updateResult = await QuizEvent.updateOne(
+                        { _id: eventId, "leaderboard.deviceId": { $ne: deviceId } },
+                        { $push: { leaderboard: { deviceId, username: username.trim(), score: batchScore, answeredQuestionIndexes: batchIndexes, responses: batchResponses } } }
+                    );
+
+                    if (updateResult.modifiedCount === 0) {
+                        return NextResponse.json({ message: "You have already finished." }, { status: 409 });
+                    }
+
                 } else if (event.deliveryMode === "STREAMED") {
                     if (questionIndex === undefined || answerIndex === undefined) return NextResponse.json({ message: "Parameters missing." }, { status: 400 });
 
+                    // ⚡️ ORGANIC STREAM PROGRESSION: Allow users to push the stream forward if time has passed
                     if (questionIndex > event.currentStreamIndex) {
                         const targetQ = event.quizQuestions[questionIndex];
                         if (targetQ && targetQ.releasedAt && now >= targetQ.releasedAt) {
-                            event.currentStreamIndex = questionIndex;
+
+                            const nextReleaseTime = new Date(now.getTime() + (event.streamGapMinutes || 5) * 60 * 1000);
+                            let streamUpdatePayload = { $set: { currentStreamIndex: questionIndex } };
+
                             if (questionIndex + 1 < event.quizQuestions.length) {
-                                event.quizQuestions[questionIndex + 1].releasedAt = new Date(now.getTime() + (event.streamGapMinutes || 5) * 60 * 1000);
-                            } else {
-                                event.endsAt = new Date(now.getTime() + (event.streamGapMinutes || 5) * 60 * 1000);
+                                streamUpdatePayload.$set[`quizQuestions.${questionIndex + 1}.releasedAt`] = nextReleaseTime;
                             }
+                            // Notice: We do NOT complete the quiz here. Only the moderator or time limit handles that.
+
+                            // Fire & forget atomic stream update (only the first concurrent request modifies it)
+                            await QuizEvent.updateOne(
+                                { _id: eventId, currentStreamIndex: { $lt: questionIndex } },
+                                streamUpdatePayload
+                            );
                         } else {
                             return NextResponse.json({ message: "Hold up, this question is not active yet." }, { status: 400 });
                         }
@@ -206,19 +250,37 @@ export async function PATCH(req) {
                         return NextResponse.json({ message: "This question has already passed." }, { status: 400 });
                     }
 
-                    if (userEntry.answeredQuestionIndexes.includes(questionIndex)) return NextResponse.json({ message: "You already answered." }, { status: 409 });
-
+                    // Proceed to atomically log their answer
                     const targetQuestion = event.quizQuestions[questionIndex];
                     const isCorrect = targetQuestion && targetQuestion.correctOptionIndex === answerIndex;
+                    const userExists = event.leaderboard.some(l => l.deviceId === deviceId);
 
-                    if (isCorrect) userEntry.score += 1;
-                    userEntry.answeredQuestionIndexes.push(questionIndex);
-                    userEntry.responses.push({ questionIndex, selectedOptionIndex: answerIndex, isCorrect });
+                    if (!userExists) {
+                        const insertResult = await QuizEvent.updateOne(
+                            { _id: eventId, "leaderboard.deviceId": { $ne: deviceId } },
+                            { $push: { leaderboard: { deviceId, username: username.trim(), score: isCorrect ? 1 : 0, answeredQuestionIndexes: [questionIndex], responses: [{ questionIndex, selectedOptionIndex: answerIndex, isCorrect }] } } }
+                        );
+                        if (insertResult.modifiedCount === 0) return NextResponse.json({ message: "Double submission detected." }, { status: 409 });
+                    } else {
+                        const updateResult = await QuizEvent.updateOne(
+                            { _id: eventId, "leaderboard.deviceId": deviceId, "leaderboard.answeredQuestionIndexes": { $ne: questionIndex } },
+                            {
+                                $inc: { "leaderboard.$.score": isCorrect ? 1 : 0 },
+                                $push: {
+                                    "leaderboard.$.answeredQuestionIndexes": questionIndex,
+                                    "leaderboard.$.responses": { questionIndex, selectedOptionIndex: answerIndex, isCorrect }
+                                }
+                            }
+                        );
+                        if (updateResult.modifiedCount === 0) return NextResponse.json({ message: "You already answered." }, { status: 409 });
+                    }
                 }
 
-                event.leaderboard.sort((a, b) => b.score - a.score);
-                await event.save();
-                return NextResponse.json({ success: true, leaderboard: event.leaderboard }, { status: 200 });
+                // ⚡️ PERFORMANCE FIX: Sort in memory before sending
+                const updatedEvent = await QuizEvent.findById(eventId).select("leaderboard").lean();
+                const sortedLeaderboard = updatedEvent.leaderboard.sort((a, b) => b.score - a.score);
+
+                return NextResponse.json({ success: true, leaderboard: sortedLeaderboard }, { status: 200 });
             }
 
             case "STREAM_NEXT": {
@@ -233,8 +295,6 @@ export async function PATCH(req) {
                     event.quizQuestions[event.currentStreamIndex].releasedAt = now;
                     if (event.currentStreamIndex + 1 < event.quizQuestions.length) {
                         event.quizQuestions[event.currentStreamIndex + 1].releasedAt = new Date(now.getTime() + (event.streamGapMinutes || 5) * 60 * 1000);
-                    } else {
-                        event.endsAt = new Date(now.getTime() + (event.streamGapMinutes || 5) * 60 * 1000);
                     }
                 }
                 await event.save();

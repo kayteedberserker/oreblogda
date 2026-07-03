@@ -1,4 +1,5 @@
 import connectDB from "@/app/lib/mongodb";
+import ClanFollower from "@/app/models/ClanFollower";
 import Clan from '@/app/models/ClanModel';
 import MobileUser from '@/app/models/MobileUserModel';
 import QuizEvent from "@/app/models/QuizEvent";
@@ -20,44 +21,57 @@ export async function GET(request) {
         // ⚡️ RAW EVENTS (MANUAL CONFIG)
         // =======================================================================
         const rawEvents = [];
-
         const activeEvents = rawEvents
-            .filter(event => {
-                if (event.endsAt) {
-                    return new Date(event.endsAt) > now;
-                }
-                return true;
-            })
+            .filter(event => (event.endsAt ? new Date(event.endsAt) > now : true))
             .map(event => {
                 let isComing = false;
                 let currentStatus = 'active';
-
-                if (event.startsAt) {
-                    if (new Date(event.startsAt) > now) {
-                        isComing = true;
-                        currentStatus = 'coming_soon';
-                    }
+                if (event.startsAt && new Date(event.startsAt) > now) {
+                    isComing = true;
+                    currentStatus = 'coming_soon';
                 }
-
-                return {
-                    ...event,
-                    isComing: isComing,
-                    status: currentStatus,
-                };
+                return { ...event, isComing, status: currentStatus };
             });
 
         // =======================================================================
-        // ⚡️ FETCH LIVE DATABASE EVENTS IN PARALLEL
+        // ⚡️ VISIBILITY CLEARANCE ENGINE
         // =======================================================================
-        const [activeShoutouts, activeQuizzes, activeTournaments] = await Promise.all([
-            ShoutoutEvent.find({ expiresAt: { $gt: now } }).lean(),
-            QuizEvent.find({ status: { $in: ["COMING_SOON", "LIVE", "COMPLETED", "CANCELLED"] } }).lean(),
-            Tournament.find({ status: { $in: ["REGISTRATION", "LIVE", "COMPLETED"] } }).lean()
-        ]);
+        let allowedClanTagsArray = [];
+
+        if (deviceId && userId && mongoose.Types.ObjectId.isValid(userId)) {
+            const [clan, followedClans] = await Promise.all([
+                Clan.findOne({
+                    $or: [{ leader: userId }, { viceLeader: userId }, { members: userId }]
+                }).select("tag").lean(),
+                ClanFollower.find({ userId: userId }).select("clanTag").lean()
+            ]);
+
+            const allowedClanTags = new Set();
+            if (clan) allowedClanTags.add(clan.tag);
+            followedClans.forEach(f => allowedClanTags.add(f.clanTag));
+            allowedClanTagsArray = Array.from(allowedClanTags);
+        }
+
+        // ⚡️ THE MASTER SECURITY FILTER
+        const eventVisibilityFilter = {
+            $or: [
+                { visibility: "PUBLIC" },
+                { visibility: { $exists: false } },
+                { visibility: "PRIVATE", clanId: { $in: allowedClanTagsArray } },
+                { leaderDeviceId: deviceId },
+                { moderatedBy: deviceId }
+            ]
+        };
 
         // =======================================================================
-        // ⚡️ MODERATOR LOOKUP ENGINE (Fetches names/pics efficiently)
+        // ⚡️ FETCH LIVE SECURE DATABASE EVENTS
         // =======================================================================
+        const [activeShoutouts, activeQuizzes, activeTournaments] = await Promise.all([
+            ShoutoutEvent.find({ expiresAt: { $gt: now }, ...eventVisibilityFilter }).lean(),
+            QuizEvent.find({ status: { $in: ["COMING_SOON", "LIVE", "COMPLETED", "CANCELLED"] }, ...eventVisibilityFilter }).lean(),
+            Tournament.find({ status: { $in: ["REGISTRATION", "LIVE", "COMPLETED"] }, ...eventVisibilityFilter }).lean()
+        ]);
+
         const allModDeviceIds = new Set();
         [...activeShoutouts, ...activeQuizzes, ...activeTournaments].forEach(event => {
             if (event.moderatedBy) {
@@ -79,7 +93,6 @@ export async function GET(request) {
             };
         });
 
-        // ⚡️ SPREAD ALL FIELDS SO THE FRONTEND EDITOR HAS EVERYTHING
         const formattedShoutouts = activeShoutouts.map(e => ({
             ...e,
             id: e._id.toString(),
@@ -87,26 +100,24 @@ export async function GET(request) {
             imageUrl: e.media?.url || null,
             targetUrl: e.externalLink || null,
             isModerator: e.leaderDeviceId === deviceId || (e.moderatedBy || []).includes(deviceId),
-            moderatorDetails: (e.moderatedBy || []).map(id => modMap[id]).filter(Boolean), // ⚡️ NEW: Mapped Details
+            moderatorDetails: (e.moderatedBy || []).map(id => modMap[id]).filter(Boolean),
             startsAt: e.createdAt,
             endsAt: e.expiresAt,
             status: "active"
         }));
 
         const formattedQuizzes = activeQuizzes.map(e => {
-            // ⚡️ ANTI-CHEAT: Hide correct answers if quiz is still active
             const isCompleted = e.status === "COMPLETED" || e.status === "CANCELLED";
             const isModerator = e.leaderDeviceId === deviceId || (e.moderatedBy || []).includes(deviceId);
 
             const safeQuestions = (e.quizQuestions || []).map(q => {
                 const safeQ = { ...q };
                 if (!isCompleted && !isModerator) {
-                    delete safeQ.correctOptionIndex; // Only reveal to players after completion!
+                    delete safeQ.correctOptionIndex;
                 }
                 return safeQ;
             });
 
-            // ⚡️ PERSONALIZED ANSWERS: Extract what this specific user picked
             const userEntry = (e.leaderboard || []).find(l => l.deviceId === deviceId);
             const userResponses = userEntry?.responses || [];
             const prefilledAnswers = {};
@@ -131,31 +142,23 @@ export async function GET(request) {
                 acknowledgedBy: e.acknowledgedBy || [],
                 participants: e.participants || [],
                 leaderboard: e.leaderboard || [],
-                userResponses: prefilledAnswers // ⚡️ Passed to frontend to restore state securely
+                userResponses: prefilledAnswers
             };
         });
 
-        // 🧠 3. Format Tournaments fully with sub-match leaderboards
-        // =======================================================================
-        // 🧠 TOURNAMENT FORMATTING (WITH WEEKLY/MONTHLY CALCULATION ENGINE)
-        // =======================================================================
         const formattedTournaments = activeTournaments.map(tournament => {
-            // 1. Setup Time Boundaries
             const today = new Date();
-
             const startOfWeek = new Date(today);
             const day = startOfWeek.getDay();
-            const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1); // Adjust for Monday start
+            const diff = startOfWeek.getDate() - day + (day === 0 ? -6 : 1);
             startOfWeek.setDate(diff);
             startOfWeek.setHours(0, 0, 0, 0);
 
             const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-            // 2. Filter Matches
             const weeklyMatches = tournament.matches.filter(m => new Date(m.scheduledAt) >= startOfWeek);
             const monthlyMatches = tournament.matches.filter(m => new Date(m.scheduledAt) >= startOfMonth);
 
-            // 3. Dynamic Aggregation Function
             const aggregateMatches = (matchesToAggregate) => {
                 const calcMap = {};
                 matchesToAggregate.forEach(matchItem => {
@@ -181,15 +184,13 @@ export async function GET(request) {
                 return Object.values(calcMap).sort((a, b) => b.finalAccumulatedScore - a.finalAccumulatedScore);
             };
 
-            // 4. Calculate Sub-Leaderboards
             const weeklyLeaderboard = aggregateMatches(weeklyMatches);
             const monthlyLeaderboard = aggregateMatches(monthlyMatches);
 
-            // 5. Enrich the matches array for the frontend
             const enrichedMatches = tournament.matches.map(match => {
                 let matchLeaderboard = [];
                 if (match.status === "COMPLETED") {
-                    matchLeaderboard = match.results.sort((a, b) => b.calculatedScore - a.calculatedScore);
+                    matchLeaderboard = [...match.results].sort((a, b) => b.calculatedScore - a.calculatedScore);
                 } else {
                     matchLeaderboard = match.participants.map(player => ({
                         targetId: player.deviceId,
@@ -199,10 +200,7 @@ export async function GET(request) {
                         calculatedScore: 0
                     }));
                 }
-                return {
-                    ...match,
-                    liveMatchLeaderboard: matchLeaderboard
-                };
+                return { ...match, liveMatchLeaderboard: matchLeaderboard };
             });
 
             return {
@@ -213,49 +211,29 @@ export async function GET(request) {
                 moderatorDetails: (tournament.moderatedBy || []).map(id => modMap[id]).filter(Boolean),
                 status: tournament.status.toLowerCase(),
                 matches: enrichedMatches,
-                weeklyLeaderboard,  // ⚡️ Newly calculated and pushed to frontend
-                monthlyLeaderboard  // ⚡️ Newly calculated and pushed to frontend
+                weeklyLeaderboard,
+                monthlyLeaderboard
             };
         });
 
-        // ⚡️ MERGE ALL EVENTS
         const allDynamicEvents = [...activeEvents, ...formattedShoutouts, ...formattedQuizzes, ...formattedTournaments];
 
-        // =======================================================================
-        // ⚡️ DYNAMIC CLAN REFERRAL MATCHING ENGINE
-        // =======================================================================
         let referredClan = null;
         if (referredBy) {
             const referrer = await MobileUser.findOne({ referralCode: referredBy }).lean();
-
             if (referrer) {
                 const clan = await Clan.findOne({
-                    $or: [
-                        { leader: referrer._id },
-                        { viceLeader: referrer._id },
-                        { members: referrer._id }
-                    ]
+                    $or: [{ leader: referrer._id }, { viceLeader: referrer._id }, { members: referrer._id }]
                 }).lean();
 
                 if (clan) {
                     let isAlreadyFollowingOrMember = false;
-
                     if (userId && mongoose.Types.ObjectId.isValid(userId)) {
-                        const followerRecord = await mongoose.models.ClanFollower.findOne({
-                            clanTag: clan.tag,
-                            userId: userId
-                        }).lean();
-
-                        if (followerRecord) {
-                            isAlreadyFollowingOrMember = true;
-                        }
+                        const followerRecord = await mongoose.models.ClanFollower.findOne({ clanTag: clan.tag, userId: userId }).lean();
+                        if (followerRecord) isAlreadyFollowingOrMember = true;
 
                         if (!isAlreadyFollowingOrMember) {
-                            if (
-                                clan.leader?.toString() === userId ||
-                                clan.viceLeader?.toString() === userId ||
-                                clan.members?.some(m => m.toString() === userId)
-                            ) {
+                            if (clan.leader?.toString() === userId || clan.viceLeader?.toString() === userId || clan.members?.some(m => m.toString() === userId)) {
                                 isAlreadyFollowingOrMember = true;
                             }
                         }
@@ -264,9 +242,7 @@ export async function GET(request) {
                     if (!isAlreadyFollowingOrMember) {
                         const colors = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899"];
                         let hash = 0;
-                        for (let i = 0; i < clan.tag.length; i++) {
-                            hash = clan.tag.charCodeAt(i) + ((hash << 5) - hash);
-                        }
+                        for (let i = 0; i < clan.tag.length; i++) { hash = clan.tag.charCodeAt(i) + ((hash << 5) - hash); }
                         const dynamicColor = colors[Math.abs(hash) % colors.length];
 
                         referredClan = {
@@ -285,7 +261,7 @@ export async function GET(request) {
 
         return NextResponse.json({
             success: true,
-            events: allDynamicEvents, // ⚡️ DELIVERING UNIFIED LIST
+            events: allDynamicEvents,
             referredClan
         });
 

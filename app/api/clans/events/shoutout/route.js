@@ -28,9 +28,25 @@ export async function POST(req) {
         const targetLeader = await MobileUser.findOne({ deviceId }).lean();
 
         if (!targetClan) return NextResponse.json({ message: "Clan not found." }, { status: 404 });
-        if (targetLeader.deviceId !== deviceId) return NextResponse.json({ message: "Access Denied: Only Clan Leaders." }, { status: 403 });
+        if (!targetLeader || targetLeader.deviceId !== deviceId) return NextResponse.json({ message: "Access Denied: Only Clan Leaders." }, { status: 403 });
+
+        if (!targetClan.verifiedClan) {
+            return NextResponse.json({ message: "This feature is currently locked for Prime Clans only." }, { status: 403 });
+        }
 
         const now = new Date();
+
+        // ⚡️ LIMIT CHECK: MAX 5 PUBLIC SHOUTOUTS GLOBALLY
+        if (visibility?.toUpperCase() === "PUBLIC") {
+            const activePublicCount = await ShoutoutEvent.countDocuments({
+                visibility: "PUBLIC",
+                expiresAt: { $gt: now }
+            });
+            if (activePublicCount >= 5) {
+                return NextResponse.json({ message: "The global limit for public events (5) has been reached. Try again later or set visibility to PRIVATE." }, { status: 429 });
+            }
+        }
+
         const activeEventConflict = await ShoutoutEvent.findOne({
             clanId,
             expiresAt: { $gt: now }

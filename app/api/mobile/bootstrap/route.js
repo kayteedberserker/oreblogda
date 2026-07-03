@@ -1,7 +1,7 @@
 import connectDB from "@/app/lib/mongodb";
 import ClanFollower from "@/app/models/ClanFollower";
 import Clan from '@/app/models/ClanModel';
-import ClanWar from "@/app/models/ClanWar"; // ⚡️ ADDED: For war tracking
+import ClanWar from "@/app/models/ClanWar";
 import MessagePillModel from "@/app/models/MessagePillModel";
 import MobileUser from "@/app/models/MobileUserModel";
 import QuizEvent from "@/app/models/QuizEvent";
@@ -11,7 +11,6 @@ import UserStreak from "@/app/models/UserStreak";
 import mongoose from 'mongoose';
 import { NextResponse } from "next/server";
 
-// ... (VersionSchema, calculatePeakLevel, addCorsHeaders, OPTIONS remain the same) ...
 const VersionSchema = new mongoose.Schema({
     key: { type: String, default: 'latest_app_version' },
     appVersion: { type: String, required: true },
@@ -133,6 +132,63 @@ export async function POST(req) {
             updateQuery.$set.activityLog = newActivityLog;
         }
 
+        // =======================================================================
+        // ⚡️ HOISTED CLAN DATA & VISIBILITY CLEARANCE ENGINE
+        // =======================================================================
+        let userClanData = null;
+        let allowedClanTagsArray = [];
+
+        if (user._id) {
+            const [clan, followedClans] = await Promise.all([
+                Clan.findOne({
+                    $or: [{ leader: user._id }, { viceLeader: user._id }, { members: user._id }]
+                }).select("tag name leader rank viceLeader spendablePoints joinRequests latestMessage messages").lean(),
+                ClanFollower.find({ userId: user._id }).select("clanTag").lean()
+            ]);
+
+            const allowedClanTags = new Set();
+
+            if (clan) {
+                allowedClanTags.add(clan.tag); // Add user's primary clan
+
+                let userRole = "member";
+                if (clan.leader?.toString() === user._id.toString()) userRole = "leader";
+                else if (clan.viceLeader?.toString() === user._id.toString()) userRole = "viceleader";
+
+                const [pendingWars, negotiatingWars] = await Promise.all([
+                    ClanWar.countDocuments({ status: 'PENDING', defenderTag: clan.tag }),
+                    ClanWar.countDocuments({ status: 'NEGOTIATING', $or: [{ challengerTag: clan.tag }, { defenderTag: clan.tag }] })
+                ]);
+
+                userClanData = {
+                    tag: clan.tag,
+                    name: clan.name,
+                    role: userRole,
+                    clanId: clan._id,
+                    rank: clan.rank,
+                    cCoins: clan.spendablePoints || 0,
+                    fullData: clan.joinRequests?.length || 0,
+                    latestMessageAt: clan.latestMessage?.createdAt || clan.messages?.[clan.messages?.length - 1]?.date || null,
+                    totalWarActions: pendingWars + negotiatingWars
+                };
+            }
+
+            // Add all followed clans to clearance
+            followedClans.forEach(f => allowedClanTags.add(f.clanTag));
+            allowedClanTagsArray = Array.from(allowedClanTags);
+        }
+
+        // ⚡️ THE MASTER SECURITY FILTER
+        const eventVisibilityFilter = {
+            $or: [
+                { visibility: "PUBLIC" },
+                { visibility: { $exists: false } }, // Failsafe for legacy docs
+                { visibility: "PRIVATE", clanId: { $in: allowedClanTagsArray } }, // Clearance granted
+                { leaderDeviceId: deviceId }, // Creator override
+                { moderatedBy: deviceId }     // Mod override
+            ]
+        };
+
         const audienceConditions = [{ targetAudience: 'global' }];
         if (user._id) audienceConditions.push({ targetAudience: 'user', targetId: user._id.toString() });
         if (deviceId) audienceConditions.push({ targetAudience: 'user', targetId: deviceId });
@@ -145,15 +201,14 @@ export async function POST(req) {
             activeShoutouts,
             activeQuizzes,
             activeTournaments,
-            activePills,
-            userClanData // ⚡️ ADDED: Fetches user clan logic in parallel
+            activePills
         ] = await Promise.all([
             MobileUser.updateOne({ _id: user._id }, updateQuery),
             UserStreak.findOne({ userId: user._id }).lean(),
             VersionModel.findOne({ key: 'latest_app_version' }).lean(),
-            ShoutoutEvent.find({ expiresAt: { $gt: now } }).lean(),
-            QuizEvent.find({ status: { $in: ["COMING_SOON", "LIVE"] } }).lean(),
-            Tournament.find({ status: { $in: ["REGISTRATION", "LIVE"] } }).lean(),
+            ShoutoutEvent.find({ expiresAt: { $gt: now }, ...eventVisibilityFilter }).lean(),
+            QuizEvent.find({ status: { $in: ["COMING_SOON", "LIVE"] }, ...eventVisibilityFilter }).lean(),
+            Tournament.find({ status: { $in: ["REGISTRATION", "LIVE"] }, ...eventVisibilityFilter }).lean(),
             MessagePillModel.aggregate([
                 { $match: { isActive: true, $and: [{ $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }] }, { $or: audienceConditions }] } },
                 { $sort: { priority: -1, createdAt: -1 } },
@@ -161,40 +216,9 @@ export async function POST(req) {
                 { $replaceRoot: { newRoot: "$doc" } },
                 { $sort: { priority: -1, createdAt: -1 } },
                 { $limit: 25 }
-            ]),
-            // ⚡️ IIFE to resolve User Clan Data without creating a messy scope
-            (async () => {
-                if (!user._id) return null;
-                const clan = await Clan.findOne({
-                    $or: [{ leader: user._id }, { viceLeader: user._id }, { members: user._id }]
-                }).select("tag name leader rank viceLeader spendablePoints joinRequests latestMessage messages").lean();
-
-                if (!clan) return null;
-
-                let userRole = "member";
-                if (clan.leader?.toString() === user._id.toString()) userRole = "leader";
-                else if (clan.viceLeader?.toString() === user._id.toString()) userRole = "viceleader";
-
-                const [pendingWars, negotiatingWars] = await Promise.all([
-                    ClanWar.countDocuments({ status: 'PENDING', defenderTag: clan.tag }),
-                    ClanWar.countDocuments({ status: 'NEGOTIATING', $or: [{ challengerTag: clan.tag }, { defenderTag: clan.tag }] })
-                ]);
-
-                return {
-                    tag: clan.tag,
-                    name: clan.name,
-                    role: userRole,
-                    clanId: clan._id,
-                    rank: clan.rank,
-                    cCoins: clan.spendablePoints || 0,
-                    fullData: clan.joinRequests?.length || 0,
-                    latestMessageAt: clan.latestMessage?.createdAt || clan.messages?.[clan.messages?.length - 1]?.date || null,
-                    totalWarActions: pendingWars + negotiatingWars
-                };
-            })()
+            ])
         ]);
 
-        // ... (Moderator lookup and event formatting remain unchanged) ...
         const allModDeviceIds = new Set();
         [...activeShoutouts, ...activeQuizzes, ...activeTournaments].forEach(event => {
             if (event.moderatedBy) {
@@ -313,7 +337,7 @@ export async function POST(req) {
             const enrichedMatches = tournament.matches.map(match => {
                 let matchLeaderboard = [];
                 if (match.status === "COMPLETED") {
-                    matchLeaderboard = match.results.sort((a, b) => b.calculatedScore - a.calculatedScore);
+                    matchLeaderboard = [...match.results].sort((a, b) => b.calculatedScore - a.calculatedScore);
                 } else {
                     matchLeaderboard = match.participants.map(player => ({
                         targetId: player.deviceId,
@@ -352,9 +376,6 @@ export async function POST(req) {
             return safeItem;
         });
 
-        // =======================================================================
-        // ⚡️ DYNAMIC CLAN REFERRAL MATCHING ENGINE
-        // =======================================================================
         let referredClan = null;
         if (referredBy) {
             const referrer = await MobileUser.findOne({ referralCode: referredBy }).lean();
@@ -368,21 +389,11 @@ export async function POST(req) {
                     let isAlreadyFollowingOrMember = false;
 
                     if (userId && mongoose.Types.ObjectId.isValid(userId)) {
-                        const followerRecord = await ClanFollower.findOne({
-                            clanTag: clan.tag,
-                            userId: userId
-                        }).lean();
-
-                        if (followerRecord) {
-                            isAlreadyFollowingOrMember = true;
-                        }
+                        const followerRecord = await ClanFollower.findOne({ clanTag: clan.tag, userId: userId }).lean();
+                        if (followerRecord) isAlreadyFollowingOrMember = true;
 
                         if (!isAlreadyFollowingOrMember) {
-                            if (
-                                clan.leader?.toString() === userId ||
-                                clan.viceLeader?.toString() === userId ||
-                                clan.members?.some(m => m.toString() === userId)
-                            ) {
+                            if (clan.leader?.toString() === userId || clan.viceLeader?.toString() === userId || clan.members?.some(m => m.toString() === userId)) {
                                 isAlreadyFollowingOrMember = true;
                             }
                         }
@@ -391,9 +402,7 @@ export async function POST(req) {
                     if (!isAlreadyFollowingOrMember) {
                         const colors = ["#3b82f6", "#8b5cf6", "#10b981", "#f59e0b", "#ef4444", "#06b6d4", "#ec4899"];
                         let hash = 0;
-                        for (let i = 0; i < clan.tag.length; i++) {
-                            hash = clan.tag.charCodeAt(i) + ((hash << 5) - hash);
-                        }
+                        for (let i = 0; i < clan.tag.length; i++) { hash = clan.tag.charCodeAt(i) + ((hash << 5) - hash); }
                         const dynamicColor = colors[Math.abs(hash) % colors.length];
 
                         referredClan = {
@@ -426,7 +435,7 @@ export async function POST(req) {
             events: dynamicEvents,
             referredClan,
             pills: activePills,
-            userClan: userClanData // ⚡️ ADDED: Passing clan data back to the frontend
+            userClan: userClanData
         }));
 
     } catch (err) {

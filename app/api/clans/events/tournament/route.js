@@ -5,6 +5,32 @@ import MobileUser from "@/app/models/MobileUserModel";
 import Tournament from "@/app/models/Tournament";
 import { NextResponse } from "next/server";
 
+// ⚡️ HELPER: Single source of truth for rebuilding the global leaderboard
+function rebuildLeaderboard(tournament) {
+    const aggregateCalcMap = {};
+    tournament.matches.forEach((matchItem) => {
+        if (!matchItem.trackPerformance || !matchItem.results) return;
+        matchItem.results.forEach((res) => {
+            if (!aggregateCalcMap[res.targetId]) {
+                aggregateCalcMap[res.targetId] = {
+                    targetId: res.targetId,
+                    displayName: res.displayName,
+                    totalMatchesPlayed: 0,
+                    totalKills: 0,
+                    highestPlacement: res.position,
+                    finalAccumulatedScore: 0
+                };
+            }
+            const cache = aggregateCalcMap[res.targetId];
+            cache.totalMatchesPlayed += 1;
+            cache.totalKills += res.kills;
+            cache.finalAccumulatedScore += res.calculatedScore;
+            if (res.position < cache.highestPlacement) cache.highestPlacement = res.position;
+        });
+    });
+    return Object.values(aggregateCalcMap).sort((a, b) => b.finalAccumulatedScore - a.finalAccumulatedScore);
+}
+
 export async function POST(req) {
     await connectDB();
     try {
@@ -17,10 +43,30 @@ export async function POST(req) {
 
         const targetClan = await Clan.findOne({ tag: clanId }).lean();
         const targetLeader = await MobileUser.findOne({ deviceId }).lean();
+
         if (!targetClan) return NextResponse.json({ message: "Clan not found." }, { status: 404 });
-        if (targetLeader.deviceId !== deviceId) return NextResponse.json({ message: "Access Denied: Only Leaders can do this." }, { status: 403 });
+
+        if (!targetLeader || targetLeader.deviceId !== deviceId) {
+            return NextResponse.json({ message: "Access Denied: Only Leaders can do this." }, { status: 403 });
+        }
+
+        if (!targetClan.verifiedClan) {
+            return NextResponse.json({ message: "This feature is currently locked for Prime Clans only." }, { status: 403 });
+        }
 
         const upperFormat = formatType?.toUpperCase() === "LEAGUE" ? "LEAGUE" : "SINGLE_MATCH";
+
+        if (visibility?.toUpperCase() === "PUBLIC") {
+            const activePublicCount = await Tournament.countDocuments({
+                visibility: "PUBLIC",
+                formatType: upperFormat,
+                status: { $in: ["REGISTRATION", "LIVE"] }
+            });
+            if (activePublicCount >= 5) {
+                return NextResponse.json({ message: `The global limit for public ${upperFormat} events (5) has been reached. Try again later or set visibility to PRIVATE.` }, { status: 429 });
+            }
+        }
+
         if (upperFormat === "LEAGUE") {
             const leagueConflict = await Tournament.findOne({ clanId, formatType: "LEAGUE", status: { $in: ["REGISTRATION", "LIVE"] } }).lean();
             if (leagueConflict) return NextResponse.json({ message: "An active League is already running for your clan." }, { status: 409 });
@@ -40,7 +86,6 @@ export async function POST(req) {
             });
         }
 
-        // ⚡️ Set max default lifespan: 30 days for Leagues, 48 hours for Single Matches
         const maxLifespan = new Date(Date.now() + (upperFormat === "LEAGUE" ? 30 * 24 : 48) * 60 * 60 * 1000);
 
         const newTournament = await Tournament.create({
@@ -78,6 +123,10 @@ export async function PATCH(req) {
 
         switch (action.toUpperCase()) {
             case "REGISTER_MATCH": {
+                if (tournament.status === "COMPLETED" || tournament.status === "CANCELLED") {
+                    return NextResponse.json({ message: "Tournament has already concluded." }, { status: 400 });
+                }
+
                 if (!matchNumber || !username) return NextResponse.json({ message: "Match number and Player Name required." }, { status: 400 });
                 if (tournament.blacklistedDeviceIds.includes(deviceId)) return NextResponse.json({ message: "You are restricted from joining this event." }, { status: 403 });
 
@@ -120,8 +169,12 @@ export async function PATCH(req) {
             case "ADD_MATCH": {
                 if (!isLeader && !isModerator) return NextResponse.json({ message: "Access Denied." }, { status: 403 });
                 if (tournament.formatType !== "LEAGUE") return NextResponse.json({ message: "Cannot add matches to a single event." }, { status: 400 });
+                if (tournament.status === "COMPLETED" || tournament.status === "CANCELLED") return NextResponse.json({ message: "Cannot add matches to a concluded league." }, { status: 400 });
 
-                const nextNumber = tournament.matches.length + 1;
+                const nextNumber = tournament.matches.length > 0
+                    ? Math.max(...tournament.matches.map(m => m.matchNumber)) + 1
+                    : 1;
+
                 tournament.matches.push({
                     matchNumber: nextNumber,
                     matchName: matchName || `Match ${nextNumber}`,
@@ -148,27 +201,33 @@ export async function PATCH(req) {
                 if (payload.roomPin !== undefined) targetMatch.lobbyConfig.roomPin = payload.roomPin;
                 if (payload.additionalInstructions !== undefined) targetMatch.lobbyConfig.additionalInstructions = payload.additionalInstructions;
 
+                let newlyLiveMatch = false;
+                let participantIdsForNotification = [];
+
                 if (payload.status && ["PENDING", "REGISTRATION", "LIVE", "COMPLETED", "CANCELLED"].includes(payload.status.toUpperCase())) {
                     const newStatus = payload.status.toUpperCase();
 
-                    // ⚡️ SEND NOTIFICATION WHEN MATCH GOES LIVE
                     if (newStatus === "LIVE" && targetMatch.status !== "LIVE") {
-                        const participantIds = targetMatch.participants.map(p => p.deviceId);
-                        if (participantIds.length > 0) {
-                            try {
-                                const users = await MobileUser.find({ deviceId: { $in: participantIds }, pushToken: { $ne: null } }).select("deviceId pushToken").lean();
-                                const notifyPromises = users.map(u =>
-                                    sendPillParallel([u.pushToken], `⚔️ Match LIVE: ${targetMatch.matchName || `Match ${matchNumber}`}`, `The lobby is open! Check the event page for room details.`, { screen: "/screens/referralevent" }, { type: 'event', targetAudience: 'user', targetId: u.deviceId, singleUser: true, groupId: `match_${matchNumber}_${eventId}`, expiresInHours: 2 })
-                                );
-                                await Promise.all(notifyPromises);
-                            } catch (e) { console.error("Live match notification error:", e); }
-                        }
+                        newlyLiveMatch = true;
+                        participantIdsForNotification = targetMatch.participants.map(p => p.deviceId);
                     }
 
                     targetMatch.status = newStatus;
                 }
 
+                // ⚡️ RELIABILITY FIX: Save DB state first before dispatching notifications
                 await tournament.save();
+
+                if (newlyLiveMatch && participantIdsForNotification.length > 0) {
+                    try {
+                        const users = await MobileUser.find({ deviceId: { $in: participantIdsForNotification }, pushToken: { $ne: null } }).select("deviceId pushToken").lean();
+                        const notifyPromises = users.map(u =>
+                            sendPillParallel([u.pushToken], `⚔️ Match LIVE: ${targetMatch.matchName || `Match ${matchNumber}`}`, `The lobby is open! Check the event page for room details.`, { screen: "/screens/referralevent" }, { type: 'event', targetAudience: 'user', targetId: u.deviceId, singleUser: true, groupId: `match_${matchNumber}_${eventId}`, expiresInHours: 2 })
+                        );
+                        await Promise.all(notifyPromises);
+                    } catch (e) { console.error("Live match notification error:", e); }
+                }
+
                 return NextResponse.json({ success: true, message: `Match details saved.` }, { status: 200 });
             }
 
@@ -178,20 +237,8 @@ export async function PATCH(req) {
 
                 tournament.matches = tournament.matches.filter(m => m.matchNumber !== matchNumber);
 
-                const aggregateCalcMap = {};
-                tournament.matches.forEach((matchItem) => {
-                    if (!matchItem.trackPerformance || !matchItem.results) return;
-                    matchItem.results.forEach((res) => {
-                        if (!aggregateCalcMap[res.targetId]) aggregateCalcMap[res.targetId] = { targetId: res.targetId, displayName: res.displayName, totalMatchesPlayed: 0, totalKills: 0, highestPlacement: res.position, finalAccumulatedScore: 0 };
-                        const cache = aggregateCalcMap[res.targetId];
-                        cache.totalMatchesPlayed += 1;
-                        cache.totalKills += res.kills;
-                        cache.finalAccumulatedScore += res.calculatedScore;
-                        if (res.position < cache.highestPlacement) cache.highestPlacement = res.position;
-                    });
-                });
-
-                tournament.liveLeaderboard = Object.values(aggregateCalcMap).sort((a, b) => b.finalAccumulatedScore - a.finalAccumulatedScore);
+                // ⚡️ DRY OPTIMIZATION: Rebuild leaderboard using the unified helper
+                tournament.liveLeaderboard = rebuildLeaderboard(tournament);
 
                 await tournament.save();
                 return NextResponse.json({ success: true, message: `Match deleted successfully.` }, { status: 200 });
@@ -203,6 +250,11 @@ export async function PATCH(req) {
 
                 const targetMatch = tournament.matches.find(m => m.matchNumber === matchNumber);
                 if (!targetMatch) return NextResponse.json({ message: "Match not found." }, { status: 404 });
+
+                if (targetMatch.status === "COMPLETED") {
+                    return NextResponse.json({ message: "Scores for this match are already locked." }, { status: 400 });
+                }
+
                 if (targetMatch.status !== "LIVE") return NextResponse.json({ message: "Match must be LIVE to grade players." }, { status: 400 });
                 if (!payload.rawResults || !Array.isArray(payload.rawResults)) return NextResponse.json({ message: "Invalid score data." }, { status: 400 });
 
@@ -222,30 +274,16 @@ export async function PATCH(req) {
                 targetMatch.loggedAt = new Date();
                 targetMatch.status = "COMPLETED";
 
-                const aggregateCalcMap = {};
-                tournament.matches.forEach((matchItem) => {
-                    if (!matchItem.trackPerformance || !matchItem.results) return;
-                    matchItem.results.forEach((res) => {
-                        if (!aggregateCalcMap[res.targetId]) aggregateCalcMap[res.targetId] = { targetId: res.targetId, displayName: res.displayName, totalMatchesPlayed: 0, totalKills: 0, highestPlacement: res.position, finalAccumulatedScore: 0 };
-                        const cache = aggregateCalcMap[res.targetId];
-                        cache.totalMatchesPlayed += 1;
-                        cache.totalKills += res.kills;
-                        cache.finalAccumulatedScore += res.calculatedScore;
-                        if (res.position < cache.highestPlacement) cache.highestPlacement = res.position;
-                    });
-                });
+                // ⚡️ DRY OPTIMIZATION: Rebuild leaderboard using the unified helper
+                tournament.liveLeaderboard = rebuildLeaderboard(tournament);
 
-                tournament.liveLeaderboard = Object.values(aggregateCalcMap).sort((a, b) => b.finalAccumulatedScore - a.finalAccumulatedScore);
-
-                // ⚡️ If single match, concluding the match concludes the entire tournament
                 if (tournament.formatType === "SINGLE_MATCH") {
                     tournament.status = "COMPLETED";
-                    tournament.expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000); // Trigger 12 hour global expiration
+                    tournament.expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
                 }
 
                 await tournament.save();
 
-                // ⚡️ SEND NOTIFICATION THAT SCORES ARE READY
                 const participantIds = targetMatch.participants.map(p => p.deviceId);
                 if (participantIds.length > 0) {
                     try {
@@ -280,8 +318,12 @@ export async function PATCH(req) {
 
             case "TERMINATE": {
                 if (!isLeader && !isModerator) return NextResponse.json({ message: "Access Denied." }, { status: 403 });
-                await Tournament.findByIdAndDelete(eventId);
-                return NextResponse.json({ success: true, message: "Event permanently deleted." }, { status: 200 });
+
+                tournament.status = "CANCELLED";
+                tournament.expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
+
+                await tournament.save();
+                return NextResponse.json({ success: true, message: "Event cancelled successfully." }, { status: 200 });
             }
 
             case "SET_TOURNAMENT_STATUS": {
