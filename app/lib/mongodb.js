@@ -10,9 +10,11 @@ if (!cached) {
 }
 
 export default async function connectDB() {
+    const start = Date.now();
     // 1. Check if the connection is already active
     if (cached.conn) {
         if (mongoose.connection.readyState === 1) {
+            console.log(`DB ready in ${Date.now() - start}ms`);
             // Intentionally quiet to keep logs clean, or use: console.log("🟢 Cached Link Active");
             return cached.conn;
         }
@@ -49,6 +51,7 @@ export default async function connectDB() {
     console.log("📡 Initializing new MongoDB connection (Pool: 4)...");
 
     cached.promise = mongoose.connect(process.env.MONGODB_URI, opts).then((mongooseInstance) => {
+        console.log(`DB ready in ${Date.now() - start}ms`);
         console.log("✅ MongoDB connected successfully");
         cached.isLoading = false;
         return mongooseInstance;
