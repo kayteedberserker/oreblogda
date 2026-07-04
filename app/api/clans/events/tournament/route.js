@@ -222,7 +222,8 @@ export async function PATCH(req) {
                     try {
                         const users = await MobileUser.find({ deviceId: { $in: participantIdsForNotification }, pushToken: { $ne: null } }).select("deviceId pushToken").lean();
                         const notifyPromises = users.map(u =>
-                            sendPillParallel([u.pushToken], `⚔️ Match LIVE: ${targetMatch.matchName || `Match ${matchNumber}`}`, `The lobby is open! Check the event page for room details.`, { screen: "/screens/referralevent" }, { type: 'event', targetAudience: 'user', targetId: u.deviceId, singleUser: true, groupId: `match_${matchNumber}_${eventId}`, expiresInHours: 2 })
+                            // Fixed: Added eventId to the deep link
+                            sendPillParallel([u.pushToken], `⚔️ Match LIVE: ${targetMatch.matchName || `Match ${matchNumber}`}`, `The lobby is open! Check the event page for room details.`, { screen: `/screens/events?id=${eventId}` }, { type: 'event', targetAudience: 'user', targetId: u.deviceId, singleUser: true, groupId: `match_${matchNumber}_${eventId}`, expiresInHours: 2 })
                         );
                         await Promise.all(notifyPromises);
                     } catch (e) { console.error("Live match notification error:", e); }
@@ -289,7 +290,8 @@ export async function PATCH(req) {
                     try {
                         const users = await MobileUser.find({ deviceId: { $in: participantIds }, pushToken: { $ne: null } }).select("deviceId pushToken").lean();
                         const notifyPromises = users.map(u =>
-                            sendPillParallel([u.pushToken], `🏆 Match Concluded`, `Scores for ${targetMatch.matchName || `Match ${matchNumber}`} are in! Check your standings.`, { screen: "/screens/referralevent" }, { type: 'event', targetAudience: 'user', targetId: u.deviceId, singleUser: true, groupId: `res_${matchNumber}_${eventId}`, expiresInHours: 6 })
+                            // Fixed: Added eventId to the deep link
+                            sendPillParallel([u.pushToken], `🏆 Match Concluded`, `Scores for ${targetMatch.matchName || `Match ${matchNumber}`} are in! Check your standings.`, { screen: `/screens/events?id=${eventId}` }, { type: 'event', targetAudience: 'user', targetId: u.deviceId, singleUser: true, groupId: `res_${matchNumber}_${eventId}`, expiresInHours: 6 })
                         );
                         await Promise.all(notifyPromises);
                     } catch (e) { console.error("Match result notification error:", e); }
