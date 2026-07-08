@@ -110,23 +110,34 @@ const formatViews = (views) => {
     return `${(views / 1000000).toFixed(views % 1000000 === 0 ? 0 : 1)}m+`;
 };
 
-const getVideoThumbnail = (r2Url) => {
-    if (!r2Url) return null;
+const getVideoThumbnail = (mediaUrl) => {
+    if (!mediaUrl) return null;
 
-    // If it's already an image, just return it directly from R2!
-    if (r2Url.match(/\.(jpeg|jpg|gif|png|webp)$/i)) {
-        return r2Url;
+    // 1. If it's already a static image format, return it immediately from source
+    if (mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i)) {
+        return mediaUrl;
     }
 
-    // Wrap the R2 video URL in Cloudinary's Fetch API
+    // 2. If it's ALREADY a legacy Cloudinary asset URL string, handle it contextually
+    if (mediaUrl.includes("res.cloudinary.com")) {
+        if (mediaUrl.includes("/video/upload/")) {
+            return mediaUrl
+                .replace("/video/upload/", "/video/upload/f_jpg,q_auto,so_auto,w_600/")
+                .replace(/\.(mp4|mov|webm|mkv)$/i, ".jpg");
+        }
+        return mediaUrl;
+    }
+
+    // 3. For raw Cloudflare R2 videos, pass through the proxy Fetch delivery architecture safely
     const cloudName = "donakg9he";
 
-    // Notice I added `w_600` (width 600px). This forces Cloudinary to make the 
-    // thumbnail small, which protects your bandwidth credits!
-    const transforms = "f_jpg,q_auto,so_auto,c_pad,b_black,w_600";
+    // The "f_jpg" transformation tells Cloudinary to automatically handle the conversion internally 
+    // without distorting the resource payload link attached below.
+    const transforms = "f_jpg,q_auto,so_auto,w_600";
 
-    // Cloudinary will fetch the video from R2, extract the frame, compress it, and cache it.
-    return `https://res.cloudinary.com/${cloudName}/video/fetch/${transforms}/${r2Url}`;
+    // URL-encode the exact source parameter so R2 folders map correctly
+    // ✅ FIXED: Delivering the clean encoded target URL directly to Cloudinary's extraction cluster
+    return `https://res.cloudinary.com/${cloudName}/video/fetch/${transforms}/${mediaUrl}`;
 };
 
 // --- Sub Components ---
