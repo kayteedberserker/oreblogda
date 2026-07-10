@@ -14,7 +14,7 @@ const QuizEventSchema = new mongoose.Schema({
     scheduledStartTime: { type: Date, required: true },
     startedAt: { type: Date, default: null },
     endsAt: { type: Date, default: null },
-    expiresAt: { type: Date, required: true },
+    expiresAt: { type: Date, required: true, index: { expires: 0 } },
 
     acknowledgeCount: { type: Number, default: 0 },
     acknowledgedBy: [{ type: String }],

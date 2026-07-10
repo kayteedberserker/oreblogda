@@ -23,7 +23,7 @@ const TournamentSchema = new mongoose.Schema({
     groupingId: { type: String, default: null, index: true },
 
     // ⚡️ NEW: Master tournament expiration timer
-    expiresAt: { type: Date, required: true },
+    expiresAt: { type: Date, required: true, index: { expires: 0 } },
 
     leaderboardWeights: {
         pointsPerKill: { type: Number, default: 1 },

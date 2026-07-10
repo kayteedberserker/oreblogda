@@ -24,7 +24,7 @@ const ShoutoutEventSchema = new mongoose.Schema({
     expiresAt: {
         type: Date,
         required: true,
-        index: true // Wipes expired shoutouts from database memories instantly
+        index: { expires: 0 }
     },
 
     // 🛰️ Network Check-In / Acknowledge Engine
