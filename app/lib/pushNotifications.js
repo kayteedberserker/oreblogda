@@ -120,8 +120,6 @@ async function sendDirectToFcmV1(token, title, message, data, groupId) {
             }
         };
 
-        console.log(JSON.stringify(payload, null, 2));
-
         const response = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
             method: 'POST',
             headers: {
@@ -132,7 +130,6 @@ async function sendDirectToFcmV1(token, title, message, data, groupId) {
         });
 
         const result = await response.json();
-        console.log("🚀 Direct FCM Custom Router Result:", JSON.stringify(result));
         if (!response.ok) {
             console.error("FCM Error:", JSON.stringify(result, null, 2));
             return null;
@@ -155,16 +152,12 @@ async function sendDirectToFcmV1(token, title, message, data, groupId) {
 export async function sendPushNotification(token, title, message, data = {}, groupId = null) {
     const pushToken = token;
     if (!pushToken) {
-        console.log("🔔 Push Logic: Missing token pointer reference. Skipping.");
         return null;
     }
     // ⚡️ ARCHITECTURAL ROUTER: Handle Native FCM tokens directly
     if (!pushToken.startsWith('ExponentPushToken')) {
-        console.log("⚡️ Routing directly via Google Native FCM V1 Engine...");
         return await sendDirectToFcmV1(pushToken, title, message, data, groupId);
     }
-
-    console.log("⚡️ Routing via Expo Server Gateway Channel...");
     const payload = {
         to: pushToken,
         sound: 'default',
@@ -190,7 +183,6 @@ export async function sendPushNotification(token, title, message, data = {}, gro
         });
 
         const result = await response.json();
-        console.log("✅ Single Expo Push Response:", JSON.stringify(result));
         return result;
     } catch (error) {
         console.error("❌ Single Expo Push Error:", error);
@@ -219,7 +211,6 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
 
     // 1. Process Native FCM batch chunks concurrently
     if (fcmTokens.length > 0) {
-        console.log(`⚡️ Handling ${fcmTokens.length} raw FCM tokens in parallel streams...`);
         fcmTokens.forEach(fcmToken => {
             broadcastPromises.push(sendDirectToFcmV1(fcmToken, title, message, data, groupId));
         });
@@ -227,7 +218,6 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
 
     // 2. Process Expo standard batch arrays
     if (expoTokens.length > 0) {
-        console.log(`⚡️ Chunking ${expoTokens.length} standard Expo tokens...`);
         const CHUNK_SIZE = 100;
         const chunks = [];
 
@@ -260,7 +250,6 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
                     body: JSON.stringify(messages),
                 });
                 const result = await response.json();
-                console.log(`✅ Expo Chunk ${index + 1} Push Response:`, result);
                 return result;
             } catch (error) {
                 console.error(`❌ Expo Chunk ${index + 1} Push Error:`, error);

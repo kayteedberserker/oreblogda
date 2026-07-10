@@ -124,8 +124,6 @@ export async function sendPillParallel(tokens, title, body, data = {}, pillConte
             : sendMultiplePushNotifications(tokens, title, body, data, data.postId || data.clanTag);
     });
 
-    console.log("generating pill message for: ", type, link, "for ", targetAudience, targetId);
-
     // Parallel pill
     await createMessagePill({
         text: pillText,

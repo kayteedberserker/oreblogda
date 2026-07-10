@@ -986,7 +986,7 @@ export async function POST(req) {
             mediaUrl, mediaType,
             media,
             hasPoll,
-            pollMultiple, pollOptions, category, fingerprint, useR2,
+            pollMultiple, pollOptions, category, useR2,
             mediaPending,  // 🌟 Present ONLY in new client builds
             totalFiles     // 🌟 Present ONLY in new client builds
         } = body;
@@ -999,7 +999,7 @@ export async function POST(req) {
             const geo = geoip.lookup(ip);
             country = geo ? geo.country : "Global";
         }
-
+        const fingerprint = req.headers.get("x-user-deviceId") || req.headers.get("x-device-id");
         const clanId = body.clanId || (category?.startsWith("Clan:") ? category.split(":")[2] : null);
         let userDoc = null;
         let isMobile = false;
@@ -1147,17 +1147,15 @@ export async function POST(req) {
  * 🛰️ CENTRALIZED LIFE-CYCLE PROCESSING ENGINE
  * Handles validation, AI evaluation, point distribution, alerts, and publication pipelines.
  */
-export async function finalizeAndPublishPost(postId, isMobile, country, fingerprint) {
+export async function finalizeAndPublishPost(postId, isMobile, country, fingerprint, isEdit = false) {
     const post = await Post.findById(postId);
     if (!post) throw new Error("Target post context not found.");
 
     // 🛡️ IDEMPOTENCY GUARD
-    if (post.status !== "pending_media" && post.status !== "pending" && post.totalFilesExpected > 0) {
+    // If it's an edit, we bypass this guard because the status might already be 'approved' from before
+    if (!isEdit && post.status !== "pending_media" && post.status !== "pending" && post.totalFilesExpected > 0) {
         console.log(`⚠️ Blocked duplicate publishing execution race for Post ID: ${postId}`);
-        return {
-            message: "Post already processed and published via parallel asset pipeline.",
-            post
-        };
+        return { message: "Post already processed and published via parallel asset pipeline.", post };
     }
 
     let userDoc = await userModel.findById(post.authorUserId);
@@ -1172,13 +1170,12 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
 
     if (isMobile) {
         // 🛡️ BACKWARDS COMPATIBILITY: Restore old build inline poll rejection logic 
-        // This ensures old clients don't crash from missing poll requirements and get logged properly.
         if (post.category === "Polls" && (!post.poll || post.poll.options.length < 2)) {
             finalStatus = "rejected";
             rejectionReason = "Polls require a valid configuration with at least 2 options.";
             expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
         } else {
-            // Run standard moderation
+            // Run standard moderation - WE ALWAYS RE-RUN THIS ON EDIT TO CATCH BAD CHANGES
             const ai = await runAIModerator(post.title, post.message, post.clanId, post.category, post.mediaUrl, post.mediaType);
             aiInterests = ai.interests || [];
 
@@ -1198,15 +1195,12 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
 
     // 🛠️ DEDUPLICATION GUARD & ARRAY RE-ORDERING
     if (post.media && post.media.length > 0) {
-        // 🌟 Ensure files are sorted perfectly back to original selection order
         post.media.sort((a, b) => (a.order || 0) - (b.order || 0));
 
         const uniqueUrls = new Set();
         post.media = post.media.filter(item => {
             if (!item || !item.url) return false;
-            if (uniqueUrls.has(item.url)) {
-                return false; // Skip duplicate video/image
-            }
+            if (uniqueUrls.has(item.url)) return false;
             uniqueUrls.add(item.url);
             return true;
         });
@@ -1221,124 +1215,126 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
     let isFirstPost = false;
     let auraStats = null;
 
-    // Gamification & Aura Engine Processing
-    if (finalStatus === "approved" && userDoc) {
-        try {
-            if (userDoc.totalPosts === undefined || userDoc.totalPosts === null) {
-                userDoc.totalPosts = await Post.countDocuments({ authorUserId: userDoc._id, status: "approved" });
-            } else {
-                userDoc.totalPosts += 1;
-            }
-
-            if (userDoc.totalPosts === 1) isFirstPost = true;
-            await checkTitleUnlocks(userDoc, "totalPosts", userDoc.totalPosts);
-
-            const hour = new Date().getHours();
-            if (hour >= 1 && hour <= 4) {
-                const alreadyHasOwl = userDoc.unlockedTitles?.some(t => t.name === "Night Owl");
-                if (!alreadyHasOwl) {
-                    await MobileUser.findByIdAndUpdate(userDoc._id, {
-                        $addToSet: { unlockedTitles: { name: "Night Owl", tier: "COMMON" } }
-                    });
-                }
-            }
-            await userDoc.save();
-
-            const auraReward = isFirstPost ? 50 : 15;
-            const auraResult = await awardAura(userDoc._id, auraReward);
-            if (auraResult && auraResult.newRank) {
-                auraStats = {
-                    earned: auraReward,
-                    currentAura: auraResult.user.aura,
-                    pointsNeeded: Math.max(0, (auraResult.newRank.nextRankReq || 12000) - auraResult.user.aura)
-                };
-            }
-        } catch (auraErr) {
-            console.error("Aura execution fault:", auraErr);
-        }
-    }
-
-    // Clan Statistics Updates
-    if (finalStatus === "approved" && (post.clanId || post.category?.startsWith("Clan:"))) {
-        try {
-            await Clan.findOneAndUpdate({ tag: post.clanId }, { $inc: { 'stats.totalPosts': 1 } });
-            await awardClanPoints(post, 50, 'create');
-        } catch (err) { console.error("Clan processing fault:", err); }
-    }
-
-    // Notifications & Email Broadcast Distributions
-    if (finalStatus === "approved") {
-        if (!isMobile) {
+    // 🌟 ONLY AWARD POINTS AND RUN GAMIFICATION IF IT'S A BRAND NEW POST
+    if (!isEdit) {
+        // Gamification & Aura Engine Processing
+        if (finalStatus === "approved" && userDoc) {
             try {
-                const subscribers = await Newsletter.find({}, "email");
-                if (subscribers.length > 0) {
-                    const transporter = nodemailer.createTransport({
-                        service: "gmail",
-                        auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
-                    });
-                    await transporter.sendMail({
-                        from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
-                        to: "Subscribers",
-                        bcc: subscribers.map(s => s.email),
-                        subject: `📰 New Post from ${userDoc?.username}`,
-                        html: `<h2>${post.title}</h2><p>${post.message.substring(0, 200)}...</p><a href="${process.env.SITE_URL}/post/${post.slug}">Read More</a>`
-                    });
+                if (userDoc.totalPosts === undefined || userDoc.totalPosts === null) {
+                    userDoc.totalPosts = await Post.countDocuments({ authorUserId: userDoc._id, status: "approved" });
+                } else {
+                    userDoc.totalPosts += 1;
                 }
-            } catch (err) { console.error("Newsletter fault:", err); }
 
-            // ⚠️ Note: Make sure your `notifyAllMobileUsersAboutPost` function ALSO pulls `post.mediaUrl` to send global rich notifications
-            try { await notifyAllMobileUsersAboutPost(post, userDoc?.username); } catch (err) { }
+                if (userDoc.totalPosts === 1) isFirstPost = true;
+                await checkTitleUnlocks(userDoc, "totalPosts", userDoc.totalPosts);
+
+                const hour = new Date().getHours();
+                if (hour >= 1 && hour <= 4) {
+                    const alreadyHasOwl = userDoc.unlockedTitles?.some(t => t.name === "Night Owl");
+                    if (!alreadyHasOwl) {
+                        await MobileUser.findByIdAndUpdate(userDoc._id, {
+                            $addToSet: { unlockedTitles: { name: "Night Owl", tier: "COMMON" } }
+                        });
+                    }
+                }
+                await userDoc.save();
+
+                const auraReward = isFirstPost ? 50 : 15;
+                const auraResult = await awardAura(userDoc._id, auraReward);
+                if (auraResult && auraResult.newRank) {
+                    auraStats = {
+                        earned: auraReward,
+                        currentAura: auraResult.user.aura,
+                        pointsNeeded: Math.max(0, (auraResult.newRank.nextRankReq || 12000) - auraResult.user.aura)
+                    };
+                }
+            } catch (auraErr) {
+                console.error("Aura execution fault:", auraErr);
+            }
         }
 
-        if (post.clanId) {
+        // Clan Statistics Updates
+        if (finalStatus === "approved" && (post.clanId || post.category?.startsWith("Clan:"))) {
             try {
-                const clan = await Clan.findOne({ tag: post.clanId }).select("name");
-                const followers = await ClanFollower.find({ clanTag: post.clanId }).populate({ path: 'userId', select: 'pushToken' });
-                const tokens = followers.flatMap(f => {
-                    const token = f.userId?.pushToken;
-                    return token != null ? [token] : [];
-                });
+                await Clan.findOneAndUpdate({ tag: post.clanId }, { $inc: { 'stats.totalPosts': 1 } });
+                await awardClanPoints(post, 50, 'create');
+            } catch (err) { console.error("Clan processing fault:", err); }
+        }
 
+        // Notifications & Email Broadcast Distributions
+        if (finalStatus === "approved") {
+            if (!isMobile) {
+                try {
+                    const subscribers = await Newsletter.find({}, "email");
+                    if (subscribers.length > 0) {
+                        const transporter = nodemailer.createTransport({
+                            service: "gmail",
+                            auth: { user: process.env.MAILEREMAIL, pass: process.env.MAILERPASS },
+                        });
+                        await transporter.sendMail({
+                            from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
+                            to: "Subscribers",
+                            bcc: subscribers.map(s => s.email),
+                            subject: `📰 New Post from ${userDoc?.username}`,
+                            html: `<h2>${post.title}</h2><p>${post.message.substring(0, 200)}...</p><a href="${process.env.SITE_URL}/post/${post.slug}">Read More</a>`
+                        });
+                    }
+                } catch (err) { console.error("Newsletter fault:", err); }
 
-                if (tokens.length > 0) {
-                    await sendPillParallel(
-                        tokens,
-                        `${clan?.name || post.clanId} Transmission 🚩`,
-                        `${userDoc?.username || 'Someone'} posted: ${post.title}`,
-                        {
-                            type: "open_post",
-                            postId: post._id.toString(),
-                            clanTag: post.clanId,
-                            screen: `/post/${post._id.toString()}`,
-                            mediaUrl: post.mediaUrl, // 🌟 INJECTED MEDIA URL FOR CLAN PUSH
-                            authorPfp: userDoc?.profilePic?.url // 🌟 INJECTED AUTHOR PFP
-                        },
-                        {
-                            type: 'clan_post',
-                            targetAudience: 'clan',
-                            targetId: post.clanId,
-                            priority: 3,
-                            link: `/post/${post._id.toString()}`,
-                            expiresInHours: 6
-                        }
-                    );
-                }
-            } catch (err) { console.error("Clan alert fault:", err); }
+                try { await notifyAllMobileUsersAboutPost(post, userDoc?.username); } catch (err) { }
+            }
+
+            if (post.clanId) {
+                try {
+                    const clan = await Clan.findOne({ tag: post.clanId }).select("name");
+                    const followers = await ClanFollower.find({ clanTag: post.clanId }).populate({ path: 'userId', select: 'pushToken' });
+                    const tokens = followers.flatMap(f => {
+                        const token = f.userId?.pushToken;
+                        return token != null ? [token] : [];
+                    });
+
+                    if (tokens.length > 0) {
+                        await sendPillParallel(
+                            tokens,
+                            `${clan?.name || post.clanId} Transmission 🚩`,
+                            `${userDoc?.username || 'Someone'} posted: ${post.title}`,
+                            {
+                                type: "open_post",
+                                postId: post._id.toString(),
+                                clanTag: post.clanId,
+                                screen: `/post/${post._id.toString()}`,
+                                mediaUrl: post.mediaUrl,
+                                authorPfp: userDoc?.profilePic?.url
+                            },
+                            {
+                                type: 'clan_post',
+                                targetAudience: 'clan',
+                                targetId: post.clanId,
+                                priority: 3,
+                                link: `/post/${post._id.toString()}`,
+                                expiresInHours: 6
+                            }
+                        );
+                    }
+                } catch (err) { console.error("Clan alert fault:", err); }
+            }
         }
     }
 
+    // 🌟 WE STILL SEND ADMIN ALERTS AND REJECTION NOTICES EVEN ON EDITS
     if (finalStatus === "pending") {
         const adminTokens = ["cUxM1ev3RBucmAXg7LklVv:APA91bEqsCxOVL9wzS-ag9DRvEJjNBUnhmiZ7hyreQ54mUGxH9x3CraM27SVZuPIyUG4HRx8IODPYGkD24MJqYiNSTKoBVrV19CLMs-ZcUiNa-plrUta6D0",];
         for (const token of adminTokens) {
             try {
                 await sendPushNotification(
                     token,
-                    "New post!",
+                    isEdit ? "Edited post needs review!" : "New post!",
                     "A post is awaiting your approval.",
                     {
                         postId: post._id.toString(),
-                        mediaUrl: post.mediaUrl, // 🌟 INJECTED MEDIA URL FOR ADMIN PUSH
-                        authorPfp: userDoc?.profilePic?.url // 🌟 INJECTED AUTHOR PFP
+                        mediaUrl: post.mediaUrl,
+                        authorPfp: userDoc?.profilePic?.url
                     }
                 );
             } catch (pErr) { }
@@ -1349,7 +1345,7 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
                 from: `"Oreblogda" <${process.env.MAILEREMAIL}>`,
                 to: "Admins",
                 bcc: ["kayteedberserker@gmail.com", "fredrickokwu@gmail.com"],
-                subject: `📰 New Post Awaiting Approval`,
+                subject: isEdit ? `📰 Edited Post Awaiting Approval` : `📰 New Post Awaiting Approval`,
                 html: `View it <a href="${process.env.SITE_URL}/authordiary/approvalpage">here</a>.`
             });
         } catch (err) { }
@@ -1367,8 +1363,8 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
                     reason: rejectionReason,
                     postId: post._id.toString(),
                     screen: "/authordiary",
-                    mediaUrl: post.mediaUrl, // 🌟 INJECTED MEDIA URL FOR REJECTION PUSH
-                    authorPfp: userDoc?.profilePic?.url // 🌟 INJECTED AUTHOR PFP
+                    mediaUrl: post.mediaUrl,
+                    authorPfp: userDoc?.profilePic?.url
                 },
                 {
                     type: 'post_rejection',
@@ -1384,7 +1380,7 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
     }
 
     return {
-        message: finalStatus === "approved" ? "Post created successfully" : finalStatus === "rejected" ? "Post rejected by AI" : "Post submitted for approval",
+        message: finalStatus === "approved" ? (isEdit ? "Post updated successfully" : "Post created successfully") : finalStatus === "rejected" ? "Post rejected by AI" : "Post submitted for approval",
         post,
         isFirstPost,
         auraStats

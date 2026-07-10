@@ -172,12 +172,12 @@ const mobileUserSchema = new mongoose.Schema(
                 explore: { type: sourceStatSchema, default: () => ({}) }
             },
             poolWeights: {
-                fresh: { type: Number, default: 0.20 },
-                author: { type: Number, default: 0.20 },
+                fresh: { type: Number, default: 0.2 },
+                author: { type: Number, default: 0.15 },
                 clan: { type: Number, default: 0.15 },
                 interest: { type: Number, default: 0.20 },
                 trending: { type: Number, default: 0.15 },
-                explore: { type: Number, default: 0.10 }
+                explore: { type: Number, default: 0.15 }
             },
             lastOptimizedAt: { type: Date, default: Date.now }
         },

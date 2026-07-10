@@ -1,20 +1,41 @@
+import { awardAura } from "@/app/lib/auraManager";
 import { awardClanPoints } from "@/app/lib/clanService";
+import { sendPillParallel } from "@/app/lib/messagePillService";
 import connectDB from "@/app/lib/mongodb";
 import MobileUser from "@/app/models/MobileUserModel";
 import Notification from "@/app/models/NotificationModel";
 import Post from "@/app/models/PostModel";
+import StickerModel from "@/app/models/StickerModel";
+import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import mongoose from "mongoose";
 import { NextResponse } from "next/server";
-// ⚡️ Add this import at the top of your file
-import { awardAura } from "@/app/lib/auraManager";
-import { sendPillParallel } from "@/app/lib/messagePillService";
-import StickerModel from "@/app/models/StickerModel";
 
+// 🏗️ Initialize Cloudflare R2 Client Platform Config
+const r2Client = new S3Client({
+    region: "auto",
+    endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    },
+});
 // --- Helper: Milestone Check Logic ---
 const shouldNotifyMilestone = (count) => {
     if (count <= 5) return true;
     if (count <= 50) return count % 10 === 0;
     return count % 50 === 0;
+};
+
+// --- Helper: Find a comment nested anywhere inside the branch trees ---
+const findCommentById = (comments, id) => {
+    for (let c of comments) {
+        if (c._id.toString() === id.toString()) return c;
+        if (c.replies && c.replies.length > 0) {
+            const found = findCommentById(c.replies, id);
+            if (found) return found;
+        }
+    }
+    return null;
 };
 
 // --- Helper: Get all user IDs in a specific comment branch ---
@@ -47,28 +68,22 @@ const populateAuthors = async (comments) => {
 
     extractIds(comments);
 
-    // Fetch only the necessary fields to derive our UI requirements
     const users = await MobileUser.find({ _id: { $in: Array.from(userIds) } })
         .select("username peakLevel lastStreak consecutiveStreak inventory previousRank")
         .lean();
+
     const userMap = users.reduce((acc, user) => {
-        // 1. Get all equipped inventory items
         const equippedItems = user.inventory ? user.inventory.filter(i => i.isEquipped) : [];
-
-        // 2. Derive specific items
-        // Checking a few common categories for glows, adjust if your specific category name is different
         const equippedGlow = equippedItems.find(i => ['GLOW'].includes(i.category?.toUpperCase())) || null;
-
         const badges = equippedItems.filter(i => i.category?.toUpperCase() === 'BADGE') || [];
 
-        // 3. Map to the exact structure the frontend expects
         acc[user._id.toString()] = {
             username: user.username || "Guest",
             name: user.username || "Guest",
             peakLevel: user.peakLevel || 0,
             lastStreak: user.lastStreak || 0,
             streak: user.consecutiveStreak || 0,
-            auraRank: user.previousRank || null, // Mapping previousRank to auraRank
+            auraRank: user.previousRank || null,
             equippedGlow,
             badges
         };
@@ -110,7 +125,6 @@ export async function GET(req, { params }) {
 
         if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
 
-        // Populate and derive authors before sending response
         const populatedComments = await populateAuthors(post.comments);
 
         return NextResponse.json({
@@ -124,7 +138,6 @@ export async function GET(req, { params }) {
     }
 }
 
-// 🏆 Updated Threshold Mapping
 const TITLE_THRESHOLDS = {
     totalCommentsReceived: [
         { limit: 10, name: "Signal Starter", tier: "COMMON" },
@@ -133,15 +146,13 @@ const TITLE_THRESHOLDS = {
         { limit: 10000, name: "The Great Orator", tier: "LEGENDARY" }
     ],
     lifetimeCommentsMade: [
-        { limit: 1, name: "First Response", tier: "COMMON" }, // Special "First Time" title
+        { limit: 1, name: "First Response", tier: "COMMON" },
         { limit: 500, name: "Active Citizen", tier: "RARE" }
     ]
 };
 
-// 🛠 Helper to check and award titles using parallel notification stack
 async function checkTitleUnlocks(user, field, currentCount) {
     const thresholds = TITLE_THRESHOLDS[field];
-
     if (!thresholds) return null;
 
     const earnedTitle = [...thresholds].reverse().find(t => currentCount >= t.limit);
@@ -153,13 +164,8 @@ async function checkTitleUnlocks(user, field, currentCount) {
                 $addToSet: { unlockedTitles: earnedTitle }
             });
 
-            // 🔔 Handle Notifications for Title Unlock
             if (user.pushToken) {
                 const titleMsg = `🏆 NEW TITLE: You have received the "${earnedTitle.name}" TITLE!`;
-
-                // Push Notification
-
-                // UI Pill
                 await sendPillParallel(
                     [user.pushToken],
                     "Title Earned",
@@ -186,14 +192,12 @@ export async function POST(req, { params }) {
 
     try {
         const body = await req.json();
-        // 🌟 FIX: Destructure candidateSources from the incoming request body
-        const { name, text, stickerId, parentCommentId, replyTo, fingerprint, candidateSources = [] } = body;
+        const { name, text, stickerId, imageUrl, parentCommentId, replyToCommentId, fingerprint, candidateSources = [] } = body;
 
-        if (!stickerId && !text?.trim()) {
-            return NextResponse.json({ message: "Comment text or stickerId required" }, { status: 400 });
+        if (!stickerId && !imageUrl && !text?.trim()) {
+            return NextResponse.json({ message: "Comment content required" }, { status: 400 });
         }
 
-        // Identify who is making the comment
         const foundMobileUser = await MobileUser.findOne({ deviceId: fingerprint });
         const mobileUserId = foundMobileUser?._id;
 
@@ -201,50 +205,91 @@ export async function POST(req, { params }) {
         const post = await Post.findOne(searchFilter);
         if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
 
-        // 🌟 NEW: Fetch the actual sticker URL from the database if a sticker was used
         let resolvedStickerUrl = null;
         if (stickerId) {
-            // Build a dynamic query matching layout structure safely to avoid CastErrors
             const queryConditions = [{ stickerId: stickerId }];
-
-            // 🛡️ Only evaluate _id if the incoming identifier passes standard validation lengths
             if (mongoose.Types.ObjectId.isValid(stickerId)) {
                 queryConditions.push({ _id: stickerId });
             }
-
-            const stickerDoc = await StickerModel.findOne({
-                $or: queryConditions
-            });
-
+            const stickerDoc = await StickerModel.findOne({ $or: queryConditions });
             if (stickerDoc && stickerDoc.url) {
                 resolvedStickerUrl = stickerDoc.url;
             }
         }
 
-        // 🧠 AFFINITY & TELEMETRY: +15 for Commenting (High effort interaction)
-        // 🌟 FIX: Now using the unified helper instead of updateUserAffinityByFingerprint
         await processTelemetryAndAffinity(fingerprint, post, candidateSources, 'comment', 15);
 
-        // Truncate post title for notifications (Max 20 chars)
-        const displayTitle = post.title?.length > 20
-            ? `${post.title.substring(0, 20)}...`
-            : post.title || "Post";
+        const displayTitle = post.title?.length > 20 ? `${post.title.substring(0, 20)}...` : post.title || "Post";
+        const commentType = stickerId ? "sticker" : imageUrl ? "image" : "text";
+        const commentText = (stickerId || imageUrl) ? "" : (text || "");
 
-        const commentType = stickerId ? "sticker" : "text";
-        const commentText = stickerId ? "" : (text || "");
+        // Pre-generate unique Comment ID to bind natively to R2 Object Keys safely
+        const commentMongoId = new mongoose.Types.ObjectId();
+        let uploadedImageUrl = imageUrl || null;
+
+        // 🟢 Stream Upload Sequence to Cloudflare R2 Storage Bucket 
+        if (imageUrl) {
+            let bodyBuffer;
+            let contentType = "image/jpeg";
+
+            if (imageUrl.startsWith("data:image")) {
+                // Parse standard incoming Base64 Data-URI Strings smoothly
+                const matches = imageUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+                if (matches && matches.length === 3) {
+                    contentType = matches[1];
+                    bodyBuffer = Buffer.from(matches[2], "base64");
+                }
+            } else if (imageUrl.startsWith("http")) {
+                // Fallback process for pre-resolved temporary server caching targets
+                try {
+                    const response = await fetch(imageUrl);
+                    const arrayBuffer = await response.arrayBuffer();
+                    bodyBuffer = Buffer.from(arrayBuffer);
+                    contentType = response.headers.get("content-type") || "image/jpeg";
+                } catch (fetchErr) {
+                    console.error("Error pulling remote media layer stream: ", fetchErr);
+                }
+            }
+
+            if (bodyBuffer) {
+                const ext = contentType.split("/")[1] || "jpeg";
+                const r2Key = `comments/${id}/${commentMongoId}.${ext}`;
+
+                await r2Client.send(new PutObjectCommand({
+                    Bucket: process.env.R2_BUCKET_NAME,
+                    Key: r2Key,
+                    Body: bodyBuffer,
+                    ContentType: contentType
+                }));
+
+                const domain = process.env.NEW_DOMAIN || "https://media.oreblogda.com";
+                uploadedImageUrl = `${domain}/${r2Key}`;
+            }
+        }
 
         const newComment = {
-            _id: new mongoose.Types.ObjectId(),
+            _id: commentMongoId,
             authorFingerprint: fingerprint,
             authorUserId: mobileUserId,
             name,
             text: commentText,
             stickerId: stickerId || null,
+            imageUrl: uploadedImageUrl, // 🌟 Syncing the updated verified R2 storage link location
             type: commentType,
-            replyTo: replyTo || null,
             date: new Date(),
+            isEdited: false,
             replies: []
         };
+
+        // 🌟 NESTED SWIPE METADATA SYNCHRONIZATION
+        if (parentCommentId && replyToCommentId) {
+            const matchedTarget = findCommentById(post.comments, replyToCommentId);
+            if (matchedTarget) {
+                newComment.replyToCommentId = replyToCommentId;
+                newComment.replyToName = matchedTarget.author?.username || matchedTarget.name || 'Anonymous';
+                newComment.replyToText = matchedTarget.type === 'sticker' ? '[Sticker]' : matchedTarget.imageUrl ? '[Image]' : matchedTarget.text;
+            }
+        }
 
         let targetRootComment = null;
         let immediateRecipientId = null;
@@ -264,7 +309,6 @@ export async function POST(req, { params }) {
             }
         };
 
-        // ⚡️ RULE 1: TOP-LEVEL COMMENT AURA & STATS
         if (!parentCommentId) {
             post.comments.unshift(newComment);
             immediateRecipientId = post.authorUserId;
@@ -273,20 +317,16 @@ export async function POST(req, { params }) {
                 await awardAura(post.authorUserId, 10);
                 await awardClanPoints(post, 20, 'comment');
 
-                // 🏆 TITLE LOGIC: Increment Recipient's stats and check unlock
                 const postAuthor = await MobileUser.findByIdAndUpdate(
                     post.authorUserId,
                     { $inc: { receivedCommentsCount: 1 } },
                     { new: true }
                 );
-
                 if (postAuthor) {
                     await checkTitleUnlocks(postAuthor, "totalCommentsReceived", postAuthor.receivedCommentsCount);
                 }
             }
-        }
-        // ⚡️ RULE 2: REPLY AURA & STATS
-        else {
+        } else {
             immediateRecipientId = findAndReply(post.comments);
             if (!immediateRecipientId) return NextResponse.json({ message: "Signal lost" }, { status: 404 });
             post.markModified("comments");
@@ -295,27 +335,23 @@ export async function POST(req, { params }) {
                 await awardAura(immediateRecipientId, 5);
                 await awardClanPoints(post, 10, 'comment');
 
-                // 🏆 TITLE LOGIC: Increment Parent Author's stats and check unlock
                 const parentAuthor = await MobileUser.findByIdAndUpdate(
                     immediateRecipientId,
                     { $inc: { receivedCommentsCount: 1 } },
                     { new: true }
                 );
-
                 if (parentAuthor) {
                     await checkTitleUnlocks(parentAuthor, "totalCommentsReceived", parentAuthor.receivedCommentsCount);
                 }
             }
         }
 
-        // 🏆 TITLE LOGIC: Increment Commenter's lifetime stats and check unlock
         if (mobileUserId) {
             const updatedCommenter = await MobileUser.findByIdAndUpdate(
                 mobileUserId,
                 { $inc: { lifetimeCommentsCount: 1 } },
                 { new: true }
             );
-
             if (updatedCommenter) {
                 await checkTitleUnlocks(updatedCommenter, "lifetimeCommentsMade", updatedCommenter.lifetimeCommentsCount);
             }
@@ -324,14 +360,11 @@ export async function POST(req, { params }) {
         await post.save();
         const notifications = [];
 
-        // --- NOTIFICATION LOGIC ---
         if (parentCommentId && immediateRecipientId?.toString() !== mobileUserId?.toString()) {
             notifications.push({
                 recipientId: immediateRecipientId,
                 title: "New Reply 💬",
-                message: stickerId
-                    ? `${name} sent a sticker on "${displayTitle}"`
-                    : `${name} on "${displayTitle}": "${text?.substring(0, 20)}..."`,
+                message: stickerId ? `${name} sent a sticker on "${displayTitle}"` : uploadedImageUrl ? `${name} shared an image on "${displayTitle}"` : `${name} on "${displayTitle}": "${text?.substring(0, 20)}..."`,
                 type: "reply",
                 commentId: targetRootComment?._id || parentCommentId,
                 isMongoId: true
@@ -342,16 +375,13 @@ export async function POST(req, { params }) {
             notifications.push({
                 recipientId: post.authorUserId,
                 title: "New Signal 📝",
-                message: stickerId
-                    ? `${name} sent a sticker on "${displayTitle}"`
-                    : `${name} commented on "${displayTitle}" (#${post.comments.length})`,
+                message: stickerId ? `${name} sent a sticker on "${displayTitle}"` : uploadedImageUrl ? `${name} shared an image on "${displayTitle}"` : `${name} commented on "${displayTitle}" (#${post.comments.length})`,
                 type: "comment",
                 commentId: newComment._id,
                 isMongoId: true
             });
         }
 
-        // ⚡️ RULE 3: THE DISCUSSION MULTIPLIER (Every 5 Replies)
         if (parentCommentId && targetRootComment) {
             const { participants, totalMessages } = getBranchData(targetRootComment);
 
@@ -361,7 +391,6 @@ export async function POST(req, { params }) {
                 if (mobileUserId) rewardIds.delete(mobileUserId.toString());
 
                 const idsToReward = Array.from(rewardIds);
-
                 if (idsToReward.length > 0) {
                     await Promise.all(idsToReward.map(id => awardAura(id, 1)));
                     await awardClanPoints(post, 5, 'comment');
@@ -390,7 +419,6 @@ export async function POST(req, { params }) {
             const user = await MobileUser.findOne(query);
 
             if (user) {
-                // Create the record in your database
                 await Notification.create({
                     recipientId: user.deviceId,
                     senderName: name,
@@ -399,21 +427,16 @@ export async function POST(req, { params }) {
                     message: n.message
                 });
 
-                // Send the Rich Notification
                 if (user.pushToken) {
-                    const tokens = [user.pushToken];
-                    const groupId = `${n.type}_${post._id}`;
-
                     await sendPillParallel(
-                        tokens,
+                        [user.pushToken],
                         n.title,
                         n.message,
                         {
                             postId: post._id.toString(),
                             type: n.type,
                             commentId: n.commentId?.toString(),
-                            // 🌟 FIXED: We inject the successfully queried Sticker URL here, falling back to the post image if no sticker exists
-                            mediaUrl: resolvedStickerUrl ? resolvedStickerUrl : post.mediaUrl,
+                            mediaUrl: resolvedStickerUrl ? resolvedStickerUrl : uploadedImageUrl ? uploadedImageUrl : post.mediaUrl,
                             authorPfp: foundMobileUser?.profilePic?.url
                         },
                         {
@@ -429,7 +452,6 @@ export async function POST(req, { params }) {
             }
         }));
 
-        // Prepare response data with enriched profile info
         let enrichedAuthor = { name: newComment.name };
         const latestSender = await MobileUser.findOne({ deviceId: fingerprint });
 
@@ -447,6 +469,7 @@ export async function POST(req, { params }) {
             };
         }
 
+        // Map parameters to return the accurate state back to the UI context smoothly
         const enrichedNewComment = {
             ...newComment,
             author: enrichedAuthor
@@ -456,6 +479,143 @@ export async function POST(req, { params }) {
     } catch (err) {
         console.error("POST error:", err);
         return NextResponse.json({ message: "Error", error: err.message }, { status: 500 });
+    }
+}
+
+// 🌟 NEW: DELETE Route for Removing Comments (Reads id from URL search parameters)
+export async function DELETE(req, { params }) {
+    await connectDB();
+    const { id } = await params;
+    const { searchParams } = new URL(req.url);
+    const commentId = searchParams.get("id");
+
+    try {
+        if (!commentId) {
+            return NextResponse.json({ message: "Missing commentId query param" }, { status: 400 });
+        }
+
+        // Extract verification details securely out of request headers
+        const fingerprint = req.headers.get("x-user-deviceId") || req.headers.get("x-device-id");
+        const foundMobileUser = fingerprint ? await MobileUser.findOne({ deviceId: fingerprint }) : null;
+        const mobileUserId = foundMobileUser?._id;
+
+        const searchFilter = id.includes("-") ? { slug: id } : { _id: id };
+        const post = await Post.findOne(searchFilter);
+        if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
+
+        let deleted = false;
+        let imageToDeleteUrl = null;
+
+        const deleteComment = (comments) => {
+            for (let i = 0; i < comments.length; i++) {
+                if (comments[i]._id.toString() === commentId) {
+                    const isOwner =
+                        (fingerprint && comments[i].authorFingerprint === fingerprint) ||
+                        (mobileUserId && comments[i].authorUserId?.toString() === mobileUserId.toString());
+
+                    if (!isOwner) {
+                        throw new Error("Unauthorized");
+                    }
+
+                    // 📸 Cache the storage reference URL securely right before array splice occurs
+                    if (comments[i].imageUrl) {
+                        imageToDeleteUrl = comments[i].imageUrl;
+                    }
+
+                    comments.splice(i, 1);
+                    deleted = true;
+                    return;
+                }
+                if (comments[i].replies && comments[i].replies.length > 0) {
+                    deleteComment(comments[i].replies);
+                }
+            }
+        };
+
+        try {
+            deleteComment(post.comments);
+        } catch (err) {
+            if (err.message === "Unauthorized") {
+                return NextResponse.json({ message: "Unauthorized: You can only delete your own comments" }, { status: 403 });
+            }
+        }
+
+        if (!deleted) return NextResponse.json({ message: "Comment not found" }, { status: 404 });
+
+        post.markModified("comments");
+        await post.save();
+
+        // 🗑️ Purge asset out from Cloudflare R2 bucket interface targets asynchronously
+        if (imageToDeleteUrl) {
+            try {
+                const domain = process.env.NEW_DOMAIN || "https://media.oreblogda.com";
+                if (imageToDeleteUrl.includes(domain)) {
+                    const r2Key = imageToDeleteUrl.split(`${domain}/`)[1];
+                    if (r2Key) {
+                        await r2Client.send(new DeleteObjectCommand({
+                            Bucket: process.env.R2_BUCKET_NAME,
+                            Key: r2Key
+                        }));
+                    }
+                }
+            } catch (r2DelErr) {
+                console.error("Failed to drop deleted comment media asset from Cloudflare R2:", r2DelErr);
+            }
+        }
+
+        return NextResponse.json({ message: "Comment deleted successfully" }, { status: 200 });
+    } catch (err) {
+        console.error("DELETE error:", err);
+        return NextResponse.json({ message: "Server error", error: err.message }, { status: 500 });
+    }
+}
+
+// 🌟 NEW: PATCH Route for Editing Comments (Reads id from URL search parameters)
+export async function PATCH(req, { params }) {
+    await connectDB();
+    const { id } = await params;
+    const { searchParams } = new URL(req.url);
+    const commentId = searchParams.get("id");
+
+    try {
+        const body = await req.json();
+        const { text } = body;
+
+        if (!commentId || !text?.trim()) {
+            return NextResponse.json({ message: "Missing commentId or updated text" }, { status: 400 });
+        }
+
+        // Extract credentials securely out of headers since the frontend body only yields { text }
+        const fingerprint = req.headers.get("x-user-deviceId") || req.headers.get("x-device-id");
+        const foundMobileUser = fingerprint ? await MobileUser.findOne({ deviceId: fingerprint }) : null;
+        const mobileUserId = foundMobileUser?._id;
+
+        const searchFilter = id.includes("-") ? { slug: id } : { _id: id };
+        const post = await Post.findOne(searchFilter);
+        if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
+
+        const targetComment = findCommentById(post.comments, commentId);
+        if (!targetComment) return NextResponse.json({ message: "Comment not found" }, { status: 404 });
+
+        // 🛡️ SERVER-SIDE SECURITY CHECK: Validate Ownership
+        const isOwner =
+            (fingerprint && targetComment.authorFingerprint === fingerprint) ||
+            (mobileUserId && targetComment.authorUserId?.toString() === mobileUserId.toString());
+
+        if (!isOwner) {
+            return NextResponse.json({ message: "Unauthorized: You can only edit your own comments" }, { status: 403 });
+        }
+
+        targetComment.text = text;
+        targetComment.isEdited = true;
+
+        post.markModified("comments");
+        await post.save();
+
+        return NextResponse.json({ message: "Comment updated successfully", comment: targetComment }, { status: 200 });
+    } catch (err) {
+        console.error("PATCH error:", err);
+        return NextResponse.json({ message: "Server error", error: err.message }, { status: 500 });
     }
 }
 
