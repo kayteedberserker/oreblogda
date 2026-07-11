@@ -1,24 +1,37 @@
-// app/robots.txt/route.js
-
 export async function GET() {
-  return new Response(
-    `User-agent: *
-Allow: /
-Allow: /categories/news
-Allow: /categories/memes 
-Allow: /categories/videos-edits
-Allow: /categories/gaming
-Allow: /categories/review
-Allow: /categories/polls
-Disallow: /authordiary
+    return new Response(
+        `# Block aggressive AI scrapers and scrapers completely
+User-agent: GPTBot
+Disallow: /
+
+User-agent: ClaudeBot
+Disallow: /
+
+User-agent: Applebot-Extended
+Disallow: /
+
+User-agent: CCBot
+Disallow: /
+
+User-agent: PerplexityBot
+Disallow: /
+
+User-agent: Omgilibot
+Disallow: /
+
+# Rules for SEO Search Engines (Google, Bing, etc.)
+User-agent: *
+Disallow: /api/
+Disallow: /authordiary/
 Disallow: /authordiary/profile
 
 Sitemap: https://oreblogda.com/sitemap.xml
 `,
-    {
-      headers: {
-        "Content-Type": "text/plain",
-      },
-    }
-  );
+        {
+            headers: {
+                "Content-Type": "text/plain",
+                "Cache-Control": "public, max-age=86400, must-revalidate",
+            },
+        }
+    );
 }

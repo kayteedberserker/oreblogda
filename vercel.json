@@ -4,5 +4,16 @@
       "path": "/api/cron/master-handler",
       "schedule": "0 23 * * *"
     }
+  ],
+  "headers": [
+    {
+      "source": "/api/cron/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "https://oreblogda.com"
+        }
+      ]
+    }
   ]
 }
