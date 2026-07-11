@@ -599,8 +599,10 @@ async function processTelemetryAndAffinity(fingerprint, post, candidateSources, 
     }
 }
 
+import Report from "@/app/models/ReportModel";
+
 // ----------------------
-// PATCH: Handle Likes, Views, Shares, Votes
+// PATCH: Handle Likes, Views, Shares, Votes, Reports
 // ----------------------
 export async function PATCH(req, { params }) {
     await connectDB();
@@ -609,10 +611,54 @@ export async function PATCH(req, { params }) {
 
     try {
         const body = await req.json();
-        const { action, payload, fingerprint, candidateSources = [] } = body;
+        const { action, payload, candidateSources = [] } = body;
         console.log(candidateSources, "is the candidate source")
+        const fingerprint = req.headers.get("x-user-deviceId") || req.headers.get("x-device-id");
         const ip = getClientIp(req);
         const isBot = await isBotRequest(req, ip);
+
+        if (action === "report") {
+            console.log("tried to report")
+            const { reason } = payload || {};
+            if (!reason) return addCorsHeaders(NextResponse.json({ message: "Report reason is required" }, { status: 400 }));
+
+            const post = await Post.findById(id);
+            if (!post) return addCorsHeaders(NextResponse.json({ message: "Post not found" }, { status: 404 }));
+
+            // Prevent duplicate reports from the same device
+            if (post.reportedBy && post.reportedBy.includes(fingerprint)) {
+                return addCorsHeaders(NextResponse.json({ message: "You have already reported this transmission." }, { status: 400 }));
+            }
+
+            // 1. Log the report for admin review
+            try {
+                await Report.create({
+                    targetId: id,
+                    targetType: "post",
+                    reporterFingerprint: fingerprint,
+                    reason: reason
+                });
+            } catch (err) {
+                // If it fails due to a unique index duplicate (just in case), ignore and continue suppressing
+            }
+
+            // 2. Update Post metrics
+            const updatedPost = await Post.findByIdAndUpdate(
+                id,
+                {
+                    $inc: { reportCount: 1 },
+                    $push: { reportedBy: fingerprint }
+                },
+                { new: true }
+            );
+
+            // 3. Telemetry Impact: Hit the post with a massive negative affinity so the algorithm buries it for them
+            if (updatedPost && fingerprint && !isBot) {
+                processTelemetryAndAffinity(fingerprint, updatedPost, candidateSources, "report", -150);
+            }
+
+            return addCorsHeaders(NextResponse.json({ message: "Report submitted successfully." }, { status: 200 }));
+        }
 
         if (action === "vote") {
             const { selectedOptions } = payload;

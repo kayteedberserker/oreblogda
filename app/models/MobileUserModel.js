@@ -237,7 +237,17 @@ const mobileUserSchema = new mongoose.Schema(
             }
         ],
         coffeeCount: { type: Number, default: 0 },
-
+        // Add this field somewhere inside your mobileUserSchema fields list:
+        blockedUsers: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "MobileUsers",
+            index: true
+        }],
+        blockedClans: [{
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "Clans",
+            index: true
+        }],
         // --- 🔗 REFERRAL SYSTEM ---
         referralCode: { type: String, unique: true, sparse: true },
         doubleStreakUntil: { type: Date, default: null },

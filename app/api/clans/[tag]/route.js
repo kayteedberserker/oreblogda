@@ -20,6 +20,7 @@ export async function GET(req, { params }) {
     await connectDB();
     const _registerUser = MobileUser.modelName;
     const { tag } = await params;
+
     const { searchParams } = new URL(req.url);
     const deviceId = searchParams.get("deviceId");
 
@@ -34,11 +35,16 @@ export async function GET(req, { params }) {
 
         const user = deviceId ? await MobileUser.findOne({ deviceId }) : null;
         const rank = getRankDetails(clan.totalPoints || 0);
-        console.log(rank, clan.totalPoints);
 
+        // ⚡️ NEW: Check if the requesting user has blocked this clan
+        let hasBlockedClan = false;
+        if (user && user.blockedClans) {
+            hasBlockedClan = user.blockedClans.some(
+                (blockedId) => blockedId.toString() === clan._id.toString()
+            );
+        }
 
         const responseData = clan.toObject();
-        console.log(responseData?.rank)
         const isAdmin = clan.leader?._id.toString() === user?._id.toString() ||
             clan.viceLeader?._id.toString() === user?._id.toString();
 
@@ -48,6 +54,7 @@ export async function GET(req, { params }) {
             nextThreshold: rank.next,
             rankColor: rank.color,
             isAdmin,
+            hasBlockedClan, // ⚡️ Passed to the frontend
             role: clan.leader?._id.toString() === user?._id.toString() ? "leader" :
                 (clan.viceLeader?._id.toString() === user?._id.toString() ? "viceLeader" : "member")
         });

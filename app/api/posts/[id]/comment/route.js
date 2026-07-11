@@ -5,6 +5,7 @@ import connectDB from "@/app/lib/mongodb";
 import MobileUser from "@/app/models/MobileUserModel";
 import Notification from "@/app/models/NotificationModel";
 import Post from "@/app/models/PostModel";
+import Report from "@/app/models/ReportModel";
 import StickerModel from "@/app/models/StickerModel";
 import { DeleteObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import mongoose from "mongoose";
@@ -104,6 +105,41 @@ const populateAuthors = async (comments) => {
     return attach(comments);
 };
 
+function processAndSortComments(commentsArray) {
+    if (!commentsArray || commentsArray.length === 0) return [];
+
+    return commentsArray.map(comment => {
+        // Create a shallow clone to avoid modifying the Mongoose object directly
+        let processed = { ...comment };
+
+        // 🛡️ Safety Masking: Strip content if marked as hidden by moderation
+        if (processed.isHidden) {
+            processed.text = "[This comment has been hidden pending admin moderation review.]";
+            processed.imageUrl = null;
+            processed.stickerId = null;
+        }
+
+        // Recursively handle nested sub-replies array if it exists
+        if (processed.replies && processed.replies.length > 0) {
+            processed.replies = processAndSortComments(processed.replies);
+        }
+
+        return processed;
+    }).sort((a, b) => {
+        // 📈 Sort: Highest number of total replies brings the discussion to the top.
+        // If reply counts are identical, it falls back to the newest timestamp.
+        const aRepliesCount = a.replies ? a.replies.length : 0;
+        const bRepliesCount = b.replies ? b.replies.length : 0;
+
+        if (bRepliesCount !== aRepliesCount) {
+            return bRepliesCount - aRepliesCount;
+        }
+
+        return new Date(b.date) - new Date(a.date);
+    });
+}
+
+// 🌟 UPDATED: GET Route for Fetching Sorted and Sanitized Post Comments
 export async function GET(req, { params }) {
     const { id } = await params;
     const { searchParams } = new URL(req.url);
@@ -116,6 +152,7 @@ export async function GET(req, { params }) {
         await connectDB();
         const searchFilter = id.includes("-") ? { slug: id } : { _id: id };
 
+        // Slicing out the root comments chunk directly via database query
         const post = await Post.findOne(searchFilter)
             .select({
                 comments: { $slice: [skip, limit] },
@@ -125,10 +162,14 @@ export async function GET(req, { params }) {
 
         if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
 
+        // Populate author information across the array slice
         const populatedComments = await populateAuthors(post.comments);
 
+        // ⚡ Process safety parameters and sort top discussions to the surface
+        const finalComments = processAndSortComments(populatedComments);
+
         return NextResponse.json({
-            comments: populatedComments,
+            comments: finalComments,
             total: post.commentCount,
             hasMore: skip + post.comments.length < post.commentCount
         });
@@ -570,22 +611,37 @@ export async function DELETE(req, { params }) {
     }
 }
 
-// 🌟 NEW: PATCH Route for Editing Comments (Reads id from URL search parameters)
+// Helper function to recursively find a comment or sub-comment within the array hierarchy
+function findCommentByIdPatch(commentsArray, targetId) {
+    for (const comment of commentsArray) {
+        if (comment._id?.toString() === targetId.toString()) {
+            return comment;
+        }
+        if (comment.replies && comment.replies.length > 0) {
+            const found = findCommentByIdPatch(comment.replies, targetId);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+// 🌟 UPDATED: PATCH Route for Editing and Reporting Comments (Preserves original data via isHidden flag)
 export async function PATCH(req, { params }) {
     await connectDB();
     const { id } = await params;
+    const targetPostId = id
     const { searchParams } = new URL(req.url);
     const commentId = searchParams.get("id");
 
     try {
         const body = await req.json();
-        const { text } = body;
+        const { action, text, reason } = body;
 
-        if (!commentId || !text?.trim()) {
-            return NextResponse.json({ message: "Missing commentId or updated text" }, { status: 400 });
+        if (!commentId) {
+            return NextResponse.json({ message: "Missing commentId" }, { status: 400 });
         }
 
-        // Extract credentials securely out of headers since the frontend body only yields { text }
+        // Extract credentials securely out of headers
         const fingerprint = req.headers.get("x-user-deviceId") || req.headers.get("x-device-id");
         const foundMobileUser = fingerprint ? await MobileUser.findOne({ deviceId: fingerprint }) : null;
         const mobileUserId = foundMobileUser?._id;
@@ -594,8 +650,74 @@ export async function PATCH(req, { params }) {
         const post = await Post.findOne(searchFilter);
         if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
 
-        const targetComment = findCommentById(post.comments, commentId);
+        const targetComment = findCommentByIdPatch(post.comments, commentId);
         if (!targetComment) return NextResponse.json({ message: "Comment not found" }, { status: 404 });
+
+        // ------------------------------------------------------------------
+        // ACTION: REPORT COMMENT
+        // ------------------------------------------------------------------
+        if (action === "report") {
+            if (!reason?.trim()) {
+                return NextResponse.json({ message: "Report reason is required" }, { status: 400 });
+            }
+
+            // Initialize safety tracking parameters if they don't exist yet
+            if (targetComment.reportCount === undefined) targetComment.reportCount = 0;
+            if (!targetComment.reportedBy) targetComment.reportedBy = [];
+            if (targetComment.isHidden === undefined) targetComment.isHidden = false;
+
+            // Prevent duplicate reporting from the same device
+            if (fingerprint && targetComment.reportedBy.includes(fingerprint)) {
+                return NextResponse.json({ message: "You have already reported this comment." }, { status: 400 });
+            }
+
+            // 1. Log the report entry for the admin review ledger (saves content context safely)
+            try {
+                await Report.create({
+                    targetId: commentId,
+                    targetPostId: targetPostId,
+                    targetType: "comment",
+                    reporterFingerprint: fingerprint || "Unknown",
+                    reporterUserId: mobileUserId || null,
+                    reason: reason
+                });
+            } catch (err) {
+                // Ignore structural duplicates across logs to avoid operation bottlenecks
+                console.log(err)
+            }
+
+            // 2. Adjust target parameters
+            targetComment.reportCount += 1;
+            if (fingerprint) targetComment.reportedBy.push(fingerprint);
+
+            // 3. Automated Threshold Trigger: Flip flag instead of destroying original content
+            if (targetComment.reportCount >= 10) {
+                targetComment.isHidden = true;
+            }
+
+            post.markModified("comments");
+            await post.save();
+
+            // Return safe clone or structural transformation layout to user client
+            const safetyResponse = { ...targetComment };
+            if (safetyResponse.isHidden) {
+                safetyResponse.text = "[This comment has been hidden pending admin moderation review.]";
+                safetyResponse.imageUrl = null;
+                safetyResponse.stickerId = null;
+            }
+
+            return NextResponse.json({
+                message: "Comment reported successfully.",
+                comment: safetyResponse
+            }, { status: 200 });
+        }
+
+        // ------------------------------------------------------------------
+        // DEFAULT ACTION: EDIT COMMENT
+        // ------------------------------------------------------------------
+        if (!text?.trim()) {
+            return NextResponse.json({ message: "Updated text is required for modifications" }, { status: 400 });
+        }
 
         // 🛡️ SERVER-SIDE SECURITY CHECK: Validate Ownership
         const isOwner =
@@ -613,6 +735,7 @@ export async function PATCH(req, { params }) {
         await post.save();
 
         return NextResponse.json({ message: "Comment updated successfully", comment: targetComment }, { status: 200 });
+
     } catch (err) {
         console.error("PATCH error:", err);
         return NextResponse.json({ message: "Server error", error: err.message }, { status: 500 });

@@ -1,12 +1,35 @@
 "use client";
 
 import { motion } from "framer-motion";
-import dynamic from 'next/dynamic';
 import { useMemo, useState } from "react";
 
-// ⚡️ Dynamically import Lottie for Next.js to prevent SSR issues
-const Lottie = dynamic(() => import('lottie-react'), { ssr: false });
+const getImageOptimizedUrl = (mediaUrl) => {
+    if (!mediaUrl) return null;
 
+    // 1. If it's a video format, bypass image optimization to prevent asset breakage
+    if (mediaUrl.match(/\.(mp4|mov|webm|mkv)$/i)) {
+        return mediaUrl;
+    }
+
+    // 2. If it's ALREADY an absolute Cloudinary upload URL string
+    if (mediaUrl.includes("res.cloudinary.com")) {
+        if (mediaUrl.includes("/image/upload/")) {
+            return mediaUrl.replace("/image/upload/", "/image/upload/f_auto,q_auto,w_800/");
+        }
+        // If it's a raw fetch path already, return as-is
+        return mediaUrl;
+    }
+
+    // 3. For raw third-party/Cloudflare R2 images via Fetch API
+    const cloudName = "donakg9he";
+
+    // f_auto: delivers webp/avif automatically
+    // q_auto: heavily optimizes byte size
+    // w_800: caps the resolution boundary for standard responsive layout feeds
+    const transforms = "f_auto,q_auto,w_800";
+
+    return `https://res.cloudinary.com/${cloudName}/image/fetch/${transforms}/${encodeURIComponent(mediaUrl)}`;
+};
 export default function AuraAvatar({
     author,
     aura,
@@ -26,14 +49,11 @@ export default function AuraAvatar({
         return author?.inventory?.find(i => i.category === 'AVATAR_VFX' && i.isEquipped);
     }, [author?.inventory]);
 
-    const vfxUrl = equippedVfx?.visualConfig?.lottieUrl || null;
-
-    // --- CHECK FOR PREMIUM AVATAR (Lottie or SVG) ---
+    // --- CHECK FOR PREMIUM AVATAR (SVG) ---
     const equippedAnimatedAvatar = useMemo(() => {
         return author?.inventory?.find(i => i.category === 'AVATAR' && i.isEquipped);
     }, [author?.inventory]);
 
-    const animatedAvatarUrl = equippedAnimatedAvatar?.visualConfig?.lottieUrl || null;
     const rawSvgAvatarCode = equippedAnimatedAvatar?.visualConfig?.svgCode || null;
 
     // --- STATIC SHAPES BASED ON RANK ---
@@ -59,15 +79,6 @@ export default function AuraAvatar({
     const vfxHeight = vfxBaseDim * vfxScale;
     const offsetY = (equippedVfx?.visualConfig?.offsetY || 0) * sizeRatio;
 
-    // Lottie fetching state
-    const [vfxData, setVfxData] = useState(null);
-    const [avatarData, setAvatarData] = useState(null);
-
-    // Fetch Lottie JSONs if they exist
-    useMemo(() => {
-        if (vfxUrl) fetch(vfxUrl).then(r => r.json()).then(setVfxData).catch(() => { });
-        if (animatedAvatarUrl) fetch(animatedAvatarUrl).then(r => r.json()).then(setAvatarData).catch(() => { });
-    }, [vfxUrl, animatedAvatarUrl]);
 
     return (
         <button
@@ -145,31 +156,7 @@ export default function AuraAvatar({
                 </>
             )}
 
-            {/* ⚡️ FIXED: PERFECTLY ANCHORED & SCALED LOTTIE VFX LAYER */}
-            {vfxData && (
-                <div
-                    style={{
-                        position: 'absolute',
-                        width: vfxWidth,
-                        height: vfxHeight,
-                        top: (containerSize - vfxHeight) / 2 + offsetY,
-                        left: (containerSize - vfxWidth) / 2,
-                        zIndex: 10,
-                        pointerEvents: 'none',
-                        overflow: 'visible',
-                        transform: `scale(${equippedVfx?.visualConfig?.zoom || 1})`
-                    }}
-                >
-                    <Lottie
-                        animationData={vfxData}
-                        loop={true}
-                        style={{ width: '100%', height: '100%' }}
-                        className={equippedVfx?.visualConfig?.applyThemeColor ? 'hue-rotate-15' : ''}
-                    />
-                </div>
-            )}
-
-            {/* 👤 THE AVATAR IMAGE, LOTTIE, OR SVG */}
+            {/* 👤 THE AVATAR IMAGE, OR SVG */}
             <motion.div
                 className="bg-gray-100 dark:bg-[#111]"
                 style={{
@@ -184,17 +171,8 @@ export default function AuraAvatar({
                 animate={hasPremiumAura ? { y: [0, -3, 0] } : {}}
                 transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
             >
-                {/* ⚡️ CHECK 1: Is it an Animated Lottie Avatar? */}
-                {avatarData ? (
-                    <div style={rank === 1 ? { transform: 'rotate(-45deg) scale(1.4)', width: '100%', height: '100%' } : { width: '100%', height: '100%' }}>
-                        <Lottie
-                            animationData={avatarData}
-                            loop={true}
-                            style={{ width: '100%', height: '100%' }}
-                        />
-                    </div>
-
-                ) : rawSvgAvatarCode ? (
+                {/* ⚡️ CHECK 1: Is it an Animated Avatar? */}
+                {rawSvgAvatarCode ? (
                     // ⚡️ Native Tailwind SVG Theming: "text-black dark:text-white" forces "currentColor" inside the SVG to automatically adapt!
                     <div
                         className="w-full h-full flex items-center justify-center text-black dark:text-white"
@@ -207,7 +185,7 @@ export default function AuraAvatar({
                 ) : author?.image ? (
                     <>
                         <img
-                            src={author.image}
+                            src={getImageOptimizedUrl(author.image)}
                             alt={author.name}
                             style={{
                                 width: '100%', height: '100%', objectFit: 'cover',

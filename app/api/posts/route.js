@@ -43,7 +43,6 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
     // =========================================================
     // 📥 STEP 1: FETCH MEDIA ONCE FOR BOTH PIPELINES
     // =========================================================
-    // We fetch the media stream here so we don't have to download it twice if both pipelines run
     let mediaBase64 = null;
     let mediaMime = null;
 
@@ -53,7 +52,6 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
 
         if (isVideo || isImage) {
             let mediaRes = null;
-            // 2 fast attempts with a 500ms backoff so posting never lags
             for (let i = 0; i < 2; i++) {
                 try {
                     const headRes = await fetch(mediaUrl, { method: 'HEAD', signal: AbortSignal.timeout(1000) });
@@ -79,14 +77,14 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
     // =========================================================
     // 🧠 STEP 2: DUAL-CIRCUIT EXECUTION HELPER
     // =========================================================
-    // This executes OpenAI first, and safely falls back to Gemini if it fails.
     async function runCircuit(systemPrompt, userText, schemaDefinition) {
         try {
             if (!process.env.OPENAI_API_KEY) throw new Error("OpenAI API key missing");
 
             const userContent = [{ type: "text", text: userText }];
 
-            // OpenAI Vision format requires data URIs for raw base64
+            // NOTE: To reach true 10/10, video frame extraction would be injected here 
+            // so the vision model can truly enforce the "Trust the media" rule on MP4s.
             if (mediaBase64 && mediaMime.startsWith("image")) {
                 userContent.push({
                     type: "image_url",
@@ -142,19 +140,111 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
         }
     }
 
-    // The shared user payload text sent to both pipelines
     const payloadText = `Clan ID: ${safeClanId}\nAttached Media URL: ${safeMediaUrl}\nTitle: "${title}"\nMessage: "${message}"\nCategory: "${category}"`;
 
     // =========================================================
-    // ⚖️ STEP 3: PIPELINE PHASE 1 - MODERATION ONLY
+    // 🏷️ STEP 3: PIPELINE PHASE 1 - TAG EXTRACTION 
     // =========================================================
+    const tagSystemPrompt = `You are Oreblogda's entity extraction engine. Your job is to accurately categorize content subjects and evaluate media consistency.
+        
+        ⭐ CONTENT VERIFICATION & RELEVANCE RULES:
+        1. Prioritize the media. Use the title/message only when they clearly describe what the media is discussing (e.g., a podcast or video essay).
+        2. Only extract entities that are central to understanding the content. 
+        3. EXCLUSION RULES (CRITICAL) - Do NOT extract entities that are:
+           - mentioned only once or shown for a brief moment
+           - used only as a comparison or analogy
+           - listed in the title but absent from the media (unless it is a commentary/essay)
+           - background posters or unrelated background gameplay
+           - hashtags or generic trending keywords
+
+        ⭐ TAGGING RULES & DEFINITIONS:
+        1. DOMINANT FRANCHISE: The single most important franchise overall.
+        2. PRIMARY FRANCHISES: The main subject visually depicted or heavily discussed. Limit: Max 2. (EXCEPTION: Compilations can have up to 5). MUST belong to Anime, Manga, Video Games, or Gaming Culture. ⭐ If no franchise can be identified with reasonable certainty, return an empty array. Never guess.
+        3. SECONDARY FRANCHISES: Franchises mentioned only in passing. Limit: Max 3.
+        4. CHARACTERS: (Max 5). Canonical official names of actively featured characters. Ignore brief cameos.
+        5. TOPICS: (Max 5). Franchise-specific lore concepts (e.g., bankai, devil fruit). Topics MUST belong to the primary franchise extracted. Never output a topic without also outputting its associated franchise.
+        6. EVIDENCE SOURCE: For every extracted entity, identify if the evidence came from "visual", "spoken", "title", "message", or "mixed".
+        7. LOWERCASE ENFORCEMENT: All tags MUST be strictly lowercase (No generic tags).`;
+
+    // Reusable object schema for entities so we can track the evidence source
+    const entitySchema = {
+        type: "OBJECT",
+        properties: {
+            name: { type: "STRING", description: "The lowercase entity tag." },
+            evidenceSource: { type: "STRING", description: "Must be 'visual', 'spoken', 'title', 'message', or 'mixed'." }
+        },
+        required: ["name", "evidenceSource"],
+        additionalProperties: false
+    };
+
+    const tagSchema = {
+        type: "OBJECT",
+        properties: {
+            titleMatchesMedia: { type: "BOOLEAN", description: "True if media content aligns with or supports the title/message." },
+            matchReason: { type: "STRING", description: "Brief explanation of why the title matches or contradicts the media." },
+            dominantFranchise: { type: "STRING", description: "The single most dominant franchise overall (lowercase), or 'none'." },
+            primaryFranchises: { type: "ARRAY", items: entitySchema, description: "Max 2 (or 5 for compilations). Main anime/gaming franchise(s)." },
+            secondaryFranchises: { type: "ARRAY", items: { type: "STRING" }, description: "Max 3. Secondary passing mentions." },
+            characters: { type: "ARRAY", items: entitySchema, description: "Max 5. Actively featured canonical characters." },
+            topics: { type: "ARRAY", items: entitySchema, description: "Max 5. Specific lore items inherently tied to the primary franchise." },
+            mediaConfidence: { type: "NUMBER", description: "0.0 to 1.0: Confidence in parsing the visual/audio media." },
+            entityConfidence: { type: "NUMBER", description: "0.0 to 1.0: Confidence that the extracted tags are correct and central." },
+            overallConfidence: { type: "NUMBER", description: "0.0 to 1.0: Overall confidence in the analysis." }
+        },
+        required: [
+            "titleMatchesMedia", "matchReason", "dominantFranchise",
+            "primaryFranchises", "secondaryFranchises", "characters",
+            "topics", "mediaConfidence", "entityConfidence", "overallConfidence"
+        ],
+        additionalProperties: false
+    };
+
+    let finalInterests = [];
+    let extractedTagsSummary = "None detected";
+
+    try {
+        const tagResult = await runCircuit(tagSystemPrompt, payloadText, tagSchema);
+
+        // ⭐ STRICT Gating: We only populate the graph if the AI is confident, 
+        // actually found a primary subject, AND the title isn't misrepresenting the media.
+        if (tagResult.overallConfidence >= 0.6 && tagResult.primaryFranchises.length > 0 && tagResult.titleMatchesMedia) {
+
+            // Map the objects back down to flat strings for our MongoDB array
+            const primary = tagResult.primaryFranchises.map(e => e.name);
+            const characters = tagResult.characters.map(e => e.name);
+            const topics = tagResult.topics.map(e => e.name);
+
+            // ⚡️ FLATTENING LOGIC: We combine ONLY the core main content elements. 
+            finalInterests = [...new Set([...primary, ...characters, ...topics])];
+        }
+
+        // Save a summary (including the self-check and dominant franchise) to feed into the Mod circuit
+        extractedTagsSummary = JSON.stringify({
+            titleMatchesMedia: tagResult.titleMatchesMedia,
+            matchReason: tagResult.matchReason,
+            dominantFranchise: tagResult.dominantFranchise,
+            primary: tagResult.primaryFranchises || [],
+            overallConfidence: tagResult.overallConfidence
+        });
+
+    } catch (e) {
+        console.error("Tagging pipeline faulted, proceeding with empty interests array", e);
+    }
+
+    // =========================================================
+    // ⚖️ STEP 4: PIPELINE PHASE 2 - MODERATION (USES TAGS)
+    // =========================================================
+
+    const modPayloadText = `${payloadText}\nExtracted Subjects by Tagger: ${extractedTagsSummary}`;
+
     const modSystemPrompt = `You are Oreblogda's moderation engine.
         MODERATION RULES:
         - Reject real-life nudity or extreme real-life gore. Allow stylized anime gore/ecchi.
-        - Reject content completely unrelated to anime, gaming, or nerd culture.
+        - ⭐ If the extracted primary franchises are empty or consist entirely of non-anime/non-gaming properties, reject the post unless the title and message clearly establish an anime/gaming context.
+        - ⭐ Check the 'titleMatchesMedia' and 'matchReason'. Reject if the title intentionally misrepresents the primary subject of the media for engagement. Do not reject opinion pieces, comparisons, retrospectives, or essays.
         - 'News': Strictly anime/gaming news.
         - 'Polls': Strictly polls.
-        - 'Fanart': MUST have media attached (Attached Media URL is not 'NONE'). Reject if missing.
+        - 'Fanart': MUST have media attached. Reject if missing.
         - 'Memes': Strictly memes. Reject if categorized as News/Review/Gaming (unless gaming-meme).
         - Reject posts lacking context or meaning in title/message.`;
 
@@ -164,54 +254,24 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
             action: { type: "STRING", description: "Must be exactly 'approve', 'reject', or 'flag'" },
             reason: { type: "STRING", description: "Brief reason explaining the decision" }
         },
-        required: ["action", "reason"]
-    };
-
-    let modResult;
-    try {
-        modResult = await runCircuit(modSystemPrompt, payloadText, modSchema);
-    } catch (e) {
-        return { action: "flag", reason: "Automated engine failover timeout. Queued for standard review.", interests: [] };
-    }
-
-    // 🛑 If the post is rejected or flagged, return instantly. DO NOT waste money extracting tags.
-    if (modResult.action !== "approve") {
-        return { action: modResult.action, reason: modResult.reason, interests: [] };
-    }
-
-    // =========================================================
-    // 🏷️ STEP 4: PIPELINE PHASE 2 - TAG EXTRACTION (Only if Approved)
-    // =========================================================
-    const tagSystemPrompt = `You are Oreblogda's entity extraction engine. Output JSON.
-        TAGGING RULES:
-        1. Identify the Anime, Game, Genre, and Characters mentioned or shown.
-        2. Prefer official anime/game names. If recognized, output the official title. Do not invent names.
-        3. CHARACTER CANONICALIZATION: Output full official canonical names (e.g., 'Gojo' -> 'satoru gojo', 'Luffy' -> 'monkey d. luffy').
-        4. SEPARATE ENTITIES: Output BOTH the character's canonical name and the root franchise/anime name as separate tags.
-        5. LOWERCASE ENFORCEMENT: All tags MUST be strictly lowercase to ensure database consistency.`;
-
-    const tagSchema = {
-        type: "OBJECT",
-        properties: {
-            interests: {
-                type: "ARRAY",
-                items: { type: "STRING" },
-                description: "Array of strictly lowercase alphanumeric tags."
-            }
-        },
-        required: ["interests"]
+        required: ["action", "reason"],
+        additionalProperties: false
     };
 
     try {
-        const tagResult = await runCircuit(tagSystemPrompt, payloadText, tagSchema);
+        const modResult = await runCircuit(modSystemPrompt, modPayloadText, modSchema);
+
         return {
-            action: "approve",
+            action: modResult.action,
             reason: modResult.reason,
-            interests: tagResult.interests || []
+            interests: finalInterests // The highly-curated, flat string array ready for MongoDB
         };
     } catch (e) {
-        // If the moderation passed but the tagging engine faulted, approve the post but return empty tags so the user isn't blocked.
-        return { action: "approve", reason: modResult.reason + " (Tagging timeout)", interests: [] };
+        return {
+            action: "flag",
+            reason: "Automated engine failover timeout. Queued for standard review.",
+            interests: finalInterests
+        };
     }
 }
 
@@ -428,6 +488,7 @@ const applyDiversityPass = (posts, maxConsecutive = 2) => {
     return result.concat(heldBack);
 };
 
+
 export async function GET(req) {
     await connectDB();
     try {
@@ -459,10 +520,14 @@ export async function GET(req) {
         const now = new Date();
         const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
 
-        // 🧠 FETCH DYNAMIC USER AFFINITY & FEED LEARNING PROFILE
+        // 🧠 FETCH DYNAMIC USER AFFINITY, FEED LEARNING PROFILE & BLOCK LISTS
         let safeAffinity = {};
         let safeAuthorAffinity = {};
         let safeCountryAffinity = {};
+
+        // 🛡️ Block System Initialization
+        let blockedUserIds = [];
+        let blockedClanTags = [];
 
         let dynamicWeights = {
             fresh: 0.35,
@@ -473,9 +538,9 @@ export async function GET(req) {
             explore: 0.05
         };
 
-        if (deviceId && !targetAuthor) {
+        if (deviceId) {
             const userProfile = await MobileUser.findOne({ deviceId })
-                .select("affinityScores authorAffinity countryAffinity feedLearning")
+                .select("affinityScores authorAffinity countryAffinity feedLearning blockedUsers blockedClans")
                 .lean();
 
             if (userProfile) {
@@ -485,6 +550,17 @@ export async function GET(req) {
 
                 if (userProfile.feedLearning?.poolWeights) {
                     dynamicWeights = { ...dynamicWeights, ...userProfile.feedLearning.poolWeights };
+                }
+
+                // 🛡️ Map Blocked Users
+                if (userProfile.blockedUsers?.length > 0) {
+                    blockedUserIds = userProfile.blockedUsers;
+                }
+
+                // 🛡️ Map Blocked Clans (Convert ObjectIds to String Tags)
+                if (userProfile.blockedClans?.length > 0) {
+                    const blockedClansDocs = await Clan.find({ _id: { $in: userProfile.blockedClans } }).select("tag").lean();
+                    blockedClanTags = blockedClansDocs.map(c => c.tag);
                 }
             }
         }
@@ -508,11 +584,34 @@ export async function GET(req) {
 
         let query = {};
         let total = 0;
-        let authorOrConditions = null;
 
         let basePoolQuery = { status: "approved" };
         if (category) {
             basePoolQuery.category = { $regex: category, $options: "i" };
+        }
+
+        // ============================================================================
+        // 🛡️ APPLY SMART BLOCK FILTERS
+        // ============================================================================
+        const blockFilters = [];
+
+        // 1. Filter out blocked users (UNLESS explicitly viewing that specific author's profile)
+        if (!targetAuthor && blockedUserIds.length > 0) {
+            blockFilters.push({
+                authorUserId: { $nin: blockedUserIds },
+                authorId: { $nin: blockedUserIds.map(id => id.toString()) }
+            });
+        }
+
+        // 2. Filter out blocked clans (UNLESS explicitly viewing that specific clan's feed)
+        if (!clanIdParam && blockedClanTags.length > 0) {
+            blockFilters.push({ clanId: { $nin: blockedClanTags } });
+        }
+
+        // 3. Apply to both the global pool and the targeted query
+        if (blockFilters.length > 0) {
+            basePoolQuery.$and = blockFilters;
+            query.$and = [...blockFilters];
         }
 
         // 🌟 TELEMETRY: IN-MEMORY CANDIDATE TRACKING WITH WEIGHTS
@@ -533,18 +632,24 @@ export async function GET(req) {
         // ⚡️ NEW PHASE 1: CANDIDATE POOL ARCHITECTURE
         // ============================================================================
         if (targetAuthor) {
+            const authorOrConditions = [];
             if (mongoose.Types.ObjectId.isValid(targetAuthor)) {
-                authorOrConditions = [
-                    { authorUserId: new mongoose.Types.ObjectId(targetAuthor) },
-                    { authorId: targetAuthor }
-                ];
-                query.$or = authorOrConditions;
+                authorOrConditions.push({ authorUserId: new mongoose.Types.ObjectId(targetAuthor) });
+                authorOrConditions.push({ authorId: targetAuthor });
             } else {
-                query.authorId = targetAuthor;
+                authorOrConditions.push({ authorId: targetAuthor });
             }
+
+            // Safely merge $or with existing block $and constraints
+            if (query.$and) {
+                query.$and.push({ $or: authorOrConditions });
+            } else {
+                query.$or = authorOrConditions;
+            }
+
             if (category) query.category = { $regex: category, $options: "i" };
 
-            // ⚡️ FIX: Apply the 24-hour time filter ALONGSIDE the author filter
+            // Apply 24-hour filter safely
             if (last24Hours) {
                 const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
                 const timeFilter = {
@@ -554,11 +659,11 @@ export async function GET(req) {
                     ]
                 };
 
-                if (query.$or) {
-                    // If we already have an $or (the author ID checks), wrap both in an $and
+                if (query.$and) {
+                    query.$and.push(timeFilter);
+                } else if (query.$or) {
                     query = { $and: [{ $or: query.$or }, timeFilter] };
                 } else {
-                    // Otherwise, just append the time filter
                     query.$or = timeFilter.$or;
                 }
             }
@@ -580,7 +685,7 @@ export async function GET(req) {
                 clanPool: Math.floor(poolBudget * dynamicWeights.clan),
                 interestPool: Math.floor(poolBudget * dynamicWeights.interest),
                 trendingPool: Math.floor(poolBudget * dynamicWeights.trending),
-                explorePool: Math.floor(poolBudget * dynamicWeights.explore) // 🌟 Fully dynamic now
+                explorePool: Math.floor(poolBudget * dynamicWeights.explore)
             };
 
             const topAuthors = Object.entries(safeAuthorAffinity)
@@ -615,8 +720,8 @@ export async function GET(req) {
                 activeClanTags.length > 0
                     ? Post.find({
                         ...basePoolQuery,
-                        $or: [{ clanId: { $in: activeClanTags } }, { clanTag: { $in: activeClanTags } }]
-                    }).sort({ createdAt: -1 }).limit(POOL_CONFIG.clanPool).select("_id clanId clanTag").lean()
+                        $or: [{ clanId: { $in: activeClanTags } }]
+                    }).sort({ createdAt: -1 }).limit(POOL_CONFIG.clanPool).select("_id clanId").lean()
                     : Promise.resolve([]),
 
                 Post.find({
@@ -658,7 +763,7 @@ export async function GET(req) {
                 addCandidate(p._id, "author", aId, weight);
             });
             clanPool.forEach(p => {
-                const cId = (p.clanTag || p.clanId)?.toString();
+                const cId = p.clanId?.toString();
                 addCandidate(p._id, "clan", cId, 20);
             });
             trendingPool.forEach(p => addCandidate(p._id, "trending", "viral_or_boosted", 50));
@@ -677,7 +782,13 @@ export async function GET(req) {
 
             const uniqueCandidateIds = [...new Set(mergedIds)].map(id => new mongoose.Types.ObjectId(id));
 
-            query = { _id: { $in: uniqueCandidateIds } };
+            // Sync the gathered unique IDs to the query, preserving block rules
+            if (query.$and) {
+                query.$and.push({ _id: { $in: uniqueCandidateIds } });
+            } else {
+                query = { _id: { $in: uniqueCandidateIds } };
+            }
+
             total = uniqueCandidateIds.length;
         }
 
@@ -734,7 +845,7 @@ export async function GET(req) {
                                 ]
                             }
                         },
-                        isViewerFollowingClan: { $or: [{ $in: ["$clanId", followedClanTags] }, { $in: ["$clanTag", followedClanTags] }] },
+                        isViewerFollowingClan: { $in: ["$clanId", followedClanTags] },
                         hasValidBadge: { $and: [{ $ne: ["$clanInfo.verifiedUntil", null] }, { $gt: ["$clanInfo.verifiedUntil", now] }] }
                     }
                 },
@@ -826,7 +937,7 @@ export async function GET(req) {
 
             // ⚡️ DIVERSITY PASS: Applied on the FULL ranked pool BEFORE pagination
             if (posts.length > 0) {
-                posts = applyDiversityPass(posts, 2);
+                posts = typeof applyDiversityPass === 'function' ? applyDiversityPass(posts, 2) : posts;
             }
 
             // 🚀 IN-MEMORY PAGINATION
@@ -841,7 +952,7 @@ export async function GET(req) {
 
         try {
             const uniqueAuthorIds = [...new Set(posts.map(p => (p.authorUserId || p.authorId)?.toString()).filter(Boolean))];
-            const uniqueClanTags = [...new Set(posts.map(p => (p.clanTag || p.clanId)?.toString()).filter(Boolean))];
+            const uniqueClanTags = [...new Set(posts.map(p => p.clanId?.toString()).filter(Boolean))];
 
             if (uniqueAuthorIds.length > 0) {
                 const users = await MobileUser.find({ _id: { $in: uniqueAuthorIds } }).lean();
@@ -879,7 +990,7 @@ export async function GET(req) {
 
         const serializedPosts = posts.map((p) => {
             const aId = (p.authorUserId || p.authorId)?.toString();
-            const cTag = (p.clanTag || p.clanId)?.toString();
+            const cTag = p.clanId?.toString();
 
             const feedMessage = (p.message || "")
                 .replace(/s\((.*?)\)|\[section\](.*?)\[\/section\]|h\((.*?)\)|\[h\](.*?)\[\/h\]|l\((.*?)\)|\[li\](.*?)\[\/li\]|link\((.*?)\)-text\((.*?)\)|\[source="(.*?)" text:(.*?)\]|br\(\)|\[br\]/gs, "$1$2$3$4$5$6$8$10")

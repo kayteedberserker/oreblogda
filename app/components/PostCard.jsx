@@ -134,17 +134,69 @@ const getVideoThumbnail = (mediaUrl) => {
     // The "f_jpg" transformation tells Cloudinary to automatically handle the conversion internally 
     // without distorting the resource payload link attached below.
     const transforms = "f_jpg,q_auto,so_auto,w_600";
-
+    console.log(`https://res.cloudinary.com/${cloudName}/video/fetch/${transforms}/${mediaUrl}`)
     // URL-encode the exact source parameter so R2 folders map correctly
     // ✅ FIXED: Delivering the clean encoded target URL directly to Cloudinary's extraction cluster
     return `https://res.cloudinary.com/${cloudName}/video/fetch/${transforms}/${mediaUrl}`;
 };
+const getImageOptimizedUrl = (mediaUrl) => {
+    if (!mediaUrl) return null;
 
+    // 1. If it's a video format, bypass image optimization to prevent asset breakage
+    if (mediaUrl.match(/\.(mp4|mov|webm|mkv)$/i)) {
+        return mediaUrl;
+    }
+
+    // 2. If it's ALREADY an absolute Cloudinary upload URL string
+    if (mediaUrl.includes("res.cloudinary.com")) {
+        if (mediaUrl.includes("/image/upload/")) {
+            return mediaUrl.replace("/image/upload/", "/image/upload/f_auto,q_auto,w_800/");
+        }
+        // If it's a raw fetch path already, return as-is
+        return mediaUrl;
+    }
+
+    // 3. For raw third-party/Cloudflare R2 images via Fetch API
+    const cloudName = "donakg9he";
+
+    // f_auto: delivers webp/avif automatically
+    // q_auto: heavily optimizes byte size
+    // w_800: caps the resolution boundary for standard responsive layout feeds
+    const transforms = "f_auto,q_auto,w_800";
+
+    return `https://res.cloudinary.com/${cloudName}/image/fetch/${transforms}/${encodeURIComponent(mediaUrl)}`;
+};
+const getVideoPlaybackUrl = (mediaUrl) => {
+    if (!mediaUrl) return null;
+
+    // 1. If it's a static image, it shouldn't be here, but return it safely
+    if (mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i)) {
+        return mediaUrl;
+    }
+
+    // 2. If it's ALREADY an absolute Cloudinary asset URL string
+    if (mediaUrl.includes("res.cloudinary.com")) {
+        if (mediaUrl.includes("/video/upload/")) {
+            // Optimize native uploads for web streaming
+            return mediaUrl.replace("/video/upload/", "/video/upload/f_auto,q_auto/");
+        }
+        return mediaUrl;
+    }
+
+    // 3. For raw third-party/Cloudflare R2 videos via Fetch API
+    const cloudName = "donakg9he";
+
+    // f_auto: yields webm/mp4 contextually based on browser support
+    // q_auto: compresses smartly without visible quality loss
+    const transforms = "f_auto,q_auto";
+
+    return `https://res.cloudinary.com/${cloudName}/video/fetch/${transforms}/${encodeURIComponent(mediaUrl)}`;
+};
 // --- Sub Components ---
 
 const MediaPlaceholder = ({ height = "250px", onPress, type, thumbUrl, showPlayIcon = true }) => (
     <button onClick={onPress} style={{ height }} className="w-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center overflow-hidden rounded-2xl relative border-none cursor-pointer group">
-        {thumbUrl && <img src={thumbUrl} className="absolute w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-500" alt="Thumbnail" />}
+        {thumbUrl && <img src={getImageOptimizedUrl(thumbUrl)} className="absolute w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-500" alt="Thumbnail" />}
         {showPlayIcon && <div className="bg-black/40 p-4 rounded-full mb-2 border border-white/20 z-10 backdrop-blur-sm group-hover:bg-blue-600/60 transition-colors">{type === "video" ? <Icons.Play /> : <Icons.Image />}</div>}
         <div className="bg-black/60 px-4 py-1 rounded-full border border-white/10 z-10 backdrop-blur-sm">
             <span className="text-white font-black text-[10px] uppercase tracking-[0.2em]">Open {type === "video" ? "Stream" : "Visual"}</span>
@@ -186,10 +238,10 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
         }
 
         if (isDirectVideo) {
-            return <video src={item.url} controls autoPlay loop className="max-w-full max-h-[85vh] rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />;
+            return <video src={getVideoPlaybackUrl(item.url)} controls autoPlay loop className="max-w-full max-h-[85vh] rounded-lg shadow-2xl" onClick={e => e.stopPropagation()} />;
         }
 
-        return <img src={item.url} className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl" alt="Enlarged Visual" onClick={e => e.stopPropagation()} />;
+        return <img src={getImageOptimizedUrl(item.url)} className="max-w-full max-h-[85vh] object-contain rounded-lg shadow-2xl" alt="Enlarged Visual" onClick={e => e.stopPropagation()} />;
     };
 
     return (
@@ -445,7 +497,7 @@ export default function PostCardComponent({ post, authorData, clanData, isFeed, 
                             <MediaPlaceholder height="100%" type="video" thumbUrl={getVideoThumbnail(mediaItems[0].url)} onPress={(e) => openItem(0, e)} />
                         ) : (
                             <button onClick={(e) => openItem(0, e)} className="w-full h-full relative block overflow-hidden group border-none">
-                                <img src={mediaItems[0].url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Post Media" />
+                                <img src={getImageOptimizedUrl(mediaItems[0].url)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Post Media" />
                             </button>
                         )}
                     </div>
@@ -453,7 +505,7 @@ export default function PostCardComponent({ post, authorData, clanData, isFeed, 
                     <div className="flex w-full h-full gap-[2px]">
                         {mediaItems.slice(0, 2).map((item, idx) => (
                             <button key={idx} onClick={(e) => openItem(idx, e)} className="flex-1 relative overflow-hidden group border-none">
-                                <img src={item.type === "video" ? getVideoThumbnail(item.url) : item.url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Post Media" />
+                                <img src={item.type === "video" ? getVideoThumbnail(item.url) : getImageOptimizedUrl(item.url)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Post Media" />
                                 {item.type === "video" && <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm"><Icons.Play /></div>}
                             </button>
                         ))}
@@ -461,16 +513,16 @@ export default function PostCardComponent({ post, authorData, clanData, isFeed, 
                 ) : (
                     <div className="flex w-full h-full gap-[2px]">
                         <button onClick={(e) => openItem(0, e)} className="w-1/2 h-full relative overflow-hidden group border-none">
-                            <img src={mediaItems[0].type === "video" ? getVideoThumbnail(mediaItems[0].url) : mediaItems[0].url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Post Media" />
+                            <img src={mediaItems[0].type === "video" ? getVideoThumbnail(mediaItems[0].url) : getImageOptimizedUrl(mediaItems[0].url)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Post Media" />
                             {mediaItems[0].type === "video" && <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm"><Icons.Play /></div>}
                         </button>
                         <div className="w-1/2 h-full flex flex-col gap-[2px]">
                             <button onClick={(e) => openItem(1, e)} className="flex-1 relative overflow-hidden group border-none">
-                                <img src={mediaItems[1].type === "video" ? getVideoThumbnail(mediaItems[1].url) : mediaItems[1].url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Post Media" />
+                                <img src={mediaItems[1].type === "video" ? getVideoThumbnail(mediaItems[1].url) : getImageOptimizedUrl(mediaItems[1].url)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Post Media" />
                                 {mediaItems[1].type === "video" && <div className="absolute inset-0 flex items-center justify-center bg-black/20 backdrop-blur-sm"><Icons.Play /></div>}
                             </button>
                             <button onClick={(e) => openItem(2, e)} className="flex-1 relative overflow-hidden group border-none">
-                                <img src={mediaItems[2].type === "video" ? getVideoThumbnail(mediaItems[2].url) : mediaItems[2].url} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Post Media" />
+                                <img src={mediaItems[2].type === "video" ? getVideoThumbnail(mediaItems[2].url) : getImageOptimizedUrl(mediaItems[2].url)} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt="Post Media" />
                                 {count > 3 && <div className="absolute inset-0 bg-black/60 flex items-center justify-center z-10 backdrop-blur-sm"><span className="text-white text-2xl font-black">+{count - 3}</span></div>}
                                 {mediaItems[2].type === "video" && count <= 3 && <div className="absolute inset-0 flex items-center justify-center bg-black/20 z-10 backdrop-blur-sm"><Icons.Play /></div>}
                             </button>

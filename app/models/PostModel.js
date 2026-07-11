@@ -16,6 +16,8 @@ const commentSchema = new mongoose.Schema({
         ref: "MobileUser",
         default: null
     },
+    reportCount: { type: Number, default: 0 }, // 🌟 NEW: Tracks total reports
+    reportedBy: [{ type: String }], // 🌟 NEW: Tracks fingerprints of reporters
     name: { type: String, required: true },
     text: { type: String, default: "" },
     stickerId: { type: String, default: null },
@@ -25,6 +27,7 @@ const commentSchema = new mongoose.Schema({
     replyToText: { type: String, default: null }, // 🌟 NEW: Context preview snippet of what's replied to
     date: { type: Date, default: Date.now },
     isEdited: { type: Boolean, default: false },
+    isHidden: { type: Boolean, default: false },
     replies: { type: Array, default: [] },
     type: { type: String, enum: ["text", "sticker", "image"], default: "text" } // 🌟 UPDATED: Added "image" enum
 });
@@ -131,6 +134,8 @@ const postSchema = new mongoose.Schema(
         },
         comments: [commentSchema],
         shares: { type: Number, default: 0 },
+        reportCount: { type: Number, default: 0 }, // 🌟 NEW: Tracks total reports
+        reportedBy: [{ type: String }], // 🌟 NEW: Tracks fingerprints of reporters
 
         /* ---------- VIEWS ---------- */
         views: { type: Number, default: 0 },

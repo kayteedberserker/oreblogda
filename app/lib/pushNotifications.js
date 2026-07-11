@@ -79,13 +79,13 @@ async function sendDirectToFcmV1(token, title, message, data, groupId) {
         let nativeExpandableImage = data.mediaUrl || data.authorPfp;
 
         if (nativeExpandableImage) {
-            const isVideo = nativeExpandableImage.match(/\.(mp4|mov|webm)$/i);
+            const isVideo = /\.(mp4|mov|webm)(\?.*)?$/i.test(nativeExpandableImage);
             const cloudName = process.env.CLOUDINARY_CLOUD_NAME || "donakg9he";
 
             // 1. Handle Legacy Direct Cloudinary URLs
             if (nativeExpandableImage.includes('cloudinary.com') && nativeExpandableImage.includes('/upload/')) {
                 if (isVideo) {
-                    nativeExpandableImage = nativeExpandableImage.replace(/\.mp4$/i, '.jpg');
+                    nativeExpandableImage = nativeExpandableImage.replace(/\.(mp4|mov|webm)(\?.*)?$/i, '.jpg');
                 }
                 nativeExpandableImage = nativeExpandableImage.replace('/upload/', '/upload/w_600,q_auto,f_jpg/');
             }
@@ -93,10 +93,10 @@ async function sendDirectToFcmV1(token, title, message, data, groupId) {
             else if (nativeExpandableImage.includes('oreblogda.com')) {
                 if (isVideo) {
                     // Tell Cloudinary to fetch the R2 video, extract a frame, shrink it to 600px, and serve it as a fast JPG
-                    nativeExpandableImage = `https://res.cloudinary.com/${cloudName}/video/fetch/f_jpg,q_auto,so_auto,c_pad,b_black,w_600/${nativeExpandableImage}`;
+                    nativeExpandableImage = `https://res.cloudinary.com/${cloudName}/video/fetch/f_jpg,q_auto,so_auto,c_pad,b_black,w_600/${encodeURIComponent(nativeExpandableImage)}`;
                 } else {
                     // Tell Cloudinary to fetch the R2 image, shrink it to 600px, and compress it so the Android OS downloads it instantly
-                    nativeExpandableImage = `https://res.cloudinary.com/${cloudName}/image/fetch/w_600,q_auto,f_jpg/${nativeExpandableImage}`;
+                    nativeExpandableImage = `https://res.cloudinary.com/${cloudName}/image/fetch/w_600,q_auto,f_jpg/${encodeURIComponent(nativeExpandableImage)}`;
                 }
             }
         }

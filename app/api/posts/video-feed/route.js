@@ -62,7 +62,6 @@ export async function GET(req) {
         const page = parseInt(searchParams.get("page")) || 1;
         const limit = parseInt(searchParams.get("limit")) || 10;
 
-        // ⚡️ 1. Grab all the contextual params
         const startingId = searchParams.get("startingId");
         const viewerId = searchParams.get("viewerId");
         const authorFilter = searchParams.get("author");
@@ -84,23 +83,33 @@ export async function GET(req) {
         const now = new Date();
         const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
 
+        // 🛑 STOP-WORDS FOR TAGS: Prevent low-information tags from poisoning the graph
+        const LOW_INFO_TAGS = new Set([
+            "anime", "action", "fantasy", "game", "gaming", "games", "movie",
+            "comedy", "shonen", "shooter", "japan", "fps", "rpg", "manga",
+            "scifi", "adventure", "drama", "romance", "slice of life", "sports", "edit", "amv", "meme"
+        ]);
+
         // 🧠 FETCH DYNAMIC USER AFFINITY & FEED LEARNING PROFILE
         let safeAffinity = {};
         let safeAuthorAffinity = {};
         let safeCountryAffinity = {};
 
+        let blockedUserIds = [];
+        let blockedClanTags = [];
+
         let dynamicWeights = {
-            fresh: 0.35,
-            author: 0.20,
-            clan: 0.15,
-            interest: 0.15,
+            related: 0.50,
+            fresh: 0.20,
+            author: 0.10,
+            clan: 0.05,
             trending: 0.10,
             explore: 0.05
         };
 
-        if (deviceId && !authorFilter && !clanFilter) {
+        if (deviceId) {
             const userProfile = await MobileUser.findOne({ deviceId })
-                .select("affinityScores authorAffinity countryAffinity feedLearning")
+                .select("affinityScores authorAffinity countryAffinity feedLearning blockedUsers blockedClans")
                 .lean();
 
             if (userProfile) {
@@ -110,6 +119,17 @@ export async function GET(req) {
 
                 if (userProfile.feedLearning?.poolWeights) {
                     dynamicWeights = { ...dynamicWeights, ...userProfile.feedLearning.poolWeights };
+                }
+
+                if (userProfile.blockedUsers?.length > 0) {
+                    blockedUserIds = userProfile.blockedUsers
+                        .map(id => mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : null)
+                        .filter(Boolean);
+                }
+
+                if (userProfile.blockedClans?.length > 0) {
+                    const blockedClansDocs = await Clan.find({ _id: { $in: userProfile.blockedClans } }).select("tag").lean();
+                    blockedClanTags = blockedClansDocs.map(c => c.tag).filter(Boolean);
                 }
             }
         }
@@ -134,25 +154,147 @@ export async function GET(req) {
         let query = {};
         let basePoolQuery = { status: "approved", "media.type": "video" };
 
-        // ⚡️ 2. Fetch "Seed" Interests and apply Hard Filters to basePoolQuery
-        let seedInterests = [];
-        let regexInterests = [];
+        // 🚫 BAN STARTING ID FROM EVER SHOWING UP IN THE FEED
+        let excludedIds = [];
         if (startingId && mongoose.Types.ObjectId.isValid(startingId)) {
-            const seedVideo = await Post.findById(startingId).select("interests").lean();
-            if (seedVideo && seedVideo.interests?.length > 0) {
-                seedInterests = seedVideo.interests.map(t => t.trim().toLowerCase());
-                regexInterests = seedInterests.map(tag => new RegExp(`^${escapeRegex(tag)}$`, 'i'));
-
-                basePoolQuery._id = { $ne: new mongoose.Types.ObjectId(startingId) };
-                basePoolQuery.interests = { $in: regexInterests };
-            }
+            excludedIds.push(new mongoose.Types.ObjectId(startingId));
+            basePoolQuery._id = { $nin: excludedIds };
         }
 
         if (categoryFilter) {
             basePoolQuery.category = categoryFilter;
         }
 
-        // 🌟 TELEMETRY: IN-MEMORY CANDIDATE TRACKING WITH WEIGHTS
+        // ============================================================================
+        // 🛡️ APPLY SMART BLOCK FILTERS
+        // ============================================================================
+        const blockFilters = [];
+
+        if (!authorFilter && blockedUserIds.length > 0) {
+            blockFilters.push({
+                authorUserId: { $nin: blockedUserIds },
+                authorId: { $nin: blockedUserIds.map(id => id.toString()) }
+            });
+        }
+
+        if (!clanFilter && blockedClanTags.length > 0) {
+            blockFilters.push({
+                clanId: { $nin: blockedClanTags },
+                clanTag: { $nin: blockedClanTags }
+            });
+        }
+
+        if (blockFilters.length > 0) {
+            basePoolQuery.$and = [...(basePoolQuery.$and || []), ...blockFilters];
+        }
+
+        // ============================================================================
+        // 🌟 ML PHASE 0 - 4: MULTI-HOP INTEREST EXPANSION (ENGAGEMENT WEIGHTED)
+        // ============================================================================
+        let seedInterests = [];
+        let expandedInterests = [];
+        let combinedInterests = [];
+
+        if (startingId && mongoose.Types.ObjectId.isValid(startingId)) {
+            console.log(`\n================= 🎬 ML FEED PIPELINE START (Page ${page}) =================`);
+            console.log(`🌱 [SEED] Target Starting Video ID: ${startingId}`);
+
+            const seedVideo = await Post.findById(startingId).select("interests").lean();
+
+            if (seedVideo && seedVideo.interests?.length > 0) {
+                // Strict lowercase, no Regex needed
+                const rawSeedInterests = seedVideo.interests.map(t => t.trim().toLowerCase());
+                seedInterests = rawSeedInterests.filter(t => !LOW_INFO_TAGS.has(t));
+
+                // Fallback: If the post ONLY had low-information tags, keep them so we don't break the feed entirely
+                if (seedInterests.length === 0 && rawSeedInterests.length > 0) {
+                    seedInterests = rawSeedInterests;
+                    console.log(`⚠️ [SEED] WARNING: Video only contained generic tags. Using raw tags.`);
+                }
+
+                console.log(`🌱 [SEED] Base Interests (Filtered):`, seedInterests);
+
+                // HOP 1: Find direct quality connections
+                const hop1Matches = await Post.find({
+                    ...basePoolQuery,
+                    interests: { $in: seedInterests }
+                })
+                    .sort({ hypePoints: -1, likesCount: -1, views: -1, createdAt: -1 })
+                    .limit(30)
+                    .select("interests likes views hypePoints hypeCount")
+                    .lean();
+
+                const hop1Counts = {};
+
+                hop1Matches.forEach(post => {
+                    const postLikes = Array.isArray(post.likes) ? post.likes.length : (post.likesCount || 0);
+                    const postHype = post.hypePoints || post.hypeCount || 0;
+                    const postViews = post.views || 0;
+                    const engagementWeight = 1 + (postHype * 0.1) + (postLikes * 0.05) + (postViews * 0.001);
+
+                    (post.interests || []).forEach(tag => {
+                        const cleanTag = tag.trim().toLowerCase();
+                        // Prevent graph poisoning: DO NOT add low info tags to the expansion graph
+                        if (!seedInterests.includes(cleanTag) && !LOW_INFO_TAGS.has(cleanTag)) {
+                            hop1Counts[cleanTag] = (hop1Counts[cleanTag] || 0) + engagementWeight;
+                        }
+                    });
+                });
+
+                const hop1Interests = Object.entries(hop1Counts)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 15)
+                    .map(([tag]) => tag);
+
+                console.log(`🚀 [HOP 1] Discovered Related Tags (Filtered):`, hop1Interests);
+
+                // HOP 2: Controlled recursive expansion (Connections of connections)
+                let hop2Interests = [];
+                if (hop1Interests.length > 0) {
+                    const hop2Matches = await Post.find({
+                        ...basePoolQuery,
+                        interests: { $in: hop1Interests }
+                    })
+                        .sort({ hypePoints: -1, likesCount: -1, views: -1, createdAt: -1 })
+                        .limit(20)
+                        .select("interests likes views hypePoints hypeCount")
+                        .lean();
+
+                    const hop2Counts = {};
+                    hop2Matches.forEach(post => {
+                        const postLikes = Array.isArray(post.likes) ? post.likes.length : (post.likesCount || 0);
+                        const postHype = post.hypePoints || post.hypeCount || 0;
+                        const postViews = post.views || 0;
+                        const engagementWeight = 1 + (postHype * 0.1) + (postLikes * 0.05) + (postViews * 0.001);
+
+                        (post.interests || []).forEach(tag => {
+                            const cleanTag = tag.trim().toLowerCase();
+                            // Do not re-add seeds, hop1 tags, or low info tags
+                            if (!seedInterests.includes(cleanTag) && !hop1Interests.includes(cleanTag) && !LOW_INFO_TAGS.has(cleanTag)) {
+                                hop2Counts[cleanTag] = (hop2Counts[cleanTag] || 0) + engagementWeight;
+                            }
+                        });
+                    });
+
+                    hop2Interests = Object.entries(hop2Counts)
+                        .sort((a, b) => b[1] - a[1])
+                        .slice(0, 10) // Tighter limit to prevent excessive drift
+                        .map(([tag]) => tag);
+
+                    console.log(`🛸 [HOP 2] Secondary Expansion Tags (Filtered):`, hop2Interests);
+                }
+
+                // Merge into single expanded array for the pipeline relevance bonus
+                expandedInterests = [...hop1Interests, ...hop2Interests];
+                combinedInterests = [...seedInterests, ...expandedInterests];
+
+                console.log(`🌌 [COMBINED] Total Interest Graph for Retrieval:`, combinedInterests);
+            } else {
+                console.log(`⚠️ [SEED] Video had no interests or was not found.`);
+            }
+        }
+
+        // 🌟 TELEMETRY
         const candidateMap = new Map();
         const addCandidate = (postId, type, reason = null, weight = 1) => {
             const id = postId.toString();
@@ -167,7 +309,7 @@ export async function GET(req) {
         };
 
         // ============================================================================
-        // ⚡️ ML PHASE 1: CANDIDATE POOL ARCHITECTURE
+        // ⚡️ ML PHASE 5 & 7: STRICT CANDIDATE UNIVERSE RETRIEVAL
         // ============================================================================
         if (authorFilter) {
             const isObjId = mongoose.Types.ObjectId.isValid(authorFilter);
@@ -181,14 +323,68 @@ export async function GET(req) {
         } else if (clanFilter) {
             query = { ...basePoolQuery, clanId: clanFilter };
 
+        } else if (startingId && combinedInterests.length > 0) {
+            // 🎬 STRICT CONTINUOUS WATCHING FEED
+            // Exclude unrelated videos entirely. Freshness and trending only rank these.
+            const sessionPoolBudget = 1000;
+
+            const sessionCandidates = await Post.find({
+                ...basePoolQuery,
+                interests: { $in: combinedInterests }
+            })
+                .sort({ createdAt: -1 })
+                .limit(sessionPoolBudget)
+                .select("_id interests")
+                .lean();
+
+            console.log(`🎯 [RETRIEVAL] Fetched ${sessionCandidates.length} strict matches inside the graph constraints.`);
+
+            sessionCandidates.forEach(p => {
+                const rawTags = p.interests || [];
+                const matchedTag = rawTags.find(tag => combinedInterests.includes(tag.toLowerCase().trim()));
+                addCandidate(p._id, "related", matchedTag || "graph_match", 10);
+            });
+
+            let candidateIdsStr = sessionCandidates.map(p => p._id.toString());
+
+            // 🌟 PHASE 7: CONTROLLED EXPANSION (Fallback)
+            // If the strict graph is exhausted deep into the session, slowly widen 
+            // rather than hitting a dead end.
+            if (sessionCandidates.length < (skip + limit)) {
+                console.log(`⚠️ [FALLBACK] Graph exhausted for deep scroll. Triggering Controlled Expansion...`);
+
+                const fallbackExcludedIds = [
+                    ...excludedIds,
+                    ...candidateIdsStr.map(id => new mongoose.Types.ObjectId(id))
+                ];
+
+                const fallbackCandidates = await Post.find({
+                    ...basePoolQuery,
+                    _id: { $nin: fallbackExcludedIds }
+                })
+                    .sort({ hypePoints: -1, likesCount: -1, createdAt: -1 })
+                    .limit(30)
+                    .select("_id")
+                    .lean();
+
+                fallbackCandidates.forEach(p => addCandidate(p._id, "explore", "controlled_expansion", 1));
+
+                const fallbackIdsStr = fallbackCandidates.map(p => p._id.toString());
+                candidateIdsStr = [...new Set([...candidateIdsStr, ...fallbackIdsStr])];
+            }
+
+            const uniqueCandidateIds = candidateIdsStr.map(id => new mongoose.Types.ObjectId(id));
+            query = { ...basePoolQuery, _id: { $in: uniqueCandidateIds } };
+
         } else {
-            // 🌐 GLOBAL VIDEO FEED: PARALLEL CANDIDATE POOLING
-            const poolBudget = 700;
+            // 🌐 INITIAL DISCOVERY / HOME FEED (No Starting Video)
+            // Fall back to the 1000 budget & 70/20/10 diversity mix
+            const poolBudget = 1000;
             const POOL_CONFIG = {
+                relatedPool: Math.floor(poolBudget * dynamicWeights.related),
                 freshPool: Math.floor(poolBudget * dynamicWeights.fresh),
                 authorPool: Math.floor(poolBudget * dynamicWeights.author),
                 clanPool: Math.floor(poolBudget * dynamicWeights.clan),
-                interestPool: Math.floor(poolBudget * dynamicWeights.interest),
                 trendingPool: Math.floor(poolBudget * dynamicWeights.trending),
                 explorePool: Math.floor(poolBudget * dynamicWeights.explore)
             };
@@ -200,16 +396,22 @@ export async function GET(req) {
                 .map(([id]) => id);
 
             const activeClanTags = [...new Set([...followedClanTags, ...viewerClanTags])];
-            const personalInterestRegexes = userInterests.map(i => new RegExp(`^${escapeRegex(i)}$`, "i"));
 
             const [
+                relatedPool,
                 freshPool,
                 authorPool,
                 clanPool,
                 trendingPool,
-                interestPool,
                 explorePool
             ] = await Promise.all([
+                userInterests.length > 0
+                    ? Post.find({
+                        ...basePoolQuery,
+                        interests: { $in: userInterests }
+                    }).sort({ createdAt: -1 }).limit(POOL_CONFIG.relatedPool).select("_id interests").lean()
+                    : Promise.resolve([]),
+
                 Post.find(basePoolQuery).sort({ createdAt: -1 }).limit(POOL_CONFIG.freshPool).select("_id").lean(),
 
                 topAuthors.length > 0
@@ -247,13 +449,6 @@ export async function GET(req) {
                     ]
                 }).sort({ createdAt: -1 }).limit(POOL_CONFIG.trendingPool).select("_id").lean(),
 
-                personalInterestRegexes.length > 0
-                    ? Post.find({
-                        ...basePoolQuery,
-                        interests: { $in: personalInterestRegexes }
-                    }).sort({ createdAt: -1 }).limit(POOL_CONFIG.interestPool).select("_id interests").lean()
-                    : Promise.resolve([]),
-
                 Post.aggregate([
                     { $match: basePoolQuery },
                     { $sample: { size: POOL_CONFIG.explorePool } },
@@ -261,6 +456,11 @@ export async function GET(req) {
                 ])
             ]);
 
+            relatedPool.forEach(p => {
+                const rawTags = p.interests || [];
+                const matchedTag = rawTags.find(tag => userInterests.includes(tag.toLowerCase().trim()));
+                addCandidate(p._id, "related", matchedTag || "graph_match", 10);
+            });
             freshPool.forEach(p => addCandidate(p._id, "fresh", "recent", 1));
             authorPool.forEach(p => {
                 const aId = (p.authorUserId || p.authorId)?.toString();
@@ -272,26 +472,18 @@ export async function GET(req) {
                 addCandidate(p._id, "clan", cId, 20);
             });
             trendingPool.forEach(p => addCandidate(p._id, "trending", "viral_or_boosted", 50));
-            interestPool.forEach(p => {
-                const rawTags = p.interests || [];
-                const matchedTag = rawTags.find(tag => userInterests.includes(tag.toLowerCase().trim()));
-                const cleanTag = matchedTag ? matchedTag.toLowerCase().trim() : null;
-                const weight = (cleanTag && safeAffinity[cleanTag]) ? safeAffinity[cleanTag] : 5;
-                addCandidate(p._id, "interest", matchedTag || "general_match", weight);
-            });
             explorePool.forEach(p => addCandidate(p._id, "explore", "discovery", 1));
 
             const mergedIds = [
-                ...freshPool, ...authorPool, ...clanPool, ...trendingPool, ...interestPool, ...explorePool
+                ...relatedPool, ...freshPool, ...authorPool, ...clanPool, ...trendingPool, ...explorePool
             ].map(p => p._id.toString());
 
             const uniqueCandidateIds = [...new Set(mergedIds)].map(id => new mongoose.Types.ObjectId(id));
-
-            query = { _id: { $in: uniqueCandidateIds } };
+            query = { ...basePoolQuery, _id: { $in: uniqueCandidateIds } };
         }
 
         // ============================================================================
-        // ⚡️ AGGREGATION & SCORING PIPELINE
+        // ⚡️ ML PHASE 6: AGGREGATION & RANKING PIPELINE
         // ============================================================================
         let posts;
 
@@ -301,13 +493,14 @@ export async function GET(req) {
             staticLocalBonus: 4, clanBonus: 15, affinityMultiplier: 1.5, tierBasicWeight: 4,
             tierEpicWeight: 7, tierLegendaryWeight: 10, tierFollowerMultiplier: 1.5,
             partnerClanBonus: 20, postBoostMultiplier: 3.0, boostIgnitionScore: 15,
-            trendingThreshold: 1000, seedMatchBonus: 500
+            trendingThreshold: 1000,
+            seedMatchBonus: 500,
+            expandedMatchBonus: 100
         };
 
         const pipeline = [
             { $match: query },
 
-            // ⚡️ Video-Specific Unwinding
             { $unwind: { path: "$media", includeArrayIndex: "mediaIndex" } },
             { $match: { "media.type": "video" } },
 
@@ -393,19 +586,33 @@ export async function GET(req) {
                         ]
                     },
                     partnerClanBonusVal: { $cond: [{ $and: ["$isViewerFollowingClan", { $eq: ["$clanInfo.verifiedClan", true] }] }, CONFIG.partnerClanBonus, 0] },
+
                     seedMatchBonusVal: {
                         $let: {
                             vars: {
-                                overlapCount: {
+                                seedOverlapCount: {
                                     $size: {
                                         $setIntersection: [
                                             { $map: { input: { $ifNull: ["$interests", []] }, as: "t", in: { $toLower: { $trim: { input: "$$t" } } } } },
                                             seedInterests
                                         ]
                                     }
+                                },
+                                expandedOverlapCount: {
+                                    $size: {
+                                        $setIntersection: [
+                                            { $map: { input: { $ifNull: ["$interests", []] }, as: "t", in: { $toLower: { $trim: { input: "$$t" } } } } },
+                                            expandedInterests
+                                        ]
+                                    }
                                 }
                             },
-                            in: { $multiply: ["$$overlapCount", CONFIG.seedMatchBonus] }
+                            in: {
+                                $add: [
+                                    { $multiply: ["$$seedOverlapCount", CONFIG.seedMatchBonus] },
+                                    { $multiply: ["$$expandedOverlapCount", CONFIG.expandedMatchBonus] }
+                                ]
+                            }
                         }
                     }
                 }
@@ -433,7 +640,7 @@ export async function GET(req) {
                             { $cond: ["$isViewerFollowingClan", CONFIG.clanBonus, 0] },
                             { $cond: ["$isViewerFollowingClan", { $multiply: ["$clanTierBonus", CONFIG.tierFollowerMultiplier] }, "$clanTierBonus"] },
                             "$partnerClanBonusVal",
-                            "$seedMatchBonusVal" // 🌟 The video feed specific bonus
+                            "$seedMatchBonusVal"
                         ]
                     },
                     noveltyScore: { $cond: [{ $lt: ["$ageInHours", CONFIG.freshnessWindow] }, CONFIG.freshnessBoost, 0] }
@@ -445,11 +652,32 @@ export async function GET(req) {
 
         posts = await Post.aggregate(pipeline);
 
-        if (posts.length > 0 && !authorFilter && !clanFilter) {
+        if (posts.length > 0 && !authorFilter && !clanFilter && !startingId) {
             posts = applyDiversityPass(posts, 2);
         }
 
-        posts = posts.slice(skip, skip + limit);
+        // 🔍 DEBUG: Log the tag overlaps to terminal directly as requested
+        if (startingId && posts.length > 0) {
+            console.log(`\n🔍 [DEBUG] Candidate Overlap for Top Results:`);
+            posts.slice(0, 10).forEach((p, idx) => {
+                const overlap = (p.interests || []).filter(x =>
+                    combinedInterests.includes(x.toLowerCase().trim())
+                );
+                console.log(`  -> [${idx + 1}] ID: ${p._id.toString()} | Score: ${p.finalScore?.toFixed(2)} | Overlap:`, overlap);
+            });
+        }
+
+        const paginatedPosts = posts.slice(skip, skip + limit);
+
+        // 🌟 FINAL DELIVERY LOGGING
+        if (startingId) {
+            console.log(`\n📦 [FINAL DELIVERY] Sending ${paginatedPosts.length} Ranked Videos to Frontend (Page ${page}):`);
+            paginatedPosts.forEach((p, index) => {
+                const finalTags = (p.interests || []).join(', ');
+                console.log(`   -> [${index + 1}] ID: ${p._id.toString()} | Score: ${p.finalScore?.toFixed(2)} | Tags: [${finalTags}]`);
+            });
+            console.log(`================= 🎬 ML FEED PIPELINE END =================\n`);
+        }
 
         // ============================================================================
         // 📦 POPULATION & SERIALIZATION
@@ -458,8 +686,8 @@ export async function GET(req) {
         let clanMap = {};
 
         try {
-            const uniqueAuthorIds = [...new Set(posts.map(p => (p.authorUserId || p.authorId)?.toString()).filter(Boolean))];
-            const uniqueClanTags = [...new Set(posts.map(p => (p.clanTag || p.clanId)?.toString()).filter(Boolean))];
+            const uniqueAuthorIds = [...new Set(paginatedPosts.map(p => (p.authorUserId || p.authorId)?.toString()).filter(Boolean))];
+            const uniqueClanTags = [...new Set(paginatedPosts.map(p => (p.clanTag || p.clanId)?.toString()).filter(Boolean))];
 
             if (uniqueAuthorIds.length > 0) {
                 const users = await MobileUser.find({ _id: { $in: uniqueAuthorIds } }).lean();
@@ -495,7 +723,7 @@ export async function GET(req) {
             }
         } catch (popErr) { console.error("Bulk Population Error:", popErr); }
 
-        const serializedPosts = posts.map((p) => {
+        const serializedPosts = paginatedPosts.map((p) => {
             const aId = (p.authorUserId || p.authorId)?.toString();
             const cTag = (p.clanTag || p.clanId)?.toString();
 
@@ -516,7 +744,7 @@ export async function GET(req) {
 
             return {
                 _id: p._id.toString(),
-                videoId: `${p._id.toString()}_${p.mediaIndex}`, // 🌟 Unwound video ID structure preserved
+                videoId: `${p._id.toString()}_${p.mediaIndex}`,
                 mediaUrl: p.media.url,
                 title: p.title,
                 authorUserId: p.authorUserId || p.authorId,
@@ -533,7 +761,7 @@ export async function GET(req) {
                 isBoosted,
                 isResurrected,
                 isFollowingClan,
-                candidateSources: telemetrySources, // 🌟 ML Telemetry attached natively
+                candidateSources: telemetrySources,
                 authorData: userMap[aId] || null,
                 clanData: clanMap[cTag] || null
             };
