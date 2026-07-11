@@ -1,5 +1,5 @@
 import connectDB from "@/app/lib/mongodb";
-import ClanFollower from "@/app/models/ClanFollowerModel"; // 🔄 Imported your follower model
+import ClanFollower from "@/app/models/ClanFollower"; // 🔄 Imported your follower model
 import MobileUser from "@/app/models/MobileUserModel";
 import Report from "@/app/models/ReportModel";
 import mongoose from "mongoose";
