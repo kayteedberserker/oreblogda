@@ -3,21 +3,21 @@ import mongoose from 'mongoose';
 import MobileUser from "app/models/MobileUserModel";
 
 const clanFollowerSchema = new mongoose.Schema({
-    clanTag: {
-        type: String,
-        required: true,
-        index: true
-    },
-    userId: {
-        type: mongoose.Schema.Types.ObjectId,
-        // Force Mongoose to recognize the model by referencing the imported variable
-        ref: MobileUser.modelName || 'MobileUser',
-        required: true
-    },
-    followedAt: {
-        type: Date,
-        default: Date.now
-    }
+clanTag: {
+type: String,
+required: true,
+index: true
+},
+userId: {
+type: mongoose.Schema.Types.ObjectId,
+// Force Mongoose to recognize the model by referencing the imported variable
+ref: MobileUser.modelName || 'MobileUser',
+required: true
+},
+followedAt: {
+type: Date,
+default: Date.now
+}
 }, { timestamps: true });
 
 // Ensure a user can't follow the same clan twice

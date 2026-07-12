@@ -29,6 +29,8 @@ const generateSecureSuffix = () => {
     return suffix;
 };
 
+import SecurityEvent from '@/app/models/SecurityEvent';
+
 export async function POST(req) {
     try {
         await connectDB();
@@ -80,15 +82,36 @@ export async function POST(req) {
             }, { status: 429 });
         }
 
+        // Get IP early so we can use it in security logs
+        const forwarded = req.headers.get("x-forwarded-for");
+        const ip = forwarded ? forwarded.split(/, /)[0] : "127.0.0.1";
+
         // 3. 🛡️ ANTI-SPAM: Hardware Account Limit 
         // Prevents abuse by limiting how many unique accounts can log in from a single physical phone
         const existingAccountsOnHardware = await MobileUser.find({ hardwareId }).select('_id');
         const isAlreadyOnThisHardware = existingAccountsOnHardware.some(acc => acc._id.equals(user._id));
 
         if (!isAlreadyOnThisHardware && existingAccountsOnHardware.length >= 3) {
-            return NextResponse.json({
-                message: "DEVICE_LIMIT: This hardware unit is at maximum capacity (3/3)."
-            }, { status: 403 });
+            const warningMsg = `[SECURITY] ${existingAccountsOnHardware.length} accounts share hardware fingerprint ${hardwareId}`;
+            console.warn(warningMsg);
+
+            // ⚡️ NEW: Save warning to database for audit trails
+            try {
+                await SecurityEvent.create({
+                    eventType: "HARDWARE_LIMIT_WARNING",
+                    severity: "moderate",
+                    hardwareId: hardwareId,
+                    userId: user._id,
+                    username: user.username,
+                    ipAddress: ip,
+                    message: warningMsg,
+                    metadata: {
+                        associatedAccountsCount: existingAccountsOnHardware.length
+                    }
+                });
+            } catch (secErr) {
+                console.error("Failed to write security log to DB:", secErr);
+            }
         }
 
         // 4. 🛡️ TRUSTED DEVICES & PIN AUTHENTICATION
@@ -158,8 +181,6 @@ export async function POST(req) {
         if (pushToken) user.pushToken = pushToken;
         user.activeSessionDeviceId = deviceId || user.deviceId; // Fixes the crash bug from original code
 
-        const forwarded = req.headers.get("x-forwarded-for");
-        const ip = forwarded ? forwarded.split(/, /)[0] : "127.0.0.1";
         const geo = geoip.lookup(ip);
         user.country = user.country && user.country !== "Unknown" ? user.country : (geo ? geo.country : "Unknown");
 
@@ -221,13 +242,16 @@ export async function POST(req) {
             accessToken,
             refreshToken,
             user: {
+                _id: user?._id,
                 uid: user.uid,
                 username: user.username,
                 deviceId: user.deviceId,
                 securityLevel: user.securityLevel,
                 coins: user.coins,
                 aura: user.aura,
-                character: user.character
+                character: user.character,
+                willBeDeleted: user.willBeDeleted,
+                deleteAt: user.deleteAt
             },
             sessionData: {
                 followedClans: followedClanTags,

@@ -155,6 +155,10 @@ const ClanSchema = new mongoose.Schema({
     nameLockedUntil: { type: Date, default: null },
 
     badges: [String],
+
+    // --- 🗑️ DELETION LOGIC ---
+    willBeDeleted: { type: Boolean, default: false },
+    deleteAt: { type: Date, default: null, index: { expires: 0 } },
 }, { timestamps: true });
 
 // Index for the War/Bounty system

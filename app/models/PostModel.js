@@ -203,6 +203,9 @@ const postSchema = new mongoose.Schema(
             default: null,
             index: true
         },
+        // --- 🗑️ DELETION LOGIC ---
+        willBeDeleted: { type: Boolean, default: false },
+        deleteAt: { type: Date, default: null, index: { expires: 0 } },
 
         expiresAt: {
             type: Date,

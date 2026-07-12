@@ -17,7 +17,10 @@ const MonthlyHypeStatSchema = new mongoose.Schema({
 
     // 🔥 The Core Score Metric
     score: { type: Number, default: 0, index: true },
-    count: { type: Number, default: 0 } // Total number of actions dropped/received
+    count: { type: Number, default: 0 }, // Total number of actions dropped/received
+
+    // --- 🗑️ DELETION LOGIC ---
+    deleteAt: { type: Date, default: null, index: { expires: 0 } },
 }, { timestamps: true });
 
 // Strict compound index so a single user/clan only has ONE document per category per month
