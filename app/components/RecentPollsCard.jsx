@@ -21,7 +21,7 @@ export default function RecentPollsCard() {
     // Ensure hydration safety
     useEffect(() => {
         setMounted(true);
-    }, []);
+    }, [])
 
     const { data, error, isLoading } = useSWR(
         "/api/posts?category=Polls&page=1&limit=2",
