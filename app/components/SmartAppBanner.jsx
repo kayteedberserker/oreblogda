@@ -58,7 +58,7 @@ export default function SmartAppBanner() {
     if (!isVisible) return null;
 
     return (
-        <div className="fixed top-0 left-0 right-0 z-[9999] animate-in slide-in-from-top duration-500">
+        <div className="fixed top-0 left-0 right-0 z-100 animate-in slide-in-from-top duration-500">
             {/* Banner Container */}
             <div className="bg-white dark:bg-[#111] border-b border-gray-200 dark:border-zinc-800 shadow-xl px-4 py-3 flex items-center justify-between">
 

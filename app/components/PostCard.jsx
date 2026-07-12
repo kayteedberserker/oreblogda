@@ -112,11 +112,7 @@ const formatViews = (views) => {
 
 const getVideoThumbnail = (mediaUrl) => {
     if (!mediaUrl) return null;
-
     // 1. If it's already a static image format, return it immediately from source
-    if (mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i)) {
-        return mediaUrl;
-    }
 
     // 2. If it's ALREADY a legacy Cloudinary asset URL string, handle it contextually
     if (mediaUrl.includes("res.cloudinary.com")) {
@@ -134,7 +130,6 @@ const getVideoThumbnail = (mediaUrl) => {
     // The "f_jpg" transformation tells Cloudinary to automatically handle the conversion internally 
     // without distorting the resource payload link attached below.
     const transforms = "f_jpg,q_auto,so_auto,w_600";
-    console.log(`https://res.cloudinary.com/${cloudName}/video/fetch/${transforms}/${mediaUrl}`)
     // URL-encode the exact source parameter so R2 folders map correctly
     // ✅ FIXED: Delivering the clean encoded target URL directly to Cloudinary's extraction cluster
     return `https://res.cloudinary.com/${cloudName}/video/fetch/${transforms}/${mediaUrl}`;
@@ -196,7 +191,7 @@ const getVideoPlaybackUrl = (mediaUrl) => {
 
 const MediaPlaceholder = ({ height = "250px", onPress, type, thumbUrl, showPlayIcon = true }) => (
     <button onClick={onPress} style={{ height }} className="w-full bg-gray-100 dark:bg-gray-900 flex items-center justify-center overflow-hidden rounded-2xl relative border-none cursor-pointer group">
-        {thumbUrl && <img src={getImageOptimizedUrl(thumbUrl)} className="absolute w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-500" alt="Thumbnail" />}
+        {thumbUrl && <img src={thumbUrl} className="absolute w-full h-full object-cover opacity-60 group-hover:scale-105 transition-transform duration-500" alt="Video Preview" />}
         {showPlayIcon && <div className="bg-black/40 p-4 rounded-full mb-2 border border-white/20 z-10 backdrop-blur-sm group-hover:bg-blue-600/60 transition-colors">{type === "video" ? <Icons.Play /> : <Icons.Image />}</div>}
         <div className="bg-black/60 px-4 py-1 rounded-full border border-white/10 z-10 backdrop-blur-sm">
             <span className="text-white font-black text-[10px] uppercase tracking-[0.2em]">Open {type === "video" ? "Stream" : "Visual"}</span>
@@ -245,14 +240,14 @@ const MediaModal = ({ isOpen, onClose, mediaItems, currentIndex, setCurrentIndex
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in duration-200" onClick={onClose}>
-            <button onClick={onClose} className="absolute top-6 right-6 p-3 bg-white/10 hover:bg-white/20 rounded-full z-50 transition-colors"><Icons.X color="white" /></button>
+        <div className="fixed inset-0 z-90 flex items-center justify-center bg-black/90 backdrop-blur-md animate-in fade-in duration-200" onClick={onClose}>
+            <button onClick={onClose} className="absolute top-20 right-6 p-3 bg-white/10 hover:bg-white/20 rounded-full z-90 transition-colors"><Icons.X color="white" /></button>
             {mediaItems[currentIndex]?.type !== "youtube" && (
-                <button onClick={(e) => { e.stopPropagation(); handleDownload(); }} disabled={isDownloading || isMediaSaved} className="absolute top-6 left-6 p-3 bg-white/10 hover:bg-white/20 rounded-full z-50 flex items-center gap-2 transition-colors">
+                <button onClick={(e) => { e.stopPropagation(); handleDownload(); }} disabled={isDownloading || isMediaSaved} className="absolute top-20 left-6 p-3 bg-white/10 hover:bg-white/20 rounded-full z-90 flex items-center gap-2 transition-colors">
                     {isDownloading ? <span className="text-white text-xs">...</span> : isMediaSaved ? <Icons.Check color="white" /> : <Icons.Download color="white" />}
                 </button>
             )}
-            <div className="relative w-full h-full flex items-center justify-center p-4">
+            <div className="relative w-full h-full flex items-center mt-20 justify-center p-4">
                 {mediaItems[currentIndex] && renderLightboxContent(mediaItems[currentIndex])}
             </div>
             {mediaItems.length > 1 && (
@@ -380,7 +375,7 @@ export default function PostCardComponent({ post, authorData, clanData, isFeed, 
         mutate({ ...activeData, likesCount: totalLikes + 1 }, false);
 
         try {
-            const res = await fetch(`${API_URL}/api/posts/${post?._id}/like`, { method: "PATCH" });
+            const res = await fetch(`${API_URL}/api/posts/${post?._id}`, { method: "PATCH", body: JSON.stringify({ action: "like" }) });
             if (res.ok) {
                 const likedList = JSON.parse(localStorage.getItem('user_likes') || "[]");
                 if (!likedList.includes(post?._id)) {

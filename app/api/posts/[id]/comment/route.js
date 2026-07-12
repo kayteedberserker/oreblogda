@@ -228,299 +228,313 @@ async function checkTitleUnlocks(user, field, currentCount) {
 }
 
 export async function POST(req, { params }) {
-    await connectDB();
-    const { id } = await params;
+  await connectDB();
+  const { id } = await params;
 
-    try {
-        const body = await req.json();
-        const { name, text, stickerId, imageUrl, parentCommentId, replyToCommentId, fingerprint, candidateSources = [] } = body;
+  try {
+    const body = await req.json();
+    const { name, text, stickerId, imageUrl, parentCommentId, replyToCommentId, fingerprint, candidateSources = [] } = body;
 
-        if (!stickerId && !imageUrl && !text?.trim()) {
-            return NextResponse.json({ message: "Comment content required" }, { status: 400 });
+    if (!stickerId && !imageUrl && !text?.trim()) {
+      return NextResponse.json({ message: "Comment content required" }, { status: 400 });
+    }
+
+    const foundMobileUser = await MobileUser.findOne({ deviceId: fingerprint });
+    const mobileUserId = foundMobileUser?._id;
+
+    const searchFilter = id.includes("-") ? { slug: id } : { _id: id };
+    const post = await Post.findOne(searchFilter);
+
+    if (!post) {
+      console.log("Post not found")
+      return NextResponse.json({ message: "Post not found" }, { status: 404 });
+    }
+
+    let resolvedStickerUrl = null;
+    if (stickerId) {
+      const queryConditions = [{ stickerId: stickerId }];
+      if (mongoose.Types.ObjectId.isValid(stickerId)) {
+        queryConditions.push({ _id: stickerId });
+      }
+      const stickerDoc = await StickerModel.findOne({ $or: queryConditions });
+      if (stickerDoc && stickerDoc.url) {
+        resolvedStickerUrl = stickerDoc.url;
+      }
+    }
+
+    await processTelemetryAndAffinity(fingerprint, post, candidateSources, 'comment', 15);
+
+    const displayTitle = post.title?.length > 20 ? `${post.title.substring(0, 20)}...` : post.title || "Post";
+    const commentType = stickerId ? "sticker" : imageUrl ? "image" : "text";
+    const commentText = (stickerId || imageUrl) ? "" : (text || "");
+
+    // Pre-generate unique Comment ID to bind natively to R2 Object Keys safely
+    const commentMongoId = new mongoose.Types.ObjectId();
+    let uploadedImageUrl = imageUrl || null;
+
+    // 🟢 Stream Upload Sequence to Cloudflare R2 Storage Bucket 
+    if (imageUrl) {
+      let bodyBuffer;
+      let contentType = "image/jpeg";
+
+      if (imageUrl.startsWith("data:image")) {
+        // Parse standard incoming Base64 Data-URI Strings smoothly
+        const matches = imageUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+        if (matches && matches.length === 3) {
+          contentType = matches[1];
+          bodyBuffer = Buffer.from(matches[2], "base64");
         }
-
-        const foundMobileUser = await MobileUser.findOne({ deviceId: fingerprint });
-        const mobileUserId = foundMobileUser?._id;
-
-        const searchFilter = id.includes("-") ? { slug: id } : { _id: id };
-        const post = await Post.findOne(searchFilter);
-        if (!post) return NextResponse.json({ message: "Post not found" }, { status: 404 });
-
-        let resolvedStickerUrl = null;
-        if (stickerId) {
-            const queryConditions = [{ stickerId: stickerId }];
-            if (mongoose.Types.ObjectId.isValid(stickerId)) {
-                queryConditions.push({ _id: stickerId });
-            }
-            const stickerDoc = await StickerModel.findOne({ $or: queryConditions });
-            if (stickerDoc && stickerDoc.url) {
-                resolvedStickerUrl = stickerDoc.url;
-            }
+      } else if (imageUrl.startsWith("http")) {
+        // Fallback process for pre-resolved temporary server caching targets
+        try {
+          const response = await fetch(imageUrl);
+          const arrayBuffer = await response.arrayBuffer();
+          bodyBuffer = Buffer.from(arrayBuffer);
+          contentType = response.headers.get("content-type") || "image/jpeg";
+        } catch (fetchErr) {
+          console.error("Error pulling remote media layer stream: ", fetchErr);
         }
+      }
 
-        await processTelemetryAndAffinity(fingerprint, post, candidateSources, 'comment', 15);
+      if (bodyBuffer) {
+        const ext = contentType.split("/")[1] || "jpeg";
+        const r2Key = `comments/${id}/${commentMongoId}.${ext}`;
 
-        const displayTitle = post.title?.length > 20 ? `${post.title.substring(0, 20)}...` : post.title || "Post";
-        const commentType = stickerId ? "sticker" : imageUrl ? "image" : "text";
-        const commentText = (stickerId || imageUrl) ? "" : (text || "");
-
-        // Pre-generate unique Comment ID to bind natively to R2 Object Keys safely
-        const commentMongoId = new mongoose.Types.ObjectId();
-        let uploadedImageUrl = imageUrl || null;
-
-        // 🟢 Stream Upload Sequence to Cloudflare R2 Storage Bucket 
-        if (imageUrl) {
-            let bodyBuffer;
-            let contentType = "image/jpeg";
-
-            if (imageUrl.startsWith("data:image")) {
-                // Parse standard incoming Base64 Data-URI Strings smoothly
-                const matches = imageUrl.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-                if (matches && matches.length === 3) {
-                    contentType = matches[1];
-                    bodyBuffer = Buffer.from(matches[2], "base64");
-                }
-            } else if (imageUrl.startsWith("http")) {
-                // Fallback process for pre-resolved temporary server caching targets
-                try {
-                    const response = await fetch(imageUrl);
-                    const arrayBuffer = await response.arrayBuffer();
-                    bodyBuffer = Buffer.from(arrayBuffer);
-                    contentType = response.headers.get("content-type") || "image/jpeg";
-                } catch (fetchErr) {
-                    console.error("Error pulling remote media layer stream: ", fetchErr);
-                }
-            }
-
-            if (bodyBuffer) {
-                const ext = contentType.split("/")[1] || "jpeg";
-                const r2Key = `comments/${id}/${commentMongoId}.${ext}`;
-
-                await r2Client.send(new PutObjectCommand({
-                    Bucket: process.env.R2_BUCKET_NAME,
-                    Key: r2Key,
-                    Body: bodyBuffer,
-                    ContentType: contentType
-                }));
-
-                const domain = process.env.NEW_DOMAIN || "https://media.oreblogda.com";
-                uploadedImageUrl = `${domain}/${r2Key}`;
-            }
-        }
-
-        const newComment = {
-            _id: commentMongoId,
-            authorFingerprint: fingerprint,
-            authorUserId: mobileUserId,
-            name,
-            text: commentText,
-            stickerId: stickerId || null,
-            imageUrl: uploadedImageUrl, // 🌟 Syncing the updated verified R2 storage link location
-            type: commentType,
-            date: new Date(),
-            isEdited: false,
-            replies: []
-        };
-
-        // 🌟 NESTED SWIPE METADATA SYNCHRONIZATION
-        if (parentCommentId && replyToCommentId) {
-            const matchedTarget = findCommentById(post.comments, replyToCommentId);
-            if (matchedTarget) {
-                newComment.replyToCommentId = replyToCommentId;
-                newComment.replyToName = matchedTarget.author?.username || matchedTarget.name || 'Anonymous';
-                newComment.replyToText = matchedTarget.type === 'sticker' ? '[Sticker]' : matchedTarget.imageUrl ? '[Image]' : matchedTarget.text;
-            }
-        }
-
-        let targetRootComment = null;
-        let immediateRecipientId = null;
-
-        const findAndReply = (comments, rootComment = null) => {
-            for (let comment of comments) {
-                const currentRoot = rootComment || comment;
-                if (comment._id.toString() === parentCommentId) {
-                    comment.replies.push(newComment);
-                    targetRootComment = currentRoot;
-                    return comment.authorUserId;
-                }
-                if (comment.replies?.length > 0) {
-                    const found = findAndReply(comment.replies, currentRoot);
-                    if (found) return found;
-                }
-            }
-        };
-
-        if (!parentCommentId) {
-            post.comments.unshift(newComment);
-            immediateRecipientId = post.authorUserId;
-
-            if (post.authorUserId && post.authorUserId.toString() !== mobileUserId?.toString()) {
-                await awardAura(post.authorUserId, 10);
-                await awardClanPoints(post, 20, 'comment');
-
-                const postAuthor = await MobileUser.findByIdAndUpdate(
-                    post.authorUserId,
-                    { $inc: { receivedCommentsCount: 1 } },
-                    { new: true }
-                );
-                if (postAuthor) {
-                    await checkTitleUnlocks(postAuthor, "totalCommentsReceived", postAuthor.receivedCommentsCount);
-                }
-            }
-        } else {
-            immediateRecipientId = findAndReply(post.comments);
-            if (!immediateRecipientId) return NextResponse.json({ message: "Signal lost" }, { status: 404 });
-            post.markModified("comments");
-
-            if (immediateRecipientId.toString() !== mobileUserId?.toString()) {
-                await awardAura(immediateRecipientId, 5);
-                await awardClanPoints(post, 10, 'comment');
-
-                const parentAuthor = await MobileUser.findByIdAndUpdate(
-                    immediateRecipientId,
-                    { $inc: { receivedCommentsCount: 1 } },
-                    { new: true }
-                );
-                if (parentAuthor) {
-                    await checkTitleUnlocks(parentAuthor, "totalCommentsReceived", parentAuthor.receivedCommentsCount);
-                }
-            }
-        }
-
-        if (mobileUserId) {
-            const updatedCommenter = await MobileUser.findByIdAndUpdate(
-                mobileUserId,
-                { $inc: { lifetimeCommentsCount: 1 } },
-                { new: true }
-            );
-            if (updatedCommenter) {
-                await checkTitleUnlocks(updatedCommenter, "lifetimeCommentsMade", updatedCommenter.lifetimeCommentsCount);
-            }
-        }
-
-        await post.save();
-        const notifications = [];
-
-        if (parentCommentId && immediateRecipientId?.toString() !== mobileUserId?.toString()) {
-            notifications.push({
-                recipientId: immediateRecipientId,
-                title: "New Reply 💬",
-                message: stickerId ? `${name} sent a sticker on "${displayTitle}"` : uploadedImageUrl ? `${name} shared an image on "${displayTitle}"` : `${name} on "${displayTitle}": "${text?.substring(0, 20)}..."`,
-                type: "reply",
-                commentId: targetRootComment?._id || parentCommentId,
-                isMongoId: true
-            });
-        }
-
-        if (!parentCommentId && post.authorUserId && post.authorUserId.toString() !== mobileUserId?.toString()) {
-            notifications.push({
-                recipientId: post.authorUserId,
-                title: "New Signal 📝",
-                message: stickerId ? `${name} sent a sticker on "${displayTitle}"` : uploadedImageUrl ? `${name} shared an image on "${displayTitle}"` : `${name} commented on "${displayTitle}" (#${post.comments.length})`,
-                type: "comment",
-                commentId: newComment._id,
-                isMongoId: true
-            });
-        }
-
-        if (parentCommentId && targetRootComment) {
-            const { participants, totalMessages } = getBranchData(targetRootComment);
-
-            if (totalMessages > 0 && totalMessages % 5 === 0) {
-                const rewardIds = new Set(participants);
-                if (post.authorUserId) rewardIds.add(post.authorUserId.toString());
-                if (mobileUserId) rewardIds.delete(mobileUserId.toString());
-
-                const idsToReward = Array.from(rewardIds);
-                if (idsToReward.length > 0) {
-                    await Promise.all(idsToReward.map(id => awardAura(id, 1)));
-                    await awardClanPoints(post, 5, 'comment');
-                }
-            }
-
-            if (typeof shouldNotifyMilestone === 'function' && shouldNotifyMilestone(totalMessages)) {
-                const discussionMsg = `[${displayTitle}] Active: ${totalMessages} replies on ${targetRootComment.name}'s signal.`;
-                participants.forEach(pId => {
-                    if (pId !== mobileUserId?.toString()) {
-                        notifications.push({
-                            recipientId: pId,
-                            title: "Discussion Active 🔥",
-                            message: discussionMsg,
-                            type: "discussion",
-                            commentId: targetRootComment._id,
-                            isMongoId: true
-                        });
-                    }
-                });
-            }
-        }
-
-        await Promise.all(notifications.map(async (n) => {
-            const query = n.isMongoId ? { _id: n.recipientId } : { deviceId: n.recipientId };
-            const user = await MobileUser.findOne(query);
-
-            if (user) {
-                await Notification.create({
-                    recipientId: user.deviceId,
-                    senderName: name,
-                    type: n.type,
-                    postId: post._id,
-                    message: n.message
-                });
-
-                if (user.pushToken) {
-                    await sendPillParallel(
-                        [user.pushToken],
-                        n.title,
-                        n.message,
-                        {
-                            postId: post._id.toString(),
-                            type: n.type,
-                            commentId: n.commentId?.toString(),
-                            mediaUrl: resolvedStickerUrl ? resolvedStickerUrl : uploadedImageUrl ? uploadedImageUrl : post.mediaUrl,
-                            authorPfp: foundMobileUser?.profilePic?.url
-                        },
-                        {
-                            type: `post_${n.type}`,
-                            targetAudience: 'user',
-                            targetId: user._id.toString(),
-                            singleUser: true,
-                            link: `/post/${post.slug}`,
-                            priority: 2
-                        }
-                    );
-                }
-            }
+        await r2Client.send(new PutObjectCommand({
+          Bucket: process.env.R2_BUCKET_NAME,
+          Key: r2Key,
+          Body: bodyBuffer,
+          ContentType: contentType
         }));
 
-        let enrichedAuthor = { name: newComment.name };
-        const latestSender = await MobileUser.findOne({ deviceId: fingerprint });
-
-        if (latestSender) {
-            const equippedItems = latestSender.inventory ? latestSender.inventory.filter(i => i.isEquipped) : [];
-            enrichedAuthor = {
-                username: latestSender.username,
-                name: latestSender.username,
-                peakLevel: latestSender.peakLevel || 0,
-                lastStreak: latestSender.lastStreak || 0,
-                streak: latestSender.consecutiveStreak || 0,
-                auraRank: latestSender.previousRank || null,
-                equippedGlow: equippedItems.find(i => ['GLOW', 'NAME_GLOW', 'TEXT_GLOW', 'EFFECT'].includes(i.category?.toUpperCase())) || null,
-                badges: equippedItems.filter(i => i.category?.toUpperCase() === 'BADGE') || []
-            };
-        }
-
-        // Map parameters to return the accurate state back to the UI context smoothly
-        const enrichedNewComment = {
-            ...newComment,
-            author: enrichedAuthor
-        };
-
-        return NextResponse.json({ comment: enrichedNewComment }, { status: 201 });
-    } catch (err) {
-        console.error("POST error:", err);
-        return NextResponse.json({ message: "Error", error: err.message }, { status: 500 });
+        const domain = process.env.NEW_DOMAIN || "https://media.oreblogda.com";
+        uploadedImageUrl = `${domain}/${r2Key}`;
+      }
     }
+
+    const newComment = {
+      _id: commentMongoId,
+      authorFingerprint: fingerprint,
+      authorUserId: mobileUserId,
+      name,
+      text: commentText,
+      stickerId: stickerId || null,
+      imageUrl: uploadedImageUrl, // 🌟 Syncing the updated verified R2 storage link location
+      type: commentType,
+      date: new Date(),
+      isEdited: false,
+      replies: []
+    };
+
+    // 🌟 NESTED SWIPE METADATA SYNCHRONIZATION
+    if (parentCommentId && replyToCommentId) {
+      const matchedTarget = findCommentById(post.comments, replyToCommentId);
+      if (matchedTarget) {
+        newComment.replyToCommentId = replyToCommentId;
+        newComment.replyToName = matchedTarget.author?.username || matchedTarget.name || 'Anonymous';
+        newComment.replyToText = matchedTarget.type === 'sticker' ? '[Sticker]' : matchedTarget.imageUrl ? '[Image]' : matchedTarget.text;
+      }
+    }
+
+    let targetRootComment = null;
+    let immediateRecipientId = null;
+    let isCommentFound = false; // Flag to track if the target comment was actually found
+
+    const findAndReply = (comments, rootComment = null) => {
+      for (let comment of comments) {
+        const currentRoot = rootComment || comment;
+        if (comment._id.toString() === parentCommentId) {
+          comment.replies.push(newComment);
+          targetRootComment = currentRoot;
+          isCommentFound = true; // Mark as successfully found
+          return comment.authorUserId;
+        }
+        if (comment.replies?.length > 0) {
+          const foundId = findAndReply(comment.replies, currentRoot);
+          if (isCommentFound) return foundId; // Check our flag instead of truthy ID
+        }
+      }
+      return null;
+    };
+
+    if (!parentCommentId) {
+      post.comments.unshift(newComment);
+      immediateRecipientId = post.authorUserId;
+
+      if (post.authorUserId && post.authorUserId.toString() !== mobileUserId?.toString()) {
+        await awardAura(post.authorUserId, 10);
+        await awardClanPoints(post, 20, 'comment');
+
+        const postAuthor = await MobileUser.findByIdAndUpdate(
+          post.authorUserId,
+          { $inc: { receivedCommentsCount: 1 } },
+          { new: true }
+        );
+        if (postAuthor) {
+          await checkTitleUnlocks(postAuthor, "totalCommentsReceived", postAuthor.receivedCommentsCount);
+        }
+      }
+    } else {
+      immediateRecipientId = findAndReply(post.comments);
+      
+      // Use the flag here instead of !immediateRecipientId to prevent anonymous 404 blocks
+      if (!isCommentFound) { 
+        console.log("No immediate rep Id found in tree"); 
+        return NextResponse.json({ message: "Signal lost" }, { status: 404 }); 
+      }
+      post.markModified("comments");
+
+      // Only give rewards and stats if the immediate recipient is a registered user
+      if (immediateRecipientId && immediateRecipientId.toString() !== mobileUserId?.toString()) {
+        await awardAura(immediateRecipientId, 5);
+        await awardClanPoints(post, 10, 'comment');
+
+        const parentAuthor = await MobileUser.findByIdAndUpdate(
+          immediateRecipientId,
+          { $inc: { receivedCommentsCount: 1 } },
+          { new: true }
+        );
+        if (parentAuthor) {
+          await checkTitleUnlocks(parentAuthor, "totalCommentsReceived", parentAuthor.receivedCommentsCount);
+        }
+      }
+    }
+
+    if (mobileUserId) {
+      const updatedCommenter = await MobileUser.findByIdAndUpdate(
+        mobileUserId,
+        { $inc: { lifetimeCommentsCount: 1 } },
+        { new: true }
+      );
+      if (updatedCommenter) {
+        await checkTitleUnlocks(updatedCommenter, "lifetimeCommentsMade", updatedCommenter.lifetimeCommentsCount);
+      }
+    }
+
+    await post.save();
+    const notifications = [];
+
+    // Ensure immediateRecipientId exists before queuing notification
+    if (parentCommentId && immediateRecipientId && immediateRecipientId.toString() !== mobileUserId?.toString()) {
+      notifications.push({
+        recipientId: immediateRecipientId,
+        title: "New Reply 💬",
+        message: stickerId ? `${name} sent a sticker on "${displayTitle}"` : uploadedImageUrl ? `${name} shared an image on "${displayTitle}"` : `${name} on "${displayTitle}": "${text?.substring(0, 20)}..."`,
+        type: "reply",
+        commentId: targetRootComment?._id || parentCommentId,
+        isMongoId: true
+      });
+    }
+
+    if (!parentCommentId && post.authorUserId && post.authorUserId.toString() !== mobileUserId?.toString()) {
+      notifications.push({
+        recipientId: post.authorUserId,
+        title: "New Signal 📝",
+        message: stickerId ? `${name} sent a sticker on "${displayTitle}"` : uploadedImageUrl ? `${name} shared an image on "${displayTitle}"` : `${name} commented on "${displayTitle}" (#${post.comments.length})`,
+        type: "comment",
+        commentId: newComment._id,
+        isMongoId: true
+      });
+    }
+
+    if (parentCommentId && targetRootComment) {
+      const { participants, totalMessages } = getBranchData(targetRootComment);
+
+      if (totalMessages > 0 && totalMessages % 5 === 0) {
+        const rewardIds = new Set(participants);
+        if (post.authorUserId) rewardIds.add(post.authorUserId.toString());
+        if (mobileUserId) rewardIds.delete(mobileUserId.toString());
+
+        const idsToReward = Array.from(rewardIds);
+        if (idsToReward.length > 0) {
+          await Promise.all(idsToReward.map(id => awardAura(id, 1)));
+          await awardClanPoints(post, 5, 'comment');
+        }
+      }
+
+      if (typeof shouldNotifyMilestone === 'function' && shouldNotifyMilestone(totalMessages)) {
+        const discussionMsg = `[${displayTitle}] Active: ${totalMessages} replies on ${targetRootComment.name}'s signal.`;
+        participants.forEach(pId => {
+          if (pId !== mobileUserId?.toString()) {
+            notifications.push({
+              recipientId: pId,
+              title: "Discussion Active 🔥",
+              message: discussionMsg,
+              type: "discussion",
+              commentId: targetRootComment._id,
+              isMongoId: true
+            });
+          }
+        });
+      }
+    }
+
+    await Promise.all(notifications.map(async (n) => {
+      const query = n.isMongoId ? { _id: n.recipientId } : { deviceId: n.recipientId };
+      const user = await MobileUser.findOne(query);
+
+      if (user) {
+        await Notification.create({
+          recipientId: user.deviceId,
+          senderName: name,
+          type: n.type,
+          postId: post._id,
+          message: n.message
+        });
+
+        if (user.pushToken) {
+          await sendPillParallel(
+            [user.pushToken],
+            n.title,
+            n.message,
+            {
+              postId: post._id.toString(),
+              type: n.type,
+              commentId: n.commentId?.toString(),
+              mediaUrl: resolvedStickerUrl ? resolvedStickerUrl : uploadedImageUrl ? uploadedImageUrl : post.mediaUrl,
+              authorPfp: foundMobileUser?.profilePic?.url
+            },
+            {
+              type: `post_${n.type}`,
+              targetAudience: 'user',
+              targetId: user._id.toString(),
+              singleUser: true,
+              link: `/post/${post.slug}`,
+              priority: 2
+            }
+          );
+        }
+      }
+    }));
+
+    let enrichedAuthor = { name: newComment.name };
+    const latestSender = await MobileUser.findOne({ deviceId: fingerprint });
+
+    if (latestSender) {
+      const equippedItems = latestSender.inventory ? latestSender.inventory.filter(i => i.isEquipped) : [];
+      enrichedAuthor = {
+        username: latestSender.username,
+        name: latestSender.username,
+        peakLevel: latestSender.peakLevel || 0,
+        lastStreak: latestSender.lastStreak || 0,
+        streak: latestSender.consecutiveStreak || 0,
+        auraRank: latestSender.previousRank || null,
+        equippedGlow: equippedItems.find(i => ['GLOW', 'NAME_GLOW', 'TEXT_GLOW', 'EFFECT'].includes(i.category?.toUpperCase())) || null,
+        badges: equippedItems.filter(i => i.category?.toUpperCase() === 'BADGE') || []
+      };
+    }
+
+    // Map parameters to return the accurate state back to the UI context smoothly
+    const enrichedNewComment = {
+      ...newComment,
+      author: enrichedAuthor
+    };
+
+    return NextResponse.json({ comment: enrichedNewComment }, { status: 201 });
+  } catch (err) {
+    console.error("POST error:", err);
+    return NextResponse.json({ message: "Error", error: err.message }, { status: 500 });
+  }
 }
 
 // 🌟 NEW: DELETE Route for Removing Comments (Reads id from URL search parameters)
