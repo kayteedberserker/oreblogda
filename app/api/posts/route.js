@@ -1294,9 +1294,9 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
                 finalStatus = "approved";
                 rejectionReason = ai.reason;
             } else if (ai.action === "reject") {
-                finalStatus = "rejected";
+                finalStatus = "approved";
                 rejectionReason = ai.reason;
-                expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
+                // expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
             } else {
                 finalStatus = "pending";
                 rejectionReason = ai.reason;
