@@ -35,7 +35,7 @@ const { GoogleGenAI } = require("@google/genai");
 // Initialize both clients with global configurations
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-async function runAIModerator(title, message, clanId, category, mediaUrl, mediaType) {
+export async function runAIModerator(title, message, clanId, category, mediaUrl, mediaType) {
     // Clean string interpolations so the model never parses literal nulls
     const safeClanId = clanId ? clanId.toString() : "NONE";
     const safeMediaUrl = mediaUrl || "NONE";
@@ -47,18 +47,18 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
     let mediaMime = null;
 
     if (mediaUrl) {
-        const isVideo = mediaType === "video" || mediaUrl.match(/\.(mp4|mov|webm|mkv)$/i);
-        const isImage = mediaType === "image" || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)$/i);
+        const isVideo = mediaType === "video"
+        const isImage = mediaType === "image"
 
         if (isVideo || isImage) {
             let mediaRes = null;
             for (let i = 0; i < 2; i++) {
                 try {
-                    const headRes = await fetch(mediaUrl, { method: 'HEAD', signal: AbortSignal.timeout(1000) });
+                    const headRes = await fetch(mediaUrl, { method: 'HEAD', signal: AbortSignal.timeout(2000) });
                     const contentLength = headRes.headers.get('content-length');
                     if (contentLength && parseInt(contentLength) > 10 * 1024 * 1024) break;
 
-                    mediaRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(2000) });
+                    mediaRes = await fetch(mediaUrl, { signal: AbortSignal.timeout(4000) });
                     if (mediaRes.ok) break;
                 } catch (e) {
                     console.log(`Media connection cycle ${i + 1} timed out, resetting connection...`);
@@ -83,8 +83,6 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
 
             const userContent = [{ type: "text", text: userText }];
 
-            // NOTE: To reach true 10/10, video frame extraction would be injected here 
-            // so the vision model can truly enforce the "Trust the media" rule on MP4s.
             if (mediaBase64 && mediaMime.startsWith("image")) {
                 userContent.push({
                     type: "image_url",
@@ -143,30 +141,30 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
     const payloadText = `Clan ID: ${safeClanId}\nAttached Media URL: ${safeMediaUrl}\nTitle: "${title}"\nMessage: "${message}"\nCategory: "${category}"`;
 
     // =========================================================
-    // 🏷️ STEP 3: PIPELINE PHASE 1 - TAG EXTRACTION 
+    // 🏷️ STEP 3: PHASE 1 - UNDERSTANDING & TAGGING (THE TRUTH PHASE)
     // =========================================================
-    const tagSystemPrompt = `You are Oreblogda's entity extraction engine. Your job is to accurately categorize content subjects and evaluate media consistency.
+    const tagSystemPrompt = `You are Oreblogda's entity extraction engine. Your ONLY job is to identify what is in the content. Do NOT moderate or judge the content. Act like a curious fan identifying the subject.
         
-        ⭐ CONTENT VERIFICATION & RELEVANCE RULES:
-        1. Prioritize the media. Use the title/message only when they clearly describe what the media is discussing (e.g., a podcast or video essay).
-        2. Only extract entities that are central to understanding the content. 
-        3. EXCLUSION RULES (CRITICAL) - Do NOT extract entities that are:
-           - mentioned only once or shown for a brief moment
-           - used only as a comparison or analogy
-           - listed in the title but absent from the media (unless it is a commentary/essay)
-           - background posters or unrelated background gameplay
-           - hashtags or generic trending keywords
+        ⭐ EXTRACTION RULES:
+        1. THE MEDIA IS THE PRIMARY SOURCE OF TRUTH. Prioritize visual content over text. Use the title/message only to provide context when they are consistent with the media. Never ignore clear visual evidence because of text. (e.g., if the title says "Valorant" but the video is clearly "Blood Strike", tag "blood strike").
+        The media is the source of truth.
+        If the media clearly contradicts the text,
+        always trust the media.
+        Never hallucinate a franchise because
+        the title mentions it.
+        2. Identify core subjects. Do NOT extract generic hashtags, random background games, or things mentioned only once in passing.
 
-        ⭐ TAGGING RULES & DEFINITIONS:
-        1. DOMINANT FRANCHISE: The single most important franchise overall.
-        2. PRIMARY FRANCHISES: The main subject visually depicted or heavily discussed. Limit: Max 2. (EXCEPTION: Compilations can have up to 5). MUST belong to Anime, Manga, Video Games, or Gaming Culture. ⭐ If no franchise can be identified with reasonable certainty, return an empty array. Never guess.
+        ⭐ TAGGING DEFINITIONS & CONSTRAINTS:
+        1. DOMINANT FRANCHISE: The single most important franchise overall. If completely unknown/unidentifiable, write "unknown".
+        2. PRIMARY FRANCHISES: The main subject visually depicted or heavily discussed. Limit: Max 2. If completely unknown/unidentifiable, return an empty array.
         3. SECONDARY FRANCHISES: Franchises mentioned only in passing. Limit: Max 3.
-        4. CHARACTERS: (Max 5). Canonical official names of actively featured characters. Ignore brief cameos.
-        5. TOPICS: (Max 5). Franchise-specific lore concepts (e.g., bankai, devil fruit). Topics MUST belong to the primary franchise extracted. Never output a topic without also outputting its associated franchise.
-        6. EVIDENCE SOURCE: For every extracted entity, identify if the evidence came from "visual", "spoken", "title", "message", or "mixed".
-        7. LOWERCASE ENFORCEMENT: All tags MUST be strictly lowercase (No generic tags).`;
+        4. CHARACTERS: Canonical official names of actively featured characters. Max 5.
+        5. TOPICS: Lore-specific concepts (e.g., bankai, devil fruit). 
+           - CRITICAL: Topics MUST belong specifically to the primary franchise extracted. Never emit a generic topic (like "ranked" or "ace") that could belong to multiple franchises unless the franchise itself is confidently identified and emitted.
+        6. CONTENT TYPE: Determine the primary format of the post from the allowed options.
+        7. EVIDENCE SOURCE: "visual", "spoken", "title", "message", or "mixed".
+        8. LOWERCASE ENFORCEMENT: All tags MUST be strictly lowercase.`;
 
-    // Reusable object schema for entities so we can track the evidence source
     const entitySchema = {
         type: "OBJECT",
         properties: {
@@ -180,19 +178,26 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
     const tagSchema = {
         type: "OBJECT",
         properties: {
-            titleMatchesMedia: { type: "BOOLEAN", description: "True if media content aligns with or supports the title/message." },
-            matchReason: { type: "STRING", description: "Brief explanation of why the title matches or contradicts the media." },
-            dominantFranchise: { type: "STRING", description: "The single most dominant franchise overall (lowercase), or 'none'." },
-            primaryFranchises: { type: "ARRAY", items: entitySchema, description: "Max 2 (or 5 for compilations). Main anime/gaming franchise(s)." },
+            relationshipBetweenTextAndMedia: {
+                type: "STRING",
+                description: "Must be exactly: 'direct', 'related', 'commentary', 'opinion', 'comparison', 'unclear', or 'contradiction'."
+            },
+            relationshipReason: { type: "STRING", description: "Brief explanation of the relationship chosen." },
+            dominantFranchise: { type: "STRING", description: "The single most dominant franchise overall, or 'unknown'." },
+            contentType: {
+                type: "STRING",
+                description: "Must be exactly one of: 'gameplay', 'anime_scene', 'fanart', 'meme', 'news', 'discussion', 'review', 'guide', 'clip', 'cosplay', 'edit', 'screenshot', 'other'."
+            },
+            primaryFranchises: { type: "ARRAY", items: entitySchema, description: "Max 2. Main anime/gaming franchise(s)." },
             secondaryFranchises: { type: "ARRAY", items: { type: "STRING" }, description: "Max 3. Secondary passing mentions." },
             characters: { type: "ARRAY", items: entitySchema, description: "Max 5. Actively featured canonical characters." },
-            topics: { type: "ARRAY", items: entitySchema, description: "Max 5. Specific lore items inherently tied to the primary franchise." },
-            mediaConfidence: { type: "NUMBER", description: "0.0 to 1.0: Confidence in parsing the visual/audio media." },
-            entityConfidence: { type: "NUMBER", description: "0.0 to 1.0: Confidence that the extracted tags are correct and central." },
-            overallConfidence: { type: "NUMBER", description: "0.0 to 1.0: Overall confidence in the analysis." }
+            topics: { type: "ARRAY", items: entitySchema, description: "Max 5. Lore items tied directly to the primary franchise." },
+            mediaConfidence: { type: "NUMBER", description: "0.0 to 1.0: Confidence in parsing media." },
+            entityConfidence: { type: "NUMBER", description: "0.0 to 1.0: Confidence in tags." },
+            overallConfidence: { type: "NUMBER", description: "0.0 to 1.0: Overall confidence." }
         },
         required: [
-            "titleMatchesMedia", "matchReason", "dominantFranchise",
+            "relationshipBetweenTextAndMedia", "relationshipReason", "dominantFranchise", "contentType",
             "primaryFranchises", "secondaryFranchises", "characters",
             "topics", "mediaConfidence", "entityConfidence", "overallConfidence"
         ],
@@ -200,53 +205,69 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
     };
 
     let finalInterests = [];
+    let isUnknownContent = false;
     let extractedTagsSummary = "None detected";
 
     try {
         const tagResult = await runCircuit(tagSystemPrompt, payloadText, tagSchema);
 
-        // ⭐ STRICT Gating: We only populate the graph if the AI is confident, 
-        // actually found a primary subject, AND the title isn't misrepresenting the media.
-        if (tagResult.overallConfidence >= 0.6 && tagResult.primaryFranchises.length > 0 && tagResult.titleMatchesMedia) {
+        const primary = tagResult.primaryFranchises.map(e => e.name);
+        const characters = tagResult.characters.map(e => e.name);
+        const topics = tagResult.topics.map(e => e.name);
 
-            // Map the objects back down to flat strings for our MongoDB array
-            const primary = tagResult.primaryFranchises.map(e => e.name);
-            const characters = tagResult.characters.map(e => e.name);
-            const topics = tagResult.topics.map(e => e.name);
+        // Keep 'unknown' out of the tag cloud, but collect whatever tags were successfully discovered
+        const parsedTags = [...primary, ...characters, ...topics].filter(t => t !== "unknown");
 
-            // ⚡️ FLATTENING LOGIC: We combine ONLY the core main content elements. 
-            finalInterests = [...new Set([...primary, ...characters, ...topics])];
+        // Push the contentType into the interests graph with a prefix, but ignore generic/meaningless ones
+        const cType = tagResult.contentType;
+        if (cType && cType !== "other" && cType !== "unknown") {
+            parsedTags.push(`type:${cType}`);
         }
 
-        // Save a summary (including the self-check and dominant franchise) to feed into the Mod circuit
+        if (parsedTags.length > 0) {
+            finalInterests = [...new Set(parsedTags)];
+        }
+
+        // Explicit boolean flag so "unknown" never becomes a massive recommendation category
+        if (tagResult.dominantFranchise === "unknown") {
+            isUnknownContent = true;
+        }
+
         extractedTagsSummary = JSON.stringify({
-            titleMatchesMedia: tagResult.titleMatchesMedia,
-            matchReason: tagResult.matchReason,
+            relationship: tagResult.relationshipBetweenTextAndMedia,
+            reason: tagResult.relationshipReason,
             dominantFranchise: tagResult.dominantFranchise,
+            contentType: tagResult.contentType,
             primary: tagResult.primaryFranchises || [],
             overallConfidence: tagResult.overallConfidence
         });
 
     } catch (e) {
         console.error("Tagging pipeline faulted, proceeding with empty interests array", e);
+        isUnknownContent = true;
     }
 
     // =========================================================
-    // ⚖️ STEP 4: PIPELINE PHASE 2 - MODERATION (USES TAGS)
+    // ⚖️ STEP 5: PHASE 2 - MODERATION (THE FILTER PHASE)
     // =========================================================
+    const modPayloadText = `${payloadText}\nPhase 1 Understanding Results: ${extractedTagsSummary}`;
 
-    const modPayloadText = `${payloadText}\nExtracted Subjects by Tagger: ${extractedTagsSummary}`;
-
-    const modSystemPrompt = `You are Oreblogda's moderation engine.
+    const modSystemPrompt = `You are Oreblogda's moderation engine. Your ONLY job is to decide if this content violates platform policy.
+        
         MODERATION RULES:
-        - Reject real-life nudity or extreme real-life gore. Allow stylized anime gore/ecchi.
-        - ⭐ If the extracted primary franchises are empty or consist entirely of non-anime/non-gaming properties, reject the post unless the title and message clearly establish an anime/gaming context.
-        - ⭐ Check the 'titleMatchesMedia' and 'matchReason'. Reject if the title intentionally misrepresents the primary subject of the media for engagement. Do not reject opinion pieces, comparisons, retrospectives, or essays.
-        - 'News': Strictly anime/gaming news.
-        - 'Polls': Strictly polls.
-        - 'Fanart': MUST have media attached. Reject if missing.
-        - 'Memes': Strictly memes. Reject if categorized as News/Review/Gaming (unless gaming-meme).
-        - Reject posts lacking context or meaning in title/message.`;
+        1. HARMFUL CONTENT: Reject real-life nudity or extreme real-life gore. Stylized anime gore/ecchi is allowed.
+        2. SPAM / OFF-TOPIC: 
+           - If you have HIGH confidence the content is purely unrelated real-world spam (e.g., real estate ads, political arguments, crypto bots), REJECT.
+           - If you cannot identify a franchise but the content might still be anime/gaming, DO NOT reject. FLAG it for human review.
+        3. INTENTIONAL DECEPTION / CLICKBAIT (CRITICAL SOFTENED RULE): 
+           - ONLY REJECT if the contradiction between the text and media is INTENTIONAL and MATERIAL deception (e.g., Title: "One Piece Episode 1200 Leak", Video: A cooking tutorial or cat video).
+        4. CATEGORIES:
+           - 'Fanart': MUST have media attached. Flag if missing.
+        5. HUMAN CULTURE RULE (CRITICAL):
+           - Anime and gaming communities frequently use: jokes, memes, sarcasm, hyperbole, incorrect franchise names, slang, and reaction titles (e.g., Title: "Best sniper", Video: Assault rifle gameplay).
+           - These should NOT be treated as malicious deception.
+           - Only reject content when a reasonable human moderator would conclude that the user intentionally attempted to deceive viewers.
+        6. DEFAULT ACTION: When in doubt, or if the content clearly belongs to gaming/anime culture, APPROVE it.`;
 
     const modSchema = {
         type: "OBJECT",
@@ -264,13 +285,15 @@ async function runAIModerator(title, message, clanId, category, mediaUrl, mediaT
         return {
             action: modResult.action,
             reason: modResult.reason,
-            interests: finalInterests // The highly-curated, flat string array ready for MongoDB
+            interests: finalInterests, // Clean, highly-specific array + prefixed content types
+            unknownContent: isUnknownContent // Simple boolean flag for DB / debugging tracking
         };
     } catch (e) {
         return {
             action: "flag",
             reason: "Automated engine failover timeout. Queued for standard review.",
-            interests: finalInterests
+            interests: finalInterests,
+            unknownContent: true
         };
     }
 }
@@ -290,7 +313,7 @@ export async function OPTIONS() {
 // ----------------------
 // Helper Functions
 // ----------------------
-async function notifyAllMobileUsersAboutPost(newPost, authorName) {
+export async function notifyAllMobileUsersAboutPost(newPost, authorName) {
     const mobileUsers = await MobileUser.find(
         { pushToken: { $nin: [null, ""], $exists: true } },
         "pushToken"
@@ -1131,7 +1154,6 @@ export async function POST(req) {
         if (!userDoc) return addCorsHeaders(NextResponse.json({ message: "Unauthorized" }, { status: 401 }));
 
         // 3. 🛡️ BACKWARDS COMPATIBILITY: Robust Media Mapping
-        // Old builds might send media arrays without a primary mediaUrl. We must parse it safely.
         const primaryMediaUrl = mediaUrl || (media && media.length > 0 ? media[0].url : null);
         const primaryMediaType = mediaType || (media && media.length > 0 ? media[0].type : "image");
         const finalMediaArray = media || (primaryMediaUrl ? [{ url: primaryMediaUrl, type: primaryMediaType, order: 0 }] : []);
@@ -1158,7 +1180,7 @@ export async function POST(req) {
         }
 
         // 5. Determine State Entrypoint
-        let finalStatus = mediaPending ? "pending_media" : (isMobile ? "pending" : "approved");
+        let finalStatus = mediaPending ? "pending" : (isMobile ? "pending" : "approved");
 
         // 6. Build Post Context Contextually
         const newPost = await Post.create({
@@ -1172,6 +1194,9 @@ export async function POST(req) {
             mediaType: primaryMediaType,
             media: finalMediaArray,
             status: finalStatus,
+            uploadStatus: mediaPending ? "pending" : "uploaded",
+            moderationStatus: mediaPending ? "pending" : (isMobile ? "pending" : "approved"),
+
             poll: hasPoll ? {
                 pollMultiple: pollMultiple || false,
                 options: pollOptions && pollOptions.length >= 2 ? pollOptions.map(opt => ({ text: opt.text, votes: 0 })) : []
@@ -1190,7 +1215,6 @@ export async function POST(req) {
             if (useR2) {
                 // 🌟 NEW R2 PIPELINE
                 for (let i = 0; i < totalFiles; i++) {
-                    // 🌟 FIX: Use the fallback finalMediaArray with optional chaining to prevent crashes
                     const ext = finalMediaArray[i]?.type === "video" ? "mp4" : "jpg";
                     const objectKey = `posts/${newPost._id}/file_${i}.${ext}`;
 
@@ -1200,15 +1224,29 @@ export async function POST(req) {
                     });
 
                     const presignedUrl = await getSignedUrl(r2Client, command, { expiresIn: 3600 });
+                    const publicUrl = `https://media.oreblogda.com/${objectKey}`;
 
                     signDataArray.push({
                         engine: "r2",
                         uploadUrl: presignedUrl,
                         objectKey: objectKey,
-                        // Pass the final public URL so the frontend knows what to save later
-                        publicUrl: `https://media.oreblogda.com/${objectKey}`
+                        publicUrl
                     });
+
+                    finalMediaArray[i] = {
+                        url: publicUrl,
+                        type: finalMediaArray[i]?.type || "image",
+                        order: finalMediaArray[i]?.order ?? i,
+                        r2Key: objectKey,
+                    };
                 }
+
+                // ✅ FIX 1: Persist the mutated media array back to MongoDB so the cron can find it
+                newPost.media = finalMediaArray;
+                newPost.mediaUrl = finalMediaArray[0]?.url ?? null;
+                newPost.mediaType = finalMediaArray[0]?.type ?? null;
+                await newPost.save();
+
             } else {
                 // 🌟 LEGACY CLOUDINARY PIPELINE (Unchanged)
                 const host = req.headers.get("host") || "localhost:3000";
@@ -1279,7 +1317,34 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
     let expiresAt = null;
     let aiInterests = [];
 
+    // Update independent state fields
+    // If we are finalizing, media is expected to be present.
+    if (post.uploadStatus !== "uploaded") {
+        post.uploadStatus = "uploaded";
+    }
+
+    // Only mark moderation as processing when we are going to run AI.
+    // For non-mobile builds you may keep prior moderationStatus.
+
+
     if (isMobile) {
+        // 🛡️ If finalize is called before uploads are fully present,
+        // keep post recoverable and do NOT burn AI cost.
+        // (Cron worker will re-run once media exists.)
+        const hasMedia = Array.isArray(post.media) && post.media.some(m => m?.url);
+        if (!hasMedia || post.mediaUrl == null) {
+            post.uploadStatus = post.uploadStatus || "uploaded";
+            post.moderationStatus = "pending";
+            post.status = "pending";
+            await post.save();
+            return {
+                message: "Post finalized but pending moderation (media not ready yet)",
+                post,
+                isFirstPost: false,
+                auraStats: null
+            };
+        }
+
         // 🛡️ BACKWARDS COMPATIBILITY: Restore old build inline poll rejection logic 
         if (post.category === "Polls" && (!post.poll || post.poll.options.length < 2)) {
             finalStatus = "rejected";
@@ -1287,20 +1352,25 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
             expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
         } else {
             // Run standard moderation - WE ALWAYS RE-RUN THIS ON EDIT TO CATCH BAD CHANGES
+            post.moderationStatus = "processing";
             const ai = await runAIModerator(post.title, post.message, post.clanId, post.category, post.mediaUrl, post.mediaType);
             aiInterests = ai.interests || [];
 
             if (ai.action === "approve") {
                 finalStatus = "approved";
                 rejectionReason = ai.reason;
+                post.moderationStatus = "approved";
             } else if (ai.action === "reject") {
-                finalStatus = "approved";
+                finalStatus = "rejected";
                 rejectionReason = ai.reason;
+                post.moderationStatus = "rejected";
                 // expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
             } else {
                 finalStatus = "pending";
                 rejectionReason = ai.reason;
+                post.moderationStatus = "failed";
             }
+
         }
     }
 
@@ -1321,7 +1391,15 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
     post.rejectionReason = rejectionReason || null;
     post.expiresAt = expiresAt || null;
     post.interests = aiInterests;
+
+    // Default upload/moderation state alignment for non-mobile flows
+    if (!post.uploadStatus) post.uploadStatus = "uploaded";
+    if (!post.moderationStatus) {
+        post.moderationStatus = finalStatus === "approved" ? "approved" : (finalStatus === "rejected" ? "rejected" : "failed");
+    }
+
     await post.save();
+
 
     let isFirstPost = false;
     let auraStats = null;

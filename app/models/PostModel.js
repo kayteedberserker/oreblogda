@@ -90,8 +90,12 @@ const mediaItemSchema = new mongoose.Schema({
     url: { type: String, required: true },
     type: { type: String, default: "image" },
     public_id: { type: String, default: null }, // 🌟 Added to track Cloudinary assets safely
-    order: { type: Number, default: 0 } // 🌟 Added to preserve upload order
+    order: { type: Number, default: 0 }, // 🌟 Added to preserve upload order
+
+    // New: store R2 object key so feed/cron can HEAD-check reliably
+    r2Key: { type: String, default: null }
 }, { _id: false });
+
 
 /* =====================================================
 6. MAIN POST SCHEMA
@@ -181,12 +185,31 @@ const postSchema = new mongoose.Schema(
             index: true
         },
 
+        // Final flag for UI/feed gating
+        // - "approved" / "rejected" are outcomes of moderation
+        // - "pending" means recoverable moderation (e.g. AI failed or waiting)
+        // - "pending_media" is kept for legacy compatibility
         status: {
             type: String,
-            // 🌟 Added "pending_media" to the allowed options list
             enum: ["pending", "approved", "rejected", "pending_media"],
             default: "approved"
         },
+
+        // New: upload/moderation independent pipeline state
+        uploadStatus: {
+            type: String,
+            enum: ["pending", "uploading", "uploaded", "failed"],
+            default: "pending"
+        },
+        moderationStatus: {
+            type: String,
+            enum: ["pending", "processing", "approved", "rejected", "failed"],
+            default: "pending"
+        },
+
+        uploadStatusChangedAt: { type: Date, default: Date.now },
+        moderationStatusChangedAt: { type: Date, default: Date.now },
+
 
         statusChangedAt: {
             type: Date,
@@ -224,17 +247,26 @@ postSchema.pre('save', function (next) {
         this.statusChangedAt = new Date();
     }
 
+    if (this.isModified('uploadStatus')) {
+        this.uploadStatusChangedAt = new Date();
+    }
+
+    if (this.isModified('moderationStatus')) {
+        this.moderationStatusChangedAt = new Date();
+    }
+
     // Only auto-map indices if media items actually exist or status isn't awaiting files
     if (this.media && this.media.length > 0) {
         this.mediaUrl = this.media[0].url;
         this.mediaType = this.media[0].type;
     }
     else if (this.mediaUrl && (!this.media || this.media.length === 0)) {
-        this.media = [{ url: this.mediaUrl, type: this.mediaType || "image", public_id: null, order: 0 }];
+        this.media = [{ url: this.mediaUrl, type: this.mediaType || "image", public_id: null, order: 0, r2Key: null }];
     }
 
     next();
 });
+
 
 /* =====================================================
 8. HOT RELOAD SAFE EXPORT

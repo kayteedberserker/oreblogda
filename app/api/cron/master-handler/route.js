@@ -1,3 +1,5 @@
+import { S3Client } from "@aws-sdk/client-s3";
+
 import { createMessagePill } from '@/app/lib/messagePillService';
 import connectDB from "@/app/lib/mongodb";
 import { sendMultiplePushNotifications } from "@/app/lib/pushNotifications";
@@ -5,9 +7,133 @@ import Clan from "@/app/models/ClanModel";
 import MessagePill from "@/app/models/MessagePillModel";
 import MobileUser from "@/app/models/MobileUserModel";
 import MonthlyHypeStat from "@/app/models/MonthlyHypeStat";
+import Post from "@/app/models/PostModel";
 import { NextResponse } from 'next/server';
+import { finalizeAndPublishPost } from "../../posts/route";
+
+
+// Initialize R2 S3-compatible client for authoritative HeadObject checks
+const r2Client = new S3Client({
+    region: "auto",
+    endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    },
+});
+
+
 
 // --- LOGIC FUNCTIONS ---
+// --- Moderation Recovery Worker ---
+// Re-runs AI moderation for posts stuck in moderationStatus=pending
+// once their media should already exist in R2.
+// NOTE: This cron should be resilient: if objects don't exist yet, skip.
+// --- LOGIC FUNCTIONS ---
+// --- Moderation Recovery Worker ---
+async function recoverPendingModerations({ batchSize = 25 } = {}) {
+    // ✅ FIX 2: Utilize the constant to self-heal jobs stuck in processing before we query
+    const STALE_PROCESSING_MS = 10 * 60 * 1000; // 10 minutes
+    const staleThreshold = new Date(Date.now() - STALE_PROCESSING_MS);
+
+    // Reset stuck processing jobs back to pending
+    try {
+        await Post.updateMany(
+            { 
+                moderationStatus: "processing", 
+                updatedAt: { $lt: staleThreshold } 
+            },
+            { 
+                $set: { moderationStatus: "pending" } 
+            }
+        );
+    } catch (err) {
+        console.error("Failed to reset stale processing jobs:", err);
+    }
+
+    const pendingPosts = await Post.find({
+        moderationStatus: "pending",
+        status: { $in: ["pending", "approved", "rejected"] },
+    })
+        .sort({ createdAt: -1 })
+        .limit(batchSize);
+
+    if (!pendingPosts.length) return;
+
+    for (const post of pendingPosts) {
+        try {
+            const mediaEntries = Array.isArray(post.media) ? post.media : [];
+            let allExist = true;
+
+            for (const entry of mediaEntries) {
+                const r2Key = entry?.r2Key;
+                const url = entry?.url;
+
+                if (!r2Key && !url) {
+                    allExist = false;
+                    break;
+                }
+
+                try {
+                    if (r2Key) {
+                        await r2Client.send(
+                            new HeadObjectCommand({
+                                Bucket: process.env.R2_BUCKET_NAME,
+                                Key: r2Key,
+                            })
+                        );
+                    } else {
+                        const headRes = await fetch(url, { method: "HEAD", signal: AbortSignal.timeout(1500) });
+                        if (!headRes || !headRes.ok) {
+                            allExist = false;
+                            break;
+                        }
+                    }
+                } catch {
+                    allExist = false;
+                    break;
+                }
+            }
+
+            if (!allExist) continue;
+
+            // Move into processing state to prevent concurrent duplicate work
+            post.moderationStatus = "processing";
+            await post.save();
+
+            const isMobile = !!post.authorId;
+            await finalizeAndPublishPost(
+                post._id,
+                isMobile,
+                post.country || "Global",
+                post.authorId,
+                true // isEdit
+            );
+
+            // If finalize didn't update moderationStatus, leave it recoverable.
+            const refreshed = await Post.findById(post._id);
+            if (!refreshed) continue;
+
+            if (![
+                'approved',
+                'rejected',
+                'failed'
+            ].includes(refreshed.moderationStatus)) {
+                refreshed.moderationStatus = 'pending';
+                await refreshed.save();
+            }
+
+        } catch (e) {
+            // keep it recoverable
+            try {
+                post.moderationStatus = "pending";
+                await post.save();
+            } catch { }
+        }
+    }
+}
+
+
 async function dailyStreakCleanup() {
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
@@ -397,6 +523,11 @@ export async function GET(req) {
         await dailyClanCheck();
         await dailyAllocation();
         await dailyNewUserBroadcast();
+
+        // Moderation recovery pass: re-run AI for any posts stuck in pending
+        // after media uploads completed (or were missed by finalize).
+        await recoverPendingModerations();
+
 
         if (isMondayWAT) {
             console.log("⏳ Processing Weekly Resets...");
