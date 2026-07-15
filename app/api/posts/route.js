@@ -1157,7 +1157,7 @@ export async function POST(req) {
         const primaryMediaUrl = mediaUrl || (media && media.length > 0 ? media[0].url : null);
         const primaryMediaType = mediaType || (media && media.length > 0 ? media[0].type : "image");
         const finalMediaArray = media || (primaryMediaUrl ? [{ url: primaryMediaUrl, type: primaryMediaType, order: 0 }] : []);
-
+        console.log(primaryMediaUrl, media)
         // 4. Generate Slugs (Unchanged logic)
         const newMessage = removeEmptyLines(normalizePostContent(message));
         const authorPrefix = userDoc.username.toLowerCase().replace(/[^a-z0-9]/g, '');

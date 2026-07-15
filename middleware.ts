@@ -11,6 +11,7 @@ const PUBLIC_API_ROUTES = [
 "/api/mobile/sync-identity",
 "/api/mobile/register",
 "/api/mobile/recover",
+"/api/posts",
 "/api/mobile/secure-uplink",
 "/api/version",
 "/api/contact",
