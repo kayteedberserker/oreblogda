@@ -1276,6 +1276,13 @@ export async function POST(req) {
             }, { status: 201 }));
         }
 
+        console.log({
+            mediaPending,
+            isMobile,
+            status: newPost.status,
+            moderationStatus: newPost.moderationStatus
+        });
+
         // 🛣️ PATH B: Old client build OR text-only new client build. Run processing engine immediately.
         const evaluation = await finalizeAndPublishPost(newPost._id, isMobile, country, fingerprint);
 
@@ -1299,7 +1306,11 @@ export async function POST(req) {
 export async function finalizeAndPublishPost(postId, isMobile, country, fingerprint, isEdit = false) {
     const post = await Post.findById(postId);
     if (!post) throw new Error("Target post context not found.");
-
+    console.log(
+        "[FINALIZE]",
+        postId,
+        isMobile
+    );
     // 🛡️ IDEMPOTENCY GUARD
     // If it's an edit, we bypass this guard because the status might already be 'approved' from before
     if (!isEdit && post.status !== "pending_media" && post.status !== "pending" && post.totalFilesExpected > 0) {
@@ -1331,8 +1342,13 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
         // 🛡️ If finalize is called before uploads are fully present,
         // keep post recoverable and do NOT burn AI cost.
         // (Cron worker will re-run once media exists.)
-        const hasMedia = Array.isArray(post.media) && post.media.some(m => m?.url);
-        if (!hasMedia || post.mediaUrl == null) {
+        const expectsMedia = post.totalFilesExpected > 0;
+
+        const hasMedia =
+            Array.isArray(post.media) &&
+            post.media.some(m => m?.url);
+
+        if (expectsMedia && (!hasMedia || post.mediaUrl == null)) {
             post.uploadStatus = post.uploadStatus || "uploaded";
             post.moderationStatus = "pending";
             post.status = "pending";
