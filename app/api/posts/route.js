@@ -35,7 +35,7 @@ const { GoogleGenAI } = require("@google/genai");
 // Initialize both clients with global configurations
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export async function runAIModerator(title, message, clanId, category, mediaUrl, mediaType) {
+export async function runAIModerator(title, message, clanId, category, mediaUrl, mediaType, poll) {
     // Clean string interpolations so the model never parses literal nulls
     const safeClanId = clanId ? clanId.toString() : "NONE";
     const safeMediaUrl = mediaUrl || "NONE";
@@ -138,7 +138,13 @@ export async function runAIModerator(title, message, clanId, category, mediaUrl,
         }
     }
 
-    const payloadText = `Clan ID: ${safeClanId}\nAttached Media URL: ${safeMediaUrl}\nTitle: "${title}"\nMessage: "${message}"\nCategory: "${category}"`;
+    let payloadText = `Clan ID: ${safeClanId}\nAttached Media URL: ${safeMediaUrl}\nTitle: "${title}"\nMessage: "${message}"\nCategory: "${category}"`;
+
+    // Append poll options if they exist so the AI can use them as context without altering system prompts
+    if (poll && poll.options && Array.isArray(poll.options) && poll.options.length > 0) {
+        const pollOptionsStr = poll.options.map((opt, index) => `${index + 1}. ${opt.text || opt}`).join(' | ');
+        payloadText += `\nPoll Context: This post contains a poll with the following options: ${pollOptionsStr}`;
+    }
 
     // =========================================================
     // 🏷️ STEP 3: PHASE 1 - UNDERSTANDING & TAGGING (THE TRUTH PHASE)
@@ -153,7 +159,8 @@ export async function runAIModerator(title, message, clanId, category, mediaUrl,
         Never hallucinate a franchise because
         the title mentions it.
         2. Identify core subjects. Do NOT extract generic hashtags, random background games, or things mentioned only once in passing.
-        3. If no media is attached? Check that the title and message are anime related
+        3. If no media is attached? Check that the title and message or polls if inluded are anime/gaming related. If they are Approve.
+
         ⭐ TAGGING DEFINITIONS & CONSTRAINTS:
         1. DOMINANT FRANCHISE: The single most important franchise overall. If completely unknown/unidentifiable, write "unknown".
         2. PRIMARY FRANCHISES: The main subject visually depicted or heavily discussed. Limit: Max 2. If completely unknown/unidentifiable, return an empty array.
@@ -1407,7 +1414,6 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
     // Only mark moderation as processing when we are going to run AI.
     // For non-mobile builds you may keep prior moderationStatus.
 
-
     if (isMobile) {
         // 🛡️ If finalize is called before uploads are fully present,
         // keep post recoverable and do NOT burn AI cost.
@@ -1439,7 +1445,8 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
         } else {
             // Run standard moderation - WE ALWAYS RE-RUN THIS ON EDIT TO CATCH BAD CHANGES
             post.moderationStatus = "processing";
-            const ai = await runAIModerator(post.title, post.message, post.clanId, post.category, post.mediaUrl, post.mediaType);
+            // Passed post.poll as the final argument
+            const ai = await runAIModerator(post.title, post.message, post.clanId, post.category, post.mediaUrl, post.mediaType, post.poll);
             aiInterests = ai.interests || [];
 
             if (ai.action === "approve") {
@@ -1485,7 +1492,6 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
     }
 
     await post.save();
-
 
     let isFirstPost = false;
     let auraStats = null;
