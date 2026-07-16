@@ -146,14 +146,14 @@ export async function runAIModerator(title, message, clanId, category, mediaUrl,
     const tagSystemPrompt = `You are Oreblogda's entity extraction engine. Your ONLY job is to identify what is in the content. Do NOT moderate or judge the content. Act like a curious fan identifying the subject.
         
         ⭐ EXTRACTION RULES:
-        1. THE MEDIA IS THE PRIMARY SOURCE OF TRUTH. Prioritize visual content over text. Use the title/message only to provide context when they are consistent with the media. Never ignore clear visual evidence because of text. (e.g., if the title says "Valorant" but the video is clearly "Blood Strike", tag "blood strike").
+        1. THE MEDIA IS THE PRIMARY SOURCE OF TRUTH. Prioritize visual content over text. Use the title/message only to provide context when they are consistent with the media and if no media is attached. Never ignore clear visual evidence because of text. (e.g., if the title says "Valorant" but the video is clearly "Blood Strike", tag "blood strike").
         The media is the source of truth.
         If the media clearly contradicts the text,
         always trust the media.
         Never hallucinate a franchise because
         the title mentions it.
         2. Identify core subjects. Do NOT extract generic hashtags, random background games, or things mentioned only once in passing.
-
+        3. If no media is attached? Check that the title and message are anime related
         ⭐ TAGGING DEFINITIONS & CONSTRAINTS:
         1. DOMINANT FRANCHISE: The single most important franchise overall. If completely unknown/unidentifiable, write "unknown".
         2. PRIMARY FRANCHISES: The main subject visually depicted or heavily discussed. Limit: Max 2. If completely unknown/unidentifiable, return an empty array.
@@ -257,12 +257,12 @@ export async function runAIModerator(title, message, clanId, category, mediaUrl,
         MODERATION RULES:
         1. HARMFUL CONTENT: Reject real-life nudity or extreme real-life gore. Stylized anime gore/ecchi is allowed.
         2. SPAM / OFF-TOPIC: 
-           - If you have HIGH confidence the content is purely unrelated real-world spam (e.g., real estate ads, political arguments, crypto bots), REJECT.
-           - If you cannot identify a franchise but the content might still be anime/gaming, DO NOT reject. FLAG it for human review.
+           - If you have HIGH confidence the content is purely unrelated to anime and gaming, real-world spam (e.g., real estate ads, political arguments, crypto bots), REJECT.
+           - If you cannot identify a franchise but the content might still be anime/gaming, DO NOT reject. If you are sure it is related to anime/gaming? Approve it else FLAG it for human review. 
         3. INTENTIONAL DECEPTION / CLICKBAIT (CRITICAL SOFTENED RULE): 
            - ONLY REJECT if the contradiction between the text and media is INTENTIONAL and MATERIAL deception (e.g., Title: "One Piece Episode 1200 Leak", Video: A cooking tutorial or cat video).
         4. CATEGORIES:
-           - 'Fanart': MUST have media attached. Flag if missing.
+           - 'Fanart': MUST have media attached. Flag if missing. Make sure you check the correct Category b4 comparing
         5. HUMAN CULTURE RULE (CRITICAL):
            - Anime and gaming communities frequently use: jokes, memes, sarcasm, hyperbole, incorrect franchise names, slang, and reaction titles (e.g., Title: "Best sniper", Video: Assault rifle gameplay).
            - These should NOT be treated as malicious deception.
@@ -1303,6 +1303,13 @@ export async function POST(req) {
  * 🛰️ CENTRALIZED LIFE-CYCLE PROCESSING ENGINE
  * Handles validation, AI evaluation, point distribution, alerts, and publication pipelines.
  */
+
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "donakg9he",
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
+
 export async function finalizeAndPublishPost(postId, isMobile, country, fingerprint, isEdit = false) {
     const post = await Post.findById(postId);
     if (!post) throw new Error("Target post context not found.");
@@ -1316,6 +1323,69 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
     if (!isEdit && post.status !== "pending_media" && post.status !== "pending" && post.totalFilesExpected > 0) {
         console.log(`⚠️ Blocked duplicate publishing execution race for Post ID: ${postId}`);
         return { message: "Post already processed and published via parallel asset pipeline.", post };
+    }
+
+    // 🚀 CLOUDINARY ASYNC EAGER UPLOAD INTELLIGENCE
+    // We intercepts videos and upload them to Cloudinary eagerly to solve synchronous limits.
+    if (post.media && post.media.length > 0) {
+        for (let i = 0; i < post.media.length; i++) {
+            const item = post.media[i];
+            if (!item || !item.url) continue;
+
+            const isVideo = item.url.match(/\.(mp4|mov|webm|mkv)$/i) || item.type === "video" || post.mediaType === "video";
+            const isCloudinary = item.url.includes("res.cloudinary.com");
+
+            if (isVideo && !isCloudinary) {
+                try {
+                    console.log(`[CLOUDINARY] Uploading video asynchronously to bypass synchronous processing limits: ${item.url}`);
+                    const uploadResult = await cloudinary.uploader.upload(item.url, {
+                        resource_type: "video",
+                        folder: "posts_videos",
+                        // Pre-generate the exact thumbnail and optimized web versions asynchronously
+                        eager: [
+                            { format: "jpg", width: 600, crop: "scale", quality: "auto", start_offset: "auto" },
+                            { quality: "auto" }
+                        ],
+                        eager_async: true
+                    });
+
+                    if (uploadResult && uploadResult.secure_url) {
+                        console.log(`[CLOUDINARY] Upload successful. Replacing URL with secure native link: ${uploadResult.secure_url}`);
+                        post.media[i].url = uploadResult.secure_url;
+                        if (post.mediaUrl === item.url || !post.mediaUrl || !post.mediaUrl.includes("res.cloudinary.com")) {
+                            post.mediaUrl = uploadResult.secure_url;
+                            post.mediaType = "video";
+                        }
+                    }
+                } catch (err) {
+                    console.error("❌ Cloudinary eager upload failed for video asset:", err);
+                }
+            }
+        }
+    }
+
+    if (post.mediaUrl && !post.mediaUrl.includes("res.cloudinary.com")) {
+        const isVideo = post.mediaUrl.match(/\.(mp4|mov|webm|mkv)$/i) || post.mediaType === "video";
+        if (isVideo) {
+            try {
+                console.log(`[CLOUDINARY] Uploading primary video to Cloudinary: ${post.mediaUrl}`);
+                const uploadResult = await cloudinary.uploader.upload(post.mediaUrl, {
+                    resource_type: "video",
+                    folder: "posts_videos",
+                    eager: [
+                        { format: "jpg", width: 600, crop: "scale", quality: "auto", start_offset: "auto" },
+                        { quality: "auto" }
+                    ],
+                    eager_async: true
+                });
+                if (uploadResult && uploadResult.secure_url) {
+                    post.mediaUrl = uploadResult.secure_url;
+                    post.mediaType = "video";
+                }
+            } catch (err) {
+                console.error("❌ Cloudinary primary video upload failed:", err);
+            }
+        }
     }
 
     let userDoc = await userModel.findById(post.authorUserId);
