@@ -2,6 +2,9 @@ import { google } from 'googleapis'; // Used to dynamically sign your FCM HTTP v
 // Alternatively, if you use the Firebase Admin SDK directly:
 // import admin from 'firebase-admin';
 
+// 🌟 NEW IMPORT: Import your user model to handle database cleanups
+import MobileUser from "@/app/models/MobileUserModel"; // Adjust this path to match your project structure
+
 /**
  * Helper to acquire the OAuth2 access token dynamically from your server environment credentials
  * Required for Firebase HTTP v1 API endpoints.
@@ -132,6 +135,23 @@ async function sendDirectToFcmV1(token, title, message, data, groupId) {
         const result = await response.json();
         if (!response.ok) {
             console.error("FCM Error:", JSON.stringify(result, null, 2));
+
+            // 🌟 AUTO-CLEANUP: Check if the token is unregistered
+            const isUnregistered = result.error?.status === "NOT_FOUND" ||
+                (result.error?.details && result.error.details.some(d => d.errorCode === "UNREGISTERED"));
+
+            if (isUnregistered) {
+                console.log(`[FCM Cleanup] Removing unregistered token from database: ${token}`);
+                try {
+                    await MobileUser.updateMany(
+                        { pushToken: token },
+                        { $set: { pushToken: null } }
+                    );
+                } catch (dbError) {
+                    console.error("❌ Failed to remove dead token from DB:", dbError);
+                }
+            }
+
             return null;
         }
         return result;
@@ -183,6 +203,20 @@ export async function sendPushNotification(token, title, message, data = {}, gro
         });
 
         const result = await response.json();
+
+        // 🌟 EXPO AUTO-CLEANUP: Handle unregistered Expo tokens
+        if (result.data && result.data.status === 'error' && result.data.details?.error === 'DeviceNotRegistered') {
+            console.log(`[Expo Cleanup] Removing unregistered token from database: ${pushToken}`);
+            try {
+                await MobileUser.updateMany(
+                    { pushToken: pushToken },
+                    { $set: { pushToken: null } }
+                );
+            } catch (dbError) {
+                console.error("❌ Failed to remove dead Expo token from DB:", dbError);
+            }
+        }
+
         return result;
     } catch (error) {
         console.error("❌ Single Expo Push Error:", error);
@@ -250,6 +284,29 @@ export async function sendMultiplePushNotifications(tokens, title, message, data
                     body: JSON.stringify(messages),
                 });
                 const result = await response.json();
+
+                // 🌟 EXPO BATCH AUTO-CLEANUP: Find all failed tokens in the chunk response
+                if (result.data && Array.isArray(result.data)) {
+                    const deadTokens = [];
+                    result.data.forEach((ticket, idx) => {
+                        if (ticket.status === 'error' && ticket.details?.error === 'DeviceNotRegistered') {
+                            deadTokens.push(messages[idx].to);
+                        }
+                    });
+
+                    if (deadTokens.length > 0) {
+                        console.log(`[Expo Batch Cleanup] Removing ${deadTokens.length} unregistered tokens from database.`);
+                        try {
+                            await MobileUser.updateMany(
+                                { pushToken: { $in: deadTokens } },
+                                { $set: { pushToken: null } }
+                            );
+                        } catch (dbError) {
+                            console.error("❌ Failed to batch remove dead Expo tokens from DB:", dbError);
+                        }
+                    }
+                }
+
                 return result;
             } catch (error) {
                 console.error(`❌ Expo Chunk ${index + 1} Push Error:`, error);
