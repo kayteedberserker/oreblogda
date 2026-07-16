@@ -1,290 +1,322 @@
-import bcrypt from "bcryptjs";
-import mongoose from "mongoose";
+import { google } from 'googleapis'; // Used to dynamically sign your FCM HTTP v1 requests safely
+// Alternatively, if you use the Firebase Admin SDK directly:
+// import admin from 'firebase-admin';
 
-// 🎒 Inventory Item Schema (Frames, Badges, etc.)
-const InventoryItemSchema = new mongoose.Schema({
-  itemId: { type: String, required: true },
-  name: { type: String, required: true },
-  category: { type: String, required: true },
-  rarity: {
-    type: String,
-    default: 'Common'
-  },
-  descriptiom: { type: String, default: null },
-  hypeType: { type: String, default: null },
-  url: { type: String, default: null },
-  visualConfig: {
-    svgCode: { type: String },
-    lottieUrl: { type: String },
-    primaryColor: { type: String },
-    secondaryColor: { type: String, default: null },
-    animationType: { type: String },
-    opacity: { type: Number },
-    zoom: { type: Number },
-    scale: { type: Number },
-    rotation: { type: String },
-    offsetY: { type: Number },
-    duration: { type: Number },
-    snakeLength: { type: Number },
-    isAnimated: { type: Boolean, default: false }
-  },
-  itemCount: { type: Number, default: 1 },
-  isConsumable: { type: Boolean, default: false },
-  canonicalUsername: {
-    type: String,
-    index: true
-  },
-  isEquipped: { type: Boolean, default: false },
-  acquiredAt: { type: Date, default: Date.now },
-  expiresAt: { type: Date, default: null },
-});
+// 🌟 NEW IMPORT: Import your user model to handle database cleanups
+import MobileUser from "@/app/models/MobileUserModel"; // Adjust this path to match your project structure
 
-const StickerSchema = new mongoose.Schema({
-  stickerId: { type: String, required: true, unique: true },
-  name: { type: String, required: true },
-  rarity: {
-    type: String,
-    enum: ['Common', 'Rare', 'Epic', 'Legendary'],
-    default: 'Common'
-  },
-  visualType: {
-    type: String,
-    enum: ['svg', 'lottie', 'image'],
-    required: true
-  },
-  visualData: {
-    svgCode: { type: String },
-    lottieUrl: { type: String },
-    imageUrl: { type: String },
-    color: { type: String }
-  },
-  isRentable: { type: Boolean, default: true },
-  isActive: { type: Boolean, default: true }
-});
+/**
+ * Helper to acquire the OAuth2 access token dynamically from your server environment credentials
+ * Required for Firebase HTTP v1 API endpoints.
+ */
+async function getgetFcmAccessToken() {
+    let envJsonString = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
 
-// ⚡️ NEW: Feed Source Stats Sub-Schema for Telemetry
-const sourceStatSchema = new mongoose.Schema({
-  impressions: { type: Number, default: 0 },
-  likes: { type: Number, default: 0 },
-  comments: { type: Number, default: 0 },
-  shares: { type: Number, default: 0 },
-  votes: { type: Number, default: 0 },
-  watch_complete: { type: Number, default: 0 },
-  skips: { type: Number, default: 0 }
-}, { _id: false });
+    if (!envJsonString) {
+        throw new Error("❌ Missing FIREBASE_SERVICE_ACCOUNT_JSON configuration on environment variables.");
+    }
 
-const mobileUserSchema = new mongoose.Schema(
-  {
-    // --- 🔑 IDENTITY & SECURITY SYSTEM ---
-    uid: { type: String, unique: true, sparse: true },
-    deviceId: { type: String, required: true, unique: true },
-    hardwareId: { type: String, index: true },
+    // Clean the string: Remove leading/trailing single or double quotes if the environment parser left them.
+    if ((envJsonString.startsWith("'") && envJsonString.endsWith("'")) ||
+        (envJsonString.startsWith('"') && envJsonString.endsWith('"'))) {
+        envJsonString = envJsonString.slice(1, -1);
+    }
 
-    // 🛡️ TRUSTED DEVICES SYSTEM (Multi-device login)
-    trustedDevices: [{
-      hardwareId: { type: String, required: true },
-      deviceId: { type: String, required: true },
-      addedAt: { type: Date, default: Date.now },
-      lastActive: { type: Date, default: Date.now }
-    }],
-    activeSessionDeviceId: { type: String, default: null },
+    let key;
+    try {
+        key = JSON.parse(envJsonString);
+    } catch (parseError) {
+        throw new Error(`❌ JSON Parse Error: ${parseError.message} \n ⚠️ Check your .env formatting. String received: ${envJsonString.substring(0, 50)}...`);
+    }
 
-    // NEW: Security Fields
-    pin: {
-      type: String,
-      required: false,
-      select: false
-    },
-    email: {
-      type: String,
-      unique: true,
-      sparse: true,
-      lowercase: true
-    },
-    securityLevel: { type: Number, default: 1 },
+    // CRITICAL GUARD: Ensure the keys actually exist in the parsed object
+    if (!key || !key.private_key || !key.client_email) {
+        throw new Error(`❌ Extracted JSON is missing required fields. Found keys: ${Object.keys(key || {}).join(', ')}`);
+    }
 
-    // 🛡️ BRUTE-FORCE PROTECTION FIELDS
-    loginAttempts: { type: Number, default: 0, select: false },
-    lockUntil: { type: Date, default: null, select: false },
-    username: { type: String, default: "Guest Author" },
-    pushToken: { type: String, default: null },
-    role: { type: String, default: "Author" },
-    description: { type: String, default: "" },
-    profilePic: {
-      url: { type: String, default: "" },
-      public_id: { type: String, default: "" },
-    },
-    totalPurchasedCoins: { type: Number, default: 0 },
-    lifetimeCoinsSpent: { type: Number, default: 0 },
-    totalLikes: { type: Number, default: 0 },
-    totalPosts: { type: Number, default: 0 },
-    tokens: { type: Number, default: 0 },
-    receivedCommentsCount: { type: Number, default: 0 },
-    lifetimeCommentsCount: { type: Number, default: 0 },
-    totalShares: { type: Number, default: 0 },
-    totalViews: { type: Number, default: 0 },
-    peakLevel: { type: Number, default: 0 },
-    totalRejectedPost: { type: Number, default: 0 },
-    consecutiveStreak: { type: Number, default: 1 },
-    refreshToken: { type: String },
-    country: { type: String, default: 'Unknown' },
-    lastActive: { type: Date, default: Date.now },
-    appOpens: { type: Number, default: 0 },
-    activityLog: [{ type: Date, default: Date.now }],
-    lastStreak: { type: Number, default: 0 },
+    // Force exact newline formatting for the certificate
+    let privateKey = key.private_key;
+    if (privateKey.includes('\\n')) {
+        privateKey = privateKey.replace(/\\n/g, '\n');
+    }
 
-    // --- 🎭 CHARACTER DESIGN ---
-    character: {
-      base: {
-        gender: { type: String, enum: ['male', 'female'], default: 'male' },
-        skinTone: { type: String, enum: ['light', 'medium', 'dark'], default: 'medium' },
-        name: { type: String, default: 'Avatar' }
-      },
-      equipped: {
-        hair: { type: String, default: 'default_hair' },
-        top: { type: String, default: 'default_top' },
-        pant: { type: String, default: 'default_pant' },
-        shoe: { type: String, default: 'default_shoe' },
-        action: { type: String, default: 'idle' }
-      }
-    },
+    // 🌟 FIX: Use the Object Configuration pattern instead of positional arguments
+    const jwtClient = new google.auth.JWT({
+        email: key.client_email,
+        key: privateKey,
+        scopes: ['https://www.googleapis.com/auth/cloud-platform']
+    });
 
-    // --- 🎭 NEURAL LINK PREFERENCES ---
-    preferences: {
-      favAnimes: { type: [String], default: [] },
-      favGenres: { type: [String], default: [] },
-      favCharacter: { type: String, default: "" },
-    },
+    try {
+        const tokens = await jwtClient.authorize();
+        return tokens.access_token;
+    } catch (authError) {
+        console.error("❌ Google JWT Authorization Failed:", authError.message);
+        throw authError;
+    }
+}
 
-    // --- 🧠 DYNAMIC ALGORITHM (AFFINITY SYSTEM) ---
-    affinityScores: { type: Map, of: Number, default: {} },
-    authorAffinity: { type: Map, of: Number, default: {} },
-    countryAffinity: { type: Map, of: Number, default: {} },
+/**
+ * Sends a raw direct payload to Google's FCM v1 endpoint
+ */
+async function sendDirectToFcmV1(token, title, message, data, groupId) {
+    try {
+        const accessToken = await getgetFcmAccessToken();
+        const projectId = process.env.FIREBASE_PROJECT_ID || "oreblogda-production"; // Update with your actual Firebase project ID
 
-    // ⚡️ NEW: MACHINE LEARNING FEED TELEMETRY (Added 'Explore')
-    feedLearning: {
-      sourceStats: {
-        fresh: { type: sourceStatSchema, default: () => ({}) },
-        interest: { type: sourceStatSchema, default: () => ({}) },
-        clan: { type: sourceStatSchema, default: () => ({}) },
-        author: { type: sourceStatSchema, default: () => ({}) },
-        trending: { type: sourceStatSchema, default: () => ({}) },
-        explore: { type: sourceStatSchema, default: () => ({}) }
-      },
-      poolWeights: {
-        fresh: { type: Number, default: 0.2 },
-        author: { type: Number, default: 0.15 },
-        clan: { type: Number, default: 0.15 },
-        interest: { type: Number, default: 0.20 },
-        trending: { type: Number, default: 0.15 },
-        explore: { type: Number, default: 0.15 }
-      },
-      lastOptimizedAt: { type: Date, default: Date.now }
-    },
+        // 🌟 SANITIZER FIX: FCM strictly requires every value in the data object to be a string. 
+        const sanitizedData = {};
+        if (groupId) sanitizedData.groupId = String(groupId);
 
-    // --- 🎒 USER INVENTORY (Frames/Badges Only) ---
-    inventory: [InventoryItemSchema],
-    stickers: {
-      owned: [{ type: String }],
-    },
-    activeCustomizations: {
-      frame: { type: String, default: null },
-      theme: { type: String, default: null },
-      badge: { type: String, default: null },
-      effect: { type: String, default: null }
-    },
-    unlockedTitles: [{ name: String, tier: String }],
-    equippedTitle: { name: String, tier: String },
-    totalHypePointsGiven: { type: Number, default: 0 },
-    totalHypePointsReceived: { type: Number, default: 0 },
+        if (data) {
+            for (const [key, value] of Object.entries(data)) {
+                // Ignore nulls and undefineds to prevent crash, force everything else to string
+                if (value !== null && value !== undefined) {
+                    sanitizedData[key] = String(value);
+                }
+            }
+        }
 
-    // --- 💰 COIN SYSTEM ---
-    coins: { type: Number, default: 0 },
-    lastClaimedDate: { type: Date, default: null },
-    claimedEvents: [{
-      eventId: { type: String, required: true },
-      claimedAt: { type: Date, default: Date.now }
-    }],
+        // 🌟 NATIVE FALLBACK & OPTIMIZER (UPDATED FOR CLOUDFLARE R2)
+        // The OS can only show ONE image in the background. We prioritize mediaUrl, fallback to authorPfp.
+        let nativeExpandableImage = data.mediaUrl || data.authorPfp;
 
-    // ⚡️ DYNAMIC EVENT TRACKERS
-    gachaPityCounters: { type: Map, of: Number, default: {} },
-    eventPoints: { type: Map, of: Number, default: {} },
-    nameLockedUntil: { type: Date, default: null },
-    coinTransactionHistory: {
-      type: [{
-        action: String,
-        type: { type: String },
-        amount: Number,
-        date: { type: Date, default: Date.now }
-      }],
-      default: []
-    },
-    auraMultiplierUntil: { type: Date, default: null },
-    currentRankLevel: { type: Number, default: 1 },
-    hasLoggedOut: { type: Boolean, default: false },
+        if (nativeExpandableImage) {
+            const isVideo = /\.(mp4|mov|webm)(\?.*)?$/i.test(nativeExpandableImage);
+            const cloudName = process.env.CLOUDINARY_CLOUD_NAME || "donakg9he";
 
-    // --- ✨ AURA SYSTEM ---
-    weeklyAura: { type: Number, default: 0 },
-    aura: { type: Number, default: 0 },
-    previousRank: { type: Number, default: null },
-    platform: { type: String, default: null },
-    auraHistory: [
-      {
-        weekNumber: Number,
-        year: Number,
-        points: Number,
-        rank: Number,
-      }
-    ],
-    coffeeCount: { type: Number, default: 0 },
-    blockedUsers: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "MobileUsers",
-      index: true
-    }],
-    blockedClans: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Clans",
-      index: true
-    }],
-    // --- 🔗 REFERRAL SYSTEM ---
-    referralCode: { type: String, unique: true, sparse: true },
-    doubleStreakUntil: { type: Date, default: null },
-    invitedUsers: [{
-      username: String,
-      date: { type: Date, default: Date.now }
-    }],
-    canonicalUsername: {
-      type: String,
-      index: true
-    },
-    referredBy: { type: String, default: null },
-    referralCount: { type: Number, default: 0 },
-    
-    // --- 🗑️ DELETION LOGIC ---
-    willBeDeleted: { type: Boolean, default: false },
-    deleteAt: { type: Date, default: null, index: { expires: 0 } },
-  },
-  { timestamps: true }
-);
+            // 1. Handle Legacy Direct Cloudinary URLs
+            if (nativeExpandableImage.includes('cloudinary.com') && nativeExpandableImage.includes('/upload/')) {
+                if (isVideo) {
+                    nativeExpandableImage = nativeExpandableImage.replace(/\.(mp4|mov|webm)(\?.*)?$/i, '.jpg');
+                }
+                nativeExpandableImage = nativeExpandableImage.replace('/upload/', '/upload/w_600,q_auto,f_jpg/');
+            }
+            // 2. Handle New Cloudflare R2 URLs (The Fetch Trick)
+            else if (nativeExpandableImage.includes('oreblogda.com')) {
+                if (isVideo) {
+                    // Tell Cloudinary to fetch the R2 video, extract a frame, shrink it to 600px, and serve it as a fast JPG
+                    nativeExpandableImage = `https://res.cloudinary.com/${cloudName}/video/fetch/f_jpg,q_auto,so_auto,c_pad,b_black,w_600/${encodeURIComponent(nativeExpandableImage)}`;
+                } else {
+                    // Tell Cloudinary to fetch the R2 image, shrink it to 600px, and compress it so the Android OS downloads it instantly
+                    nativeExpandableImage = `https://res.cloudinary.com/${cloudName}/image/fetch/w_600,q_auto,f_jpg/${encodeURIComponent(nativeExpandableImage)}`;
+                }
+            }
+        }
 
-// --- 🛡️ SECURITY MIDDLEWARE ---
-mobileUserSchema.pre("save", async function (next) {
-  if (!this.isModified("pin") || !this.pin) return next();
+        const payload = {
+            message: {
+                token: token,
+                notification: {
+                    title: title,
+                    body: message
+                },
+                android: {
+                    priority: "high",
+                    notification: {
+                        // Natively binds the compressed image or author PFP so it expands instantly
+                        image: nativeExpandableImage || undefined,
+                        sound: "default"
+                    }
+                },
+                data: sanitizedData // 🌟 Hand over the clean, string-only object to Notifee
+            }
+        };
 
-  try {
-    const salt = await bcrypt.genSalt(10);
-    this.pin = await bcrypt.hash(this.pin, salt);
-    next();
-  } catch (err) {
-    next(err);
-  }
-});
+        const response = await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${accessToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+        });
 
-mobileUserSchema.methods.comparePin = async function (enteredPin) {
-  return await bcrypt.compare(enteredPin, this.pin);
-};
+        const result = await response.json();
+        if (!response.ok) {
+            console.error("FCM Error:", JSON.stringify(result, null, 2));
 
-const MobileUser = mongoose.models.MobileUsers || mongoose.model("MobileUsers", mobileUserSchema);
+            // 🌟 AUTO-CLEANUP: Check if the token is unregistered
+            const isUnregistered = result.error?.status === "NOT_FOUND" ||
+                (result.error?.details && result.error.details.some(d => d.errorCode === "UNREGISTERED"));
 
-export default MobileUser;
+            if (isUnregistered) {
+                console.log(`[FCM Cleanup] Removing unregistered token from database: ${token}`);
+                try {
+                    await MobileUser.updateMany(
+                        { pushToken: token },
+                        { $set: { pushToken: null } }
+                    );
+                } catch (dbError) {
+                    console.error("❌ Failed to remove dead token from DB:", dbError);
+                }
+            }
+
+            return null;
+        }
+        return result;
+    } catch (error) {
+        console.error("❌ Direct FCM Custom Router Fatal Error:", error);
+        return null;
+    }
+}
+
+/**
+ * Sends a single push notification with Dual Token Routing, Grouping & Rich Media support
+ * @param {string} token - The original token passed in (ignored due to hardcoded test)
+ * @param {string} title - The notification title
+ * @param {string} message - The notification body
+ * @param {object} data - Extra data (screen, postId, 🌟 mediaUrl, authorPfp)
+ * @param {string} groupId - (Optional) Use a unique ID to group notifications together
+ */
+export async function sendPushNotification(token, title, message, data = {}, groupId = null) {
+    const pushToken = token;
+    if (!pushToken) {
+        return null;
+    }
+    // ⚡️ ARCHITECTURAL ROUTER: Handle Native FCM tokens directly
+    if (!pushToken.startsWith('ExponentPushToken')) {
+        return await sendDirectToFcmV1(pushToken, title, message, data, groupId);
+    }
+    const payload = {
+        to: pushToken,
+        sound: 'default',
+        title: title,
+        body: message,
+        data: {
+            ...data,
+            groupId: groupId,
+        },
+        threadIdentifier: groupId || 'default_group',
+        mutableContent: true,
+    };
+
+    try {
+        const response = await fetch('https://exp.host/--/api/v2/push/send', {
+            method: 'POST',
+            headers: {
+                'Accept': 'application/json',
+                'Accept-encoding': 'gzip, deflate',
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
+
+        const result = await response.json();
+
+        // 🌟 EXPO AUTO-CLEANUP: Handle unregistered Expo tokens
+        if (result.data && result.data.status === 'error' && result.data.details?.error === 'DeviceNotRegistered') {
+            console.log(`[Expo Cleanup] Removing unregistered token from database: ${pushToken}`);
+            try {
+                await MobileUser.updateMany(
+                    { pushToken: pushToken },
+                    { $set: { pushToken: null } }
+                );
+            } catch (dbError) {
+                console.error("❌ Failed to remove dead Expo token from DB:", dbError);
+            }
+        }
+
+        return result;
+    } catch (error) {
+        console.error("❌ Single Expo Push Error:", error);
+    }
+}
+
+/**
+ * Sends notifications to multiple tokens with dynamic path grouping
+ */
+export async function sendMultiplePushNotifications(tokens, title, message, data = {}, groupId = null) {
+    if (!tokens || tokens.length === 0) return [];
+
+    // Sort tokens out into different priority arrays to process concurrently
+    const expoTokens = [];
+    const fcmTokens = [];
+
+    tokens.forEach(token => {
+        if (token && token.startsWith('ExponentPushToken')) {
+            expoTokens.push(token);
+        } else if (token) {
+            fcmTokens.push(token);
+        }
+    });
+
+    const broadcastPromises = [];
+
+    // 1. Process Native FCM batch chunks concurrently
+    if (fcmTokens.length > 0) {
+        fcmTokens.forEach(fcmToken => {
+            broadcastPromises.push(sendDirectToFcmV1(fcmToken, title, message, data, groupId));
+        });
+    }
+
+    // 2. Process Expo standard batch arrays
+    if (expoTokens.length > 0) {
+        const CHUNK_SIZE = 100;
+        const chunks = [];
+
+        for (let i = 0; i < expoTokens.length; i += CHUNK_SIZE) {
+            chunks.push(expoTokens.slice(i, i + CHUNK_SIZE));
+        }
+
+        const expoPromises = chunks.map(async (chunk, index) => {
+            const messages = chunk.map(token => ({
+                to: token,
+                sound: "default",
+                title: title,
+                body: message,
+                data: {
+                    ...data,
+                    groupId: groupId,
+                },
+                threadId: groupId || 'broadcast_group',
+                mutableContent: true,
+            }));
+
+            try {
+                const response = await fetch('https://exp.host/--/api/v2/push/send', {
+                    method: 'POST',
+                    headers: {
+                        'Accept': 'application/json',
+                        'Accept-encoding': 'gzip, deflate',
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(messages),
+                });
+                const result = await response.json();
+
+                // 🌟 EXPO BATCH AUTO-CLEANUP: Find all failed tokens in the chunk response
+                if (result.data && Array.isArray(result.data)) {
+                    const deadTokens = [];
+                    result.data.forEach((ticket, idx) => {
+                        if (ticket.status === 'error' && ticket.details?.error === 'DeviceNotRegistered') {
+                            deadTokens.push(messages[idx].to);
+                        }
+                    });
+
+                    if (deadTokens.length > 0) {
+                        console.log(`[Expo Batch Cleanup] Removing ${deadTokens.length} unregistered tokens from database.`);
+                        try {
+                            await MobileUser.updateMany(
+                                { pushToken: { $in: deadTokens } },
+                                { $set: { pushToken: null } }
+                            );
+                        } catch (dbError) {
+                            console.error("❌ Failed to batch remove dead Expo tokens from DB:", dbError);
+                        }
+                    }
+                }
+
+                return result;
+            } catch (error) {
+                console.error(`❌ Expo Chunk ${index + 1} Push Error:`, error);
+                return null;
+            }
+        });
+
+        broadcastPromises.push(...expoPromises);
+    }
+
+    const outputSummaryResults = await Promise.all(broadcastPromises);
+    return outputSummaryResults;
+}
