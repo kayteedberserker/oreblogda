@@ -288,7 +288,8 @@ export async function POST(req) {
                 acknowledgeCount: e.acknowledgeCount || 0,
                 acknowledgedBy: e.acknowledgedBy || [],
                 participants: e.participants || [],
-                leaderboard: e.leaderboard || [],
+                leaderboard: [...(e.leaderboard || [])]
+                    .sort((a, b) => b.score - a.score),
                 userResponses: prefilledAnswers
             };
         });
@@ -328,7 +329,18 @@ export async function POST(req) {
                         if (res.position < cache.highestPlacement) cache.highestPlacement = res.position;
                     });
                 });
-                return Object.values(calcMap).sort((a, b) => b.finalAccumulatedScore - a.finalAccumulatedScore);
+
+                return Object.values(calcMap).sort((a, b) => {
+                    if (b.finalAccumulatedScore !== a.finalAccumulatedScore) {
+                        return b.finalAccumulatedScore - a.finalAccumulatedScore;
+                    }
+
+                    if (a.highestPlacement !== b.highestPlacement) {
+                        return a.highestPlacement - b.highestPlacement;
+                    }
+
+                    return b.totalKills - a.totalKills;
+                });
             };
 
             const weeklyLeaderboard = aggregateMatches(weeklyMatches);
@@ -337,7 +349,17 @@ export async function POST(req) {
             const enrichedMatches = tournament.matches.map(match => {
                 let matchLeaderboard = [];
                 if (match.status === "COMPLETED") {
-                    matchLeaderboard = [...match.results].sort((a, b) => b.calculatedScore - a.calculatedScore);
+                    matchLeaderboard = [...match.results].sort((a, b) => {
+                        if (b.calculatedScore !== a.calculatedScore) {
+                            return b.calculatedScore - a.calculatedScore;
+                        }
+
+                        if (a.position !== b.position) {
+                            return a.position - b.position;
+                        }
+
+                        return b.kills - a.kills;
+                    });
                 } else {
                     matchLeaderboard = match.participants.map(player => ({
                         targetId: player.deviceId,
@@ -347,10 +369,7 @@ export async function POST(req) {
                         calculatedScore: 0
                     }));
                 }
-                return {
-                    ...match,
-                    liveMatchLeaderboard: matchLeaderboard
-                };
+                return { ...match, liveMatchLeaderboard: matchLeaderboard, results: matchLeaderboard, };
             });
 
             return {
