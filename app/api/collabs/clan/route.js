@@ -34,7 +34,7 @@ export async function GET(request) {
 
         // Verify that the target clan is actually a valid, officially verified ledger network tier
         const activeClanVerification = await Clan.findOne({ tag: clanTag });
-        const isVerified = activeClanVerification ? activeClanVerification.verifiedClan : false;
+        const isVerified = activeClanVerification?.verifiedClan && activeClanVerification.primeLevel >= 2;
 
         // ⚡️ Extract dynamic collab settings directly from the Clan doc
         const collabType = activeClanVerification?.collabType || 'followers';

@@ -41,13 +41,19 @@ export async function POST(req) {
         if (!deviceId) return NextResponse.json({ message: "Authentication missing." }, { status: 401 });
         if (!clanId || !title) return NextResponse.json({ message: "Missing required details." }, { status: 400 });
 
-        const targetClan = await Clan.findOne({ tag: clanId }).lean();
-        const targetLeader = await MobileUser.findOne({ deviceId }).lean();
+        const targetClan = await Clan.findOne({ tag: clanId.toUpperCase() }).lean();
+        const targetUser = await MobileUser.findOne({ deviceId }).lean();
 
         if (!targetClan) return NextResponse.json({ message: "Clan not found." }, { status: 404 });
+        if (!targetUser) return NextResponse.json({ message: "User profile not found." }, { status: 404 });
 
-        if (!targetLeader || targetLeader.deviceId !== deviceId) {
-            return NextResponse.json({ message: "Access Denied: Only Leaders can do this." }, { status: 403 });
+        // ⚡️ FIXED: Real Role Authentication Check
+        // Explicitly check if the authenticated user's ID matches the clan's leader or viceLeader fields
+        const isLeader = targetClan.leader?.toString() === targetUser._id.toString();
+        const isViceLeader = targetClan.viceLeader?.toString() === targetUser._id.toString();
+
+        if (!isLeader && !isViceLeader) {
+            return NextResponse.json({ message: "Access Denied: Only Clan Leaders and Vice Leaders hold creation clearances." }, { status: 403 });
         }
 
         if (!targetClan.verifiedClan) {
@@ -68,7 +74,7 @@ export async function POST(req) {
         }
 
         if (upperFormat === "LEAGUE") {
-            const leagueConflict = await Tournament.findOne({ clanId, formatType: "LEAGUE", status: { $in: ["REGISTRATION", "LIVE"] } }).lean();
+            const leagueConflict = await Tournament.findOne({ clanId: clanId.toUpperCase(), formatType: "LEAGUE", status: { $in: ["REGISTRATION", "LIVE"] } }).lean();
             if (leagueConflict) return NextResponse.json({ message: "An active League is already running for your clan." }, { status: 409 });
         }
 
@@ -89,13 +95,24 @@ export async function POST(req) {
         const maxLifespan = new Date(Date.now() + (upperFormat === "LEAGUE" ? 30 * 24 : 48) * 60 * 60 * 1000);
 
         const newTournament = await Tournament.create({
-            clanId, clanName: targetClan.name, leaderDeviceId: deviceId, moderatedBy: [deviceId],
-            title, description, visibility: visibility?.toUpperCase() === "PRIVATE" ? "PRIVATE" : "PUBLIC",
-            gameName: gameName || "Bloodstrike", formatType: upperFormat, teamFormat: teamFormat?.toUpperCase() === "TEAM" ? "TEAM" : "SOLO",
-            status: "REGISTRATION", groupingId: upperFormat === "SINGLE_MATCH" ? (groupingId || null) : null,
+            clanId: clanId.toUpperCase(),
+            clanName: targetClan.name,
+            leaderDeviceId: deviceId,
+            moderatedBy: [deviceId],
+            title,
+            description,
+            visibility: visibility?.toUpperCase() === "PRIVATE" ? "PRIVATE" : "PUBLIC",
+            gameName: gameName || "Bloodstrike",
+            formatType: upperFormat,
+            teamFormat: teamFormat?.toUpperCase() === "TEAM" ? "TEAM" : "SOLO",
+            status: "REGISTRATION",
+            groupingId: upperFormat === "SINGLE_MATCH" ? (groupingId || null) : null,
             expiresAt: maxLifespan,
             leaderboardWeights: leaderboardWeights || { pointsPerKill: 1, pointsPerMatchPlayed: 0, placementScoring: { "1": 15, "2": 12, "3": 10, "4": 8, "5": 6 } },
-            matches: initialMatches, liveLeaderboard: [], participants: [], blacklistedDeviceIds: []
+            matches: initialMatches,
+            liveLeaderboard: [],
+            participants: [],
+            blacklistedDeviceIds: []
         });
 
         return NextResponse.json({ success: true, data: newTournament }, { status: 201 });

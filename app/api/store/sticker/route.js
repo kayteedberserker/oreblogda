@@ -7,15 +7,25 @@ export async function GET(req) {
     await connectDB();
 
     const deviceId = req.headers.get("x-user-deviceId") || req.headers.get("deviceid");
+    const clanId = req.headers.get("x-clan-id") || req.headers.get("clanid"); // ⚡️ Added Clan ID Header
+
     if (!deviceId) return NextResponse.json({ error: "Missing Device ID" }, { status: 400 });
 
     try {
-        const [user, allStickers] = await Promise.all([
+        const [user, allStickersRaw] = await Promise.all([
             MobileUser.findOne({ deviceId }),
             Sticker.find({}).lean()
         ]);
 
         if (!user) return NextResponse.json({ error: "User not found" }, { status: 404 });
+
+        // ⚡️ SECURE FILTERING: Strip out clan stickers that don't belong to the user
+        const allStickers = allStickersRaw.filter(sticker => {
+            if (sticker.type === "clan") {
+                return clanId && sticker.clanId === clanId;
+            }
+            return true; // Free, Event, Rent pass normally
+        });
 
         const ownedIds = user.stickers?.owned || [];
         const legacyIds = (user.inventory || [])
@@ -25,14 +35,14 @@ export async function GET(req) {
         const allOwnedIds = [...new Set([...ownedIds, ...legacyIds])];
         const ownedStickers = allStickers.filter(s => allOwnedIds.includes(s.stickerId));
 
-        // 🚀 SERVER-SIDE GROUPING: Group all stickers by their Pack ID
+        // 🚀 SERVER-SIDE GROUPING: Group all accessible stickers by their Pack ID
         const packsMap = allStickers.reduce((acc, sticker) => {
             const pId = sticker.packId || "SYSTEM_DEFAULT";
 
             if (!acc[pId]) {
                 acc[pId] = {
                     packId: pId,
-                    coverArt: sticker.url, // Use the first sticker as the pack's icon
+                    coverArt: sticker.url,
                     totalItems: 0,
                     items: []
                 };
@@ -46,7 +56,7 @@ export async function GET(req) {
         const storePacks = Object.values(packsMap);
 
         return NextResponse.json({
-            storePacks, // Send the grouped array instead of a flat list
+            storePacks,
             owned: ownedStickers,
             balance: user.coins
         }, { status: 200 });

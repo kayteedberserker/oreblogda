@@ -233,7 +233,7 @@ export async function PATCH(req, { params }) {
                     _id: { $ne: clan._id },
                     $or: [
                         { nameLockedUntil: { $gt: new Date() } },
-                        { verifiedClan: true }
+                        { verifiedClan: true, primeLevel: { $in: [2, 3] } }
                     ],
                     canonicalName: cleanNewName
                 });

@@ -169,6 +169,13 @@ const postSchema = new mongoose.Schema(
             default: 0
         },
 
+        // ⚡️ NEW: Idempotency Key to prevent duplicate posts
+        requestId: {
+            type: String,
+            index: true,
+            default: null
+        },
+
         category: {
             type: String,
             default: "News"

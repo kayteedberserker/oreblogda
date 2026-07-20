@@ -129,7 +129,7 @@ export async function POST(req) {
             canonicalName: cleanNameCore,
             $or: [
                 { nameLockedUntil: { $gt: new Date() } },
-                { verifiedClan: true }
+                { verifiedClan: true, primeLevel: { $in: [2, 3] } }
             ]
         });
 

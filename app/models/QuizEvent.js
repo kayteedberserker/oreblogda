@@ -24,8 +24,10 @@ const QuizEventSchema = new mongoose.Schema({
     currentStreamIndex: { type: Number, default: 0 },
     maxQuestions: { type: Number, default: 30, max: 30 },
 
+    // ⚡️ UPDATED: Added imageUrl field to question configuration
     quizQuestions: [{
         questionText: String,
+        imageUrl: { type: String, default: null },
         options: [String],
         correctOptionIndex: Number,
         releasedAt: { type: Date, default: null }

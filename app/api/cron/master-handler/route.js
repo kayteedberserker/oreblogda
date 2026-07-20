@@ -39,12 +39,12 @@ async function recoverPendingModerations({ batchSize = 25 } = {}) {
     // Reset stuck processing jobs back to pending
     try {
         await Post.updateMany(
-            { 
-                moderationStatus: "processing", 
-                updatedAt: { $lt: staleThreshold } 
+            {
+                moderationStatus: "processing",
+                updatedAt: { $lt: staleThreshold }
             },
-            { 
-                $set: { moderationStatus: "pending" } 
+            {
+                $set: { moderationStatus: "pending" }
             }
         );
     } catch (err) {
@@ -180,7 +180,6 @@ async function dailyClanCheck() {
         const daysSinceActive = Math.floor((now - new Date(clan.lastActive)) / (1000 * 60 * 60 * 24));
         if (daysSinceActive >= 14) {
             setFields.totalPoints = Math.floor((clan.totalPoints || 0) * 0.5);
-            setFields.spendablePoints = Math.floor((clan.spendablePoints || 0) * 0.5);
             setFields.lastActive = new Date();
             await createMessagePill({
                 text: `⚠️ CLAN DECAY: Points halved due to 14 days of inactivity.`,
@@ -244,7 +243,7 @@ async function dailyAllocation() {
         const isVerified = clan.verifiedUntil && new Date(clan.verifiedUntil) > now;
         if (clan.weeklyPointHistory && clan.weeklyPointHistory.length > 0) {
             const lastHistoryEntry = clan.weeklyPointHistory[clan.weeklyPointHistory.length - 1];
-            if (lastHistoryEntry.rankAtTime > 0 && lastHistoryEntry.rankAtTime <= 10) allowance = 10;
+            if (lastHistoryEntry.rankAtTime > 0 && lastHistoryEntry.rankAtTime <= 10) allowance = 5;
         }
         bulkOps.push({ updateOne: { filter: { _id: clan._id }, update: { $inc: { spendablePoints: allowance } } } });
     }
@@ -305,6 +304,7 @@ async function weeklyClanReset() {
     const pillPromises = [];
     const weeklyTitleBadges = ["The Pirate King", "The Pillars", "Hunter Association", "Talk-no-jutsu", "Talk no jutsu"];
     await Clan.updateMany({}, { $pull: { badges: { $in: weeklyTitleBadges } } });
+
     for (let i = 0; i < rankedClans.length; i++) {
         const clan = rankedClans[i];
         const position = i + 1;
@@ -316,6 +316,7 @@ async function weeklyClanReset() {
         const decayValue = decayAmounts[currentRank - 1] || 0;
         let decayedPoints = (clan.totalPoints || 0) - decayValue;
         let newRank = 0;
+
         if (decayedPoints > 0) {
             newRank = 1;
             for (let r = rankThresholds.length - 1; r >= 0; r--) {
@@ -325,14 +326,70 @@ async function weeklyClanReset() {
                 }
             }
         }
+
         setFields.totalPoints = decayedPoints;
         setFields.rank = newRank;
+
+        // Handle Rank Promotions / Demotions
         if (newRank > currentRank) {
             pillPromises.push(createMessagePill({ text: `🎖️ PROMOTION: Your clan has ascended to Tier ${newRank}!`, type: 'achievement', targetAudience: 'clan', targetId: clan.tag, priority: 2, expiresInHours: 36, replaceExistingType: false }));
+
+            // ⚡️ Reset the quota strikes to 0 if the clan ranked up
+            setFields.primeQuotaMissed = 0;
         } else if (newRank < currentRank) {
             const demotionMsg = newRank === 0 ? `⚠️ EXILED: Your clan is in DEBT (${decayedPoints} pts). Earn points to restore rank!` : `⚠️ DEMOTION: Weekly decay dropped your clan to Tier ${newRank}.`;
             pillPromises.push(createMessagePill({ text: demotionMsg, type: 'warning', targetAudience: 'clan', targetId: clan.tag, priority: 1, expiresInHours: 48, replaceExistingType: false }));
         }
+
+        // ⚡️ Village Prime Quota Check (Excludes Level 2 & 3)
+        if (clan.primeLevel === 1) {
+            // Only enforce quota tracking if they didn't just earn a promotion rank-up
+            if (newRank <= currentRank) {
+                if ((clan.currentWeeklyPoints || 0) < 500) {
+                    const newMissed = (clan.primeQuotaMissed || 0) + 1;
+
+                    if (newMissed >= 4) {
+                        // The moment strikes reach 4, fully revoke Prime status
+                        setFields.primeLevel = 0;
+                        setFields.primeQuotaMissed = 0;
+                        setFields.verifiedClan = false;
+                        setFields.verifiedclan = false; // Cover both schema casings safely
+
+                        // Clean up the application status so they can re-apply down the road
+                        if (clan.primeApplication) {
+                            setFields["primeApplication.status"] = "none";
+                        }
+
+                        // Pull the elite badges given to Prime members
+                        await Clan.updateOne({ _id: clan._id }, { $pull: { badges: "Prime Clan 1" } });
+
+                        pillPromises.push(createMessagePill({
+                            text: `🚨 PRIME REVOKED: Your clan missed the 500pt weekly quota 4 times. Prime features disabled.`,
+                            type: 'warning',
+                            targetAudience: 'clan',
+                            targetId: clan.tag,
+                            priority: 2,
+                            expiresInHours: 48,
+                            replaceExistingType: false
+                        }));
+                    } else {
+                        // Increment and leave it active, sending out a warning pill
+                        setFields.primeQuotaMissed = newMissed;
+
+                        pillPromises.push(createMessagePill({
+                            text: `⚠️ QUOTA MISSED: Your clan missed the weekly 500-point Prime quota (${newMissed}/3 strikes).`,
+                            type: 'warning',
+                            targetAudience: 'clan',
+                            targetId: clan.tag,
+                            priority: 1,
+                            expiresInHours: 48,
+                            replaceExistingType: false
+                        }));
+                    }
+                }
+            }
+        }
+
         const nextRankThreshold = rankThresholds[newRank];
         let hit80PercentLimit = false;
         if (nextRankThreshold && newRank > 0) {
@@ -340,6 +397,7 @@ async function weeklyClanReset() {
         } else if (newRank === 6) {
             hit80PercentLimit = true;
         }
+
         if (hit80PercentLimit) {
             incFields.consecutiveWeeksNoDerank = 1;
             if ((clan.consecutiveWeeksNoDerank + 1) >= 4) badgesToAdd.push("Unlimited Chakra");
@@ -347,6 +405,7 @@ async function weeklyClanReset() {
             setFields.consecutiveWeeksNoDerank = 0;
             await Clan.updateOne({ _id: clan._id }, { $pull: { badges: "Unlimited Chakra" } });
         }
+
         const history = clan.weeklyPointHistory || [];
         const lastWeek = history[history.length - 1];
         if (lastWeek?.points > 0) {
@@ -354,24 +413,30 @@ async function weeklyClanReset() {
             if (growth >= 2.0) badgesToAdd.push("Gear 2nd");
             else if (growth >= 1.5) badgesToAdd.push("Zenkai Boost");
         }
+
         if (newRank > 0) {
             if (position === 1) {
                 badgesToAdd.push("The Pirate King");
                 pillPromises.push(createMessagePill({ text: `👑 ALL HAIL: [${clan.tag}] ${clan.name} is the #1 Clan of the Week!`, type: 'event', targetAudience: 'global', link: `/clans/${clan.tag}`, priority: 3, expiresInHours: 48, replaceExistingType: true }));
             } else if (position <= 5) badgesToAdd.push("The Pillars");
             else if (position <= 10) badgesToAdd.push("Hunter Association");
+
             if (mostDiscussedClan && clan._id.equals(mostDiscussedClan._id)) {
                 badgesToAdd.push("Talk-no-jutsu");
                 pillPromises.push(createMessagePill({ text: `💬 TALK-NO-JUTSU: Your clan was the most discussed this week!`, type: 'achievement', targetAudience: 'clan', targetId: clan.tag, priority: 2, expiresInHours: 48, replaceExistingType: false }));
             }
         }
+
         pushFields.weeklyPointHistory = { $each: [{ weekEnding, points: clan.currentWeeklyPoints, rankAtTime: position }], $slice: -12 };
         setFields.currentWeeklyPoints = 0;
+
         const finalUpdate = { $set: setFields, $push: pushFields };
         if (badgesToAdd.length > 0) finalUpdate.$addToSet = { badges: { $each: badgesToAdd } };
         if (Object.keys(incFields).length > 0) finalUpdate.$inc = incFields;
+
         bulkOps.push({ updateOne: { filter: { _id: clan._id }, update: finalUpdate } });
     }
+
     if (bulkOps.length > 0) await Clan.bulkWrite(bulkOps);
     if (pillPromises.length > 0) await Promise.all(pillPromises).catch(err => console.error("Pill generation error:", err));
 }
@@ -380,7 +445,7 @@ async function weeklyClanReset() {
 async function weeklyCollabPayout() {
     console.log("⏳ Processing Weekly Continuous Collab Payouts...");
     // Find verified clans that have a monthly allowance set
-    const clans = await Clan.find({ verifiedClan: true, monthlyCollabAllowance: { $gt: 0 } });
+    const clans = await Clan.find({ verifiedClan: true, monthlyCollabAllowance: { $gt: 0 }, primeLevel: { $in: [2, 3] } });
 
     if (clans.length === 0) return;
 
@@ -411,7 +476,7 @@ async function weeklyCollabPayout() {
             targetAudience: 'user', // Specifically target the leader
             targetId: clan.leader.toString(),
             priority: 3,
-            expiresInHours: 72,
+            expiresInHours: 24,
             replaceExistingType: false
         }));
 
@@ -423,7 +488,7 @@ async function weeklyCollabPayout() {
                     [leader.pushToken],
                     "Collab Payout Arrived! 💎",
                     `You received ${payout} OC for this week's influencer allocation!`,
-                    { screen: 'CollabsDashboard', clanTag: clan.tag }
+                    { screen: '/screens/Wallet', clanTag: clan.tag }
                 );
             }
         } catch (err) {

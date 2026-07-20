@@ -12,7 +12,6 @@ const PUBLIC_API_ROUTES = [
 "/api/mobile/register",
 "/api/mobile/recover",
 "/api/mobile/secure-uplink",
-"/api/posts",
 "/api/version",
 "/api/contact",
 "/api/mobile/refresh",

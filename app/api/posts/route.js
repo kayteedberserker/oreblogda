@@ -150,27 +150,27 @@ export async function runAIModerator(title, message, clanId, category, mediaUrl,
     // 🏷️ STEP 3: PHASE 1 - UNDERSTANDING & TAGGING (THE TRUTH PHASE)
     // =========================================================
     const tagSystemPrompt = `You are Oreblogda's entity extraction engine. Your ONLY job is to identify what is in the content. Do NOT moderate or judge the content. Act like a curious fan identifying the subject.
-        
-        ⭐ EXTRACTION RULES:
-        1. THE MEDIA IS THE PRIMARY SOURCE OF TRUTH. Prioritize visual content over text. Use the title/message only to provide context when they are consistent with the media and if no media is attached. Never ignore clear visual evidence because of text. (e.g., if the title says "Valorant" but the video is clearly "Blood Strike", tag "blood strike").
-        The media is the source of truth.
-        If the media clearly contradicts the text,
-        always trust the media.
-        Never hallucinate a franchise because
-        the title mentions it.
-        2. Identify core subjects. Do NOT extract generic hashtags, random background games, or things mentioned only once in passing.
-        3. If no media is attached? Check that the title and message or polls if inluded are anime/gaming related. If they are Approve.
 
-        ⭐ TAGGING DEFINITIONS & CONSTRAINTS:
-        1. DOMINANT FRANCHISE: The single most important franchise overall. If completely unknown/unidentifiable, write "unknown".
-        2. PRIMARY FRANCHISES: The main subject visually depicted or heavily discussed. Limit: Max 2. If completely unknown/unidentifiable, return an empty array.
-        3. SECONDARY FRANCHISES: Franchises mentioned only in passing. Limit: Max 3.
-        4. CHARACTERS: Canonical official names of actively featured characters. Max 5.
-        5. TOPICS: Lore-specific concepts (e.g., bankai, devil fruit). 
-           - CRITICAL: Topics MUST belong specifically to the primary franchise extracted. Never emit a generic topic (like "ranked" or "ace") that could belong to multiple franchises unless the franchise itself is confidently identified and emitted.
-        6. CONTENT TYPE: Determine the primary format of the post from the allowed options.
-        7. EVIDENCE SOURCE: "visual", "spoken", "title", "message", or "mixed".
-        8. LOWERCASE ENFORCEMENT: All tags MUST be strictly lowercase.`;
+⭐ EXTRACTION RULES:
+1. THE MEDIA IS THE PRIMARY SOURCE OF TRUTH. Prioritize visual content over text. Use the title/message only to provide context when they are consistent with the media and if no media is attached. Never ignore clear visual evidence because of text. (e.g., if the title says "Valorant" but the video is clearly "Blood Strike", tag "blood strike").
+The media is the source of truth.
+If the media clearly contradicts the text,
+always trust the media.
+Never hallucinate a franchise because
+the title mentions it.
+2. Identify core subjects. Do NOT extract generic hashtags, random background games, or things mentioned only once in passing.
+3. If no media is attached? Check that the title and message or polls if inluded are anime/gaming related. If they are Approve.
+
+⭐ TAGGING DEFINITIONS & CONSTRAINTS:
+1. DOMINANT FRANCHISE: The single most important franchise overall. If completely unknown/unidentifiable, write "unknown".
+2. PRIMARY FRANCHISES: The main subject visually depicted or heavily discussed. Limit: Max 2. If completely unknown/unidentifiable, return an empty array.
+3. SECONDARY FRANCHISES: Franchises mentioned only in passing. Limit: Max 3.
+4. CHARACTERS: Canonical official names of actively featured characters. Max 5.
+5. TOPICS: Lore-specific concepts (e.g., bankai, devil fruit). 
+- CRITICAL: Topics MUST belong specifically to the primary franchise extracted. Never emit a generic topic (like "ranked" or "ace") that could belong to multiple franchises unless the franchise itself is confidently identified and emitted.
+6. CONTENT TYPE: Determine the primary format of the post from the allowed options.
+7. EVIDENCE SOURCE: "visual", "spoken", "title", "message", or "mixed".
+8. LOWERCASE ENFORCEMENT: All tags MUST be strictly lowercase.`;
 
     const entitySchema = {
         type: "OBJECT",
@@ -260,21 +260,24 @@ export async function runAIModerator(title, message, clanId, category, mediaUrl,
     const modPayloadText = `${payloadText}\nPhase 1 Understanding Results: ${extractedTagsSummary}`;
 
     const modSystemPrompt = `You are Oreblogda's moderation engine. Your ONLY job is to decide if this content violates platform policy.
-        
-        MODERATION RULES:
-        1. HARMFUL CONTENT: Reject real-life nudity or extreme real-life gore. Stylized anime gore/ecchi is allowed.
-        2. SPAM / OFF-TOPIC: 
-           - If you have HIGH confidence the content is purely unrelated to anime and gaming, real-world spam (e.g., real estate ads, political arguments, crypto bots), REJECT.
-           - If you cannot identify a franchise but the content might still be anime/gaming, DO NOT reject. If you are sure it is related to anime/gaming? Approve it else FLAG it for human review. 
-        3. INTENTIONAL DECEPTION / CLICKBAIT (CRITICAL SOFTENED RULE): 
-           - ONLY REJECT if the contradiction between the text and media is INTENTIONAL and MATERIAL deception (e.g., Title: "One Piece Episode 1200 Leak", Video: A cooking tutorial or cat video).
-        4. CATEGORIES:
-           - 'Fanart': MUST have media attached. Flag if missing. Make sure you check the correct Category b4 comparing
-        5. HUMAN CULTURE RULE (CRITICAL):
-           - Anime and gaming communities frequently use: jokes, memes, sarcasm, hyperbole, incorrect franchise names, slang, and reaction titles (e.g., Title: "Best sniper", Video: Assault rifle gameplay).
-           - These should NOT be treated as malicious deception.
-           - Only reject content when a reasonable human moderator would conclude that the user intentionally attempted to deceive viewers.
-        6. DEFAULT ACTION: When in doubt, or if the content clearly belongs to gaming/anime culture, APPROVE it.`;
+
+MODERATION RULES:
+1. HARMFUL CONTENT: Reject real-life nudity or extreme real-life gore. Stylized anime gore/ecchi is allowed.
+2. SPAM / OFF-TOPIC: 
+- If you have HIGH confidence the content is purely unrelated to anime and gaming, real-world spam (e.g., real estate ads, political arguments, crypto bots), REJECT.
+- If the content doesnt include any media? we check the title and message, if it is anime related we approve, if it is completely nonsensical? no meaning at all like a bunch of words with no meaning. REJECT.
+- If you cannot identify a franchise but the content might still be anime/gaming, DO NOT reject. If you are sure it is related to anime/gaming? Approve it else FLAG it for human review. 
+3. INTENTIONAL DECEPTION / CLICKBAIT (CRITICAL SOFTENED RULE): 
+- ONLY REJECT if the contradiction between the text and media is INTENTIONAL and MATERIAL deception (e.g., Title: "One Piece Episode 1200 Leak", Video: A cooking tutorial or cat video).
+4. CATEGORIES:
+- 'Fanart': MUST have media attached. Flag if missing. Make sure you check the correct Category b4 comparing
+5. HUMAN CULTURE RULE (CRITICAL):
+- Anime and gaming communities frequently use: jokes, memes, sarcasm, hyperbole, incorrect franchise names, slang, and reaction titles (e.g., Title: "Best sniper", Video: Assault rifle gameplay).
+- These should NOT be treated as malicious deception.
+- Only reject content when a reasonable human moderator would conclude that the user intentionally attempted to deceive viewers.
+6. DEFAULT ACTION: When in doubt, and if the content clearly belongs to gaming/anime culture, APPROVE it.
+7. YOU should also review content that doesnt include any media. In those we check the title, message or poll if included. IF these are related to anime/gaming/pop culture APPROVE IT.
+`;
 
     const modSchema = {
         type: "OBJECT",
@@ -1113,6 +1116,21 @@ async function checkTitleUnlocks(user, field, currentCount) {
     return null;
 }
 
+// 🌟 NEW CENTRALIZED LOGGING HELPER
+async function logEvent(postId, type, message, metadata = {}) {
+    try {
+        await PostEvent.create({
+            postId: postId ? postId.toString() : "SYSTEM",
+            type,
+            message,
+            metadata: { ...metadata, timestamp: new Date() }
+        });
+        console.log(`[EVENT] ${type} | Post: ${postId}`);
+    } catch (error) {
+        console.error("Failed to write to PostEvent logs:", error);
+    }
+}
+
 // --------------------------------------------------------------------
 // POST: Create a new post (Supports Old Client Builds & New Background Pipeline)
 // --------------------------------------------------------------------
@@ -1129,8 +1147,14 @@ export async function POST(req) {
             hasPoll,
             pollMultiple, pollOptions, category, useR2,
             mediaPending,  // 🌟 Present ONLY in new client builds
-            totalFiles     // 🌟 Present ONLY in new client builds
+            totalFiles,    // 🌟 Present ONLY in new client builds
+            requestId      // 🌟 NEW: Client-side generated idempotency key
         } = body;
+
+        const fingerprint = req.headers.get("x-user-deviceId") || req.headers.get("x-device-id");
+
+        // Log immediate receipt
+        await logEvent(null, "POST_REQUEST_RECEIVED", "Initial POST request hit server", { requestId, fingerprint, totalFiles });
 
         // 1. Resolve Country Metadata
         let country = req.headers.get("x-user-country");
@@ -1140,7 +1164,7 @@ export async function POST(req) {
             const geo = geoip.lookup(ip);
             country = geo ? geo.country : "Global";
         }
-        const fingerprint = req.headers.get("x-user-deviceId") || req.headers.get("x-device-id");
+
         const clanId = body.clanId || (category?.startsWith("Clan:") ? category.split(":")[2] : null);
         let userDoc = null;
         let isMobile = false;
@@ -1160,12 +1184,32 @@ export async function POST(req) {
 
         if (!userDoc) return addCorsHeaders(NextResponse.json({ message: "Unauthorized" }, { status: 401 }));
 
+        // 🌟 IDEMPOTENCY CHECK (Early Return to kill duplicates)
+        let newPost;
+
+        if (requestId) {
+            const existingPost = await Post.findOne({
+                requestId,
+                authorUserId: userDoc._id
+            });
+
+            if (existingPost) {
+                await logEvent(existingPost._id, "DUPLICATE_POST_DETECTED", "Network retry caught. Returning existing context.", { requestId });
+                return addCorsHeaders(NextResponse.json({
+                    message: "Duplicate request.",
+                    post: existingPost,
+                    signData: existingPost.signData
+                }, { status: 200 }));
+            }
+        }
+
         // 3. 🛡️ BACKWARDS COMPATIBILITY: Robust Media Mapping
         const primaryMediaUrl = mediaUrl || (media && media.length > 0 ? media[0].url : null);
         const primaryMediaType = mediaType || (media && media.length > 0 ? media[0].type : "image");
         const finalMediaArray = media || (primaryMediaUrl ? [{ url: primaryMediaUrl, type: primaryMediaType, order: 0 }] : []);
-        console.log(primaryMediaUrl, media)
-        // 4. Generate Slugs (Unchanged logic)
+        console.log(primaryMediaUrl, media);
+
+        // 4. Generate Slugs
         const newMessage = removeEmptyLines(normalizePostContent(message));
         const authorPrefix = userDoc.username.toLowerCase().replace(/[^a-z0-9]/g, '');
         let cleanedTitle = title.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().replace(/\s+/g, '-');
@@ -1190,7 +1234,7 @@ export async function POST(req) {
         let finalStatus = mediaPending ? "pending" : (isMobile ? "pending" : "approved");
 
         // 6. Build Post Context Contextually
-        const newPost = await Post.create({
+        newPost = await Post.create({
             authorUserId: userDoc._id,
             authorId: fingerprint,
             authorName: userDoc.username,
@@ -1203,7 +1247,7 @@ export async function POST(req) {
             status: finalStatus,
             uploadStatus: mediaPending ? "pending" : "uploaded",
             moderationStatus: mediaPending ? "pending" : (isMobile ? "pending" : "approved"),
-
+            requestId, // 🌟 Save the Idempotency Key
             poll: hasPoll ? {
                 pollMultiple: pollMultiple || false,
                 options: pollOptions && pollOptions.length >= 2 ? pollOptions.map(opt => ({ text: opt.text, votes: 0 })) : []
@@ -1212,6 +1256,14 @@ export async function POST(req) {
             clanId: clanId,
             country: country,
             totalFilesExpected: totalFiles || 0
+        });
+
+        await logEvent(newPost._id, "POST_CREATED", "Post initialized", {
+            requestId,
+            mediaPending,
+            totalFiles,
+            title,
+            isMobile
         });
 
         // 🛣️ PATH A: New client build initializing background media upload operations
@@ -1254,6 +1306,8 @@ export async function POST(req) {
                 newPost.mediaType = finalMediaArray[0]?.type ?? null;
                 await newPost.save();
 
+                await logEvent(newPost._id, "PRESIGNED_URL_GENERATED", "R2 Pre-signed URLs mapped", { count: signDataArray.length });
+
             } else {
                 // 🌟 LEGACY CLOUDINARY PIPELINE (Unchanged)
                 const host = req.headers.get("host") || "localhost:3000";
@@ -1274,6 +1328,7 @@ export async function POST(req) {
                         cloudName: process.env.CLOUDINARY_CLOUD_NAME,
                     });
                 }
+                await logEvent(newPost._id, "PRESIGNED_URL_GENERATED", "Cloudinary Signatures mapped", { count: signDataArray.length });
             }
 
             return addCorsHeaders(NextResponse.json({
@@ -1318,17 +1373,24 @@ cloudinary.config({
 });
 
 export async function finalizeAndPublishPost(postId, isMobile, country, fingerprint, isEdit = false) {
+    await logEvent(postId, "FINALIZE_CALLED", "Finalize Engine execution started", { isMobile, isEdit });
+
     const post = await Post.findById(postId);
-    if (!post) throw new Error("Target post context not found.");
+    if (!post) {
+        await logEvent(postId, "FINALIZE_FAILED", "Target post context not found");
+        throw new Error("Target post context not found.");
+    }
     console.log(
         "[FINALIZE]",
         postId,
         isMobile
     );
+
     // 🛡️ IDEMPOTENCY GUARD
     // If it's an edit, we bypass this guard because the status might already be 'approved' from before
     if (!isEdit && post.status !== "pending_media" && post.status !== "pending" && post.totalFilesExpected > 0) {
         console.log(`⚠️ Blocked duplicate publishing execution race for Post ID: ${postId}`);
+        await logEvent(postId, "DUPLICATE_POST_DETECTED", "Blocked race condition in finalize engine", { currentStatus: post.status });
         return { message: "Post already processed and published via parallel asset pipeline.", post };
     }
 
@@ -1429,6 +1491,9 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
             post.moderationStatus = "pending";
             post.status = "pending";
             await post.save();
+
+            await logEvent(postId, "FINALIZE_FAILED", "Media not ready. Re-queued.", { expectsMedia, hasMedia });
+
             return {
                 message: "Post finalized but pending moderation (media not ready yet)",
                 post,
@@ -1445,8 +1510,13 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
         } else {
             // Run standard moderation - WE ALWAYS RE-RUN THIS ON EDIT TO CATCH BAD CHANGES
             post.moderationStatus = "processing";
+
+            await logEvent(postId, "AI_STARTED", "Sending post context to AI Moderator");
             // Passed post.poll as the final argument
             const ai = await runAIModerator(post.title, post.message, post.clanId, post.category, post.mediaUrl, post.mediaType, post.poll);
+
+            await logEvent(postId, "AI_COMPLETED", "AI Moderation returned", { action: ai.action, reason: ai.reason });
+
             aiInterests = ai.interests || [];
 
             if (ai.action === "approve") {
@@ -1457,13 +1527,12 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
                 finalStatus = "rejected";
                 rejectionReason = ai.reason;
                 post.moderationStatus = "rejected";
-                // expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
+                expiresAt = new Date(Date.now() + 12 * 60 * 60 * 1000);
             } else {
                 finalStatus = "pending";
                 rejectionReason = ai.reason;
                 post.moderationStatus = "failed";
             }
-
         }
     }
 
@@ -1600,6 +1669,8 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
                     }
                 } catch (err) { console.error("Clan alert fault:", err); }
             }
+
+            await logEvent(postId, "POST_PUBLISHED", "Post successfully broadcasted and published");
         }
     }
 
@@ -1659,6 +1730,8 @@ export async function finalizeAndPublishPost(postId, isMobile, country, fingerpr
             );
         } catch (err) { console.error("Rejection notice fault:", err); }
     }
+
+    await logEvent(postId, "FINALIZE_SUCCESS", "Finalize execution successfully finished", { finalStatus, isEdit });
 
     return {
         message: finalStatus === "approved" ? (isEdit ? "Post updated successfully" : "Post created successfully") : finalStatus === "rejected" ? "Post rejected by AI" : "Post submitted for approval",

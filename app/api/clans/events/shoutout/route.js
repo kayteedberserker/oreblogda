@@ -24,11 +24,20 @@ export async function POST(req) {
         if (!deviceId) return NextResponse.json({ message: "Authentication missing." }, { status: 401 });
         if (!clanId || !title || !description) return NextResponse.json({ message: "Missing required parameters." }, { status: 400 });
 
-        const targetClan = await Clan.findOne({ tag: clanId }).lean();
-        const targetLeader = await MobileUser.findOne({ deviceId }).lean();
+        const targetClan = await Clan.findOne({ tag: clanId.toUpperCase() }).lean();
+        const targetUser = await MobileUser.findOne({ deviceId }).lean();
 
         if (!targetClan) return NextResponse.json({ message: "Clan not found." }, { status: 404 });
-        if (!targetLeader || targetLeader.deviceId !== deviceId) return NextResponse.json({ message: "Access Denied: Only Clan Leaders." }, { status: 403 });
+        if (!targetUser) return NextResponse.json({ message: "User profile not found." }, { status: 404 });
+
+        // ⚡️ FIXED: Real Role Authentication Check
+        // Explicitly check if the authenticated user's ID matches the clan's leader or viceLeader fields
+        const isLeader = targetClan.leader?.toString() === targetUser._id.toString();
+        const isViceLeader = targetClan.viceLeader?.toString() === targetUser._id.toString();
+
+        if (!isLeader && !isViceLeader) {
+            return NextResponse.json({ message: "Access Denied: Only Clan Leaders and Vice Leaders hold creation clearances." }, { status: 403 });
+        }
 
         if (!targetClan.verifiedClan) {
             return NextResponse.json({ message: "This feature is currently locked for Prime Clans only." }, { status: 403 });
@@ -48,7 +57,7 @@ export async function POST(req) {
         }
 
         const activeEventConflict = await ShoutoutEvent.findOne({
-            clanId,
+            clanId: clanId.toUpperCase(),
             expiresAt: { $gt: now }
         }).lean();
 
@@ -75,7 +84,7 @@ export async function POST(req) {
         const targetVisibility = visibility?.toUpperCase() === "PRIVATE" ? "PRIVATE" : "PUBLIC";
 
         const newShoutout = await ShoutoutEvent.create({
-            clanId,
+            clanId: clanId.toUpperCase(),
             clanName: targetClan.name,
             leaderDeviceId: deviceId,
             moderatedBy: [deviceId],

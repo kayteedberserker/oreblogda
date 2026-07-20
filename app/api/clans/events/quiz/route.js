@@ -4,329 +4,439 @@ import ClanFollower from "@/app/models/ClanFollower";
 import Clan from "@/app/models/ClanModel";
 import MobileUser from "@/app/models/MobileUserModel";
 import QuizEvent from "@/app/models/QuizEvent";
+import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3"; // ⚡️ NEW IMPORT FOR R2
+import mongoose from "mongoose";
 import { NextResponse } from "next/server";
 
+// ⚡️ CONFIG: Initialize Cloudflare R2 Client
+const r2Client = new S3Client({
+    region: "auto",
+    endpoint: `https://${process.env.CLOUDFLARE_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+    credentials: {
+        accessKeyId: process.env.R2_ACCESS_KEY_ID,
+        secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
+    },
+});
+
+// ⚡️ HELPER: Standardized base64 processing and upload to R2 bucket
+async function uploadQuestionImageToR2(base64Str, eventId, questionIndex) {
+    const matches = base64Str.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.*)$/);
+    if (!matches || matches.length !== 3) throw new Error("Invalid base64 format image data.");
+
+    const contentType = matches[1];
+    const buffer = Buffer.from(matches[2], "base64");
+    const extension = contentType.split("/")[1] || "png";
+
+    // Scoped directory structure: quizzes/eventId/question_index_timestamp.ext
+    const key = `quizzes/${eventId}/question_${questionIndex}_${Date.now()}.${extension}`;
+
+    await r2Client.send(new PutObjectCommand({
+        Bucket: process.env.R2_BUCKET_NAME,
+        Key: key,
+        Body: buffer,
+        ContentType: contentType,
+    }));
+
+    return `https://media.oreblogda.com/${key}`;
+}
+
 export async function POST(req) {
-await connectDB();
-try {
-const body = await req.json();
-const { clanId, title, description, visibility, deliveryMode, streamGapMinutes, scheduledStartTime, quizQuestions } = body;
+    await connectDB();
+    try {
+        const body = await req.json();
+        const { clanId, title, description, visibility, deliveryMode, streamGapMinutes, scheduledStartTime, quizQuestions } = body;
 
-const deviceId = req.headers.get("x-user-deviceId");
-if (!deviceId) return NextResponse.json({ message: "Authentication missing." }, { status: 401 });
-if (!clanId || !title || !description || !scheduledStartTime) return NextResponse.json({ message: "Missing primary details." }, { status: 400 });
+        const deviceId = req.headers.get("x-user-deviceId");
+        if (!deviceId) return NextResponse.json({ message: "Authentication missing." }, { status: 401 });
+        if (!clanId || !title || !description || !scheduledStartTime) return NextResponse.json({ message: "Missing primary details." }, { status: 400 });
 
-const targetClan = await Clan.findOne({ tag: clanId }).lean();
-const targetLeader = await MobileUser.findOne({ deviceId }).lean();
+        const targetClan = await Clan.findOne({ tag: clanId.toUpperCase() }).lean();
+        const targetUser = await MobileUser.findOne({ deviceId }).lean();
 
-if (!targetClan) return NextResponse.json({ message: "Clan not found." }, { status: 404 });
-if (!targetLeader || targetLeader.deviceId !== deviceId) return NextResponse.json({ message: "Access Denied: Only Clan Leaders." }, { status: 403 });
+        if (!targetClan) return NextResponse.json({ message: "Clan not found." }, { status: 404 });
+        if (!targetUser) return NextResponse.json({ message: "User profile not found." }, { status: 404 });
 
-// ⚡️ FEATURE LOCK: PRIME / VERIFIED CLANS ONLY
-if (!targetClan.verifiedClan) {
-return NextResponse.json({ message: "This feature is currently locked for Prime Clans only." }, { status: 403 });
-}
+        // ⚡️ FIXED: Real Role Authentication Check
+        // Explicitly check if the authenticated user's ID matches the clan's leader or viceLeader fields
+        const isLeader = targetClan.leader?.toString() === targetUser._id.toString();
+        const isViceLeader = targetClan.viceLeader?.toString() === targetUser._id.toString();
 
-// ⚡️ LIMIT CHECK: MAX 5 PUBLIC QUIZZES GLOBALLY
-if (visibility?.toUpperCase() === "PUBLIC") {
-const activePublicCount = await QuizEvent.countDocuments({
-visibility: "PUBLIC",
-status: { $in: ["COMING_SOON", "LIVE"] }
-});
-if (activePublicCount >= 5) {
-return NextResponse.json({ message: "The global limit for public events (5) has been reached. Try again later or set visibility to PRIVATE." }, { status: 429 });
-}
-}
+        if (!isLeader && !isViceLeader) {
+            return NextResponse.json({ message: "Access Denied: Only Clan Leaders and Vice Leaders hold creation clearance." }, { status: 403 });
+        }
 
-const duplicateConflict = await QuizEvent.findOne({ clanId, status: { $in: ["COMING_SOON", "LIVE"] } }).lean();
-if (duplicateConflict) return NextResponse.json({ message: "Your clan already has an active Quiz." }, { status: 409 });
+        // ⚡️ FEATURE LOCK: PRIME / VERIFIED CLANS ONLY
+        if (!targetClan.verifiedClan) {
+            return NextResponse.json({ message: "This feature is currently locked for Prime Clans only." }, { status: 403 });
+        }
 
-const now = new Date();
-const scheduledTime = new Date(scheduledStartTime);
+        // ⚡️ LIMIT CHECK: MAX 5 PUBLIC QUIZZES GLOBALLY
+        if (visibility?.toUpperCase() === "PUBLIC") {
+            const activePublicCount = await QuizEvent.countDocuments({
+                visibility: "PUBLIC",
+                status: { $in: ["COMING_SOON", "LIVE"] }
+            });
+            if (activePublicCount >= 5) {
+                return NextResponse.json({ message: "The global limit for public events (5) has been reached. Try again later or set visibility to PRIVATE." }, { status: 429 });
+            }
+        }
 
-// ⚡️ TIMELINE: 1 Hour Grace Period from Scheduled Time. 
-// If not started within this window, the DB TTL automatically purges it.
-const maxLifespan = new Date(scheduledTime.getTime() + 1 * 60 * 60 * 1000);
+        const duplicateConflict = await QuizEvent.findOne({ clanId: clanId.toUpperCase(), status: { $in: ["COMING_SOON", "LIVE"] } }).lean();
+        if (duplicateConflict) return NextResponse.json({ message: "Your clan already has an active Quiz." }, { status: 409 });
 
-if (scheduledTime < now || scheduledTime > new Date(now.getTime() + 24 * 60 * 60 * 1000)) {
-return NextResponse.json({ message: "Start time must be within the next 24 hours." }, { status: 400 });
-}
+        const now = new Date();
+        const scheduledTime = new Date(scheduledStartTime);
 
-const newQuiz = await QuizEvent.create({
-clanId, clanName: targetClan.name, leaderDeviceId: deviceId, moderatedBy: [deviceId],
-title, description, visibility: visibility?.toUpperCase() === "PRIVATE" ? "PRIVATE" : "PUBLIC",
-status: "COMING_SOON", deliveryMode: deliveryMode === "STREAMED" ? "STREAMED" : "BATCH",
-streamGapMinutes: deliveryMode === "STREAMED" ? Math.min(parseInt(streamGapMinutes) || 5, 15) : null,
-scheduledStartTime: scheduledTime, expiresAt: maxLifespan, quizQuestions: quizQuestions || [],
-leaderboard: [], participants: [], blacklistedDeviceIds: [], acknowledgeCount: 0, acknowledgedBy: []
-});
+        // ⚡️ TIMELINE: 1 Hour Grace Period from Scheduled Time. 
+        // If not started within this window, the DB TTL automatically purges it.
+        const maxLifespan = new Date(scheduledTime.getTime() + 1 * 60 * 60 * 1000);
 
-return NextResponse.json({ success: true, data: newQuiz }, { status: 201 });
-} catch (err) {
-console.error("⛔ QUIZ_CREATION_CRASH:", err);
-return NextResponse.json({ message: "Server error during creation." }, { status: 500 });
-}
+        if (scheduledTime < now || scheduledTime > new Date(now.getTime() + 24 * 60 * 60 * 1000)) {
+            return NextResponse.json({ message: "Start time must be within the next 24 hours." }, { status: 400 });
+        }
+
+        // ⚡️ NEW: Pre-generate Event ID for R2 directory path configuration
+        const generatedEventId = new mongoose.Types.ObjectId();
+
+        const processedQuestions = [];
+        if (quizQuestions && Array.isArray(quizQuestions)) {
+            if (quizQuestions.length > 30) return NextResponse.json({ message: "Max allowed questions is 30." }, { status: 400 });
+
+            for (let i = 0; i < quizQuestions.length; i++) {
+                const q = quizQuestions[i];
+                let currentImgUrl = q.imageUrl || null;
+
+                if (currentImgUrl && currentImgUrl.startsWith("data:image")) {
+                    try {
+                        currentImgUrl = await uploadQuestionImageToR2(currentImgUrl, generatedEventId.toString(), i);
+                    } catch (uploadErr) {
+                        console.error(`⛔ R2_POST_UPLOAD_FAILED at index ${i}:`, uploadErr);
+                        return NextResponse.json({ message: `Failed to process image upload for question ${i + 1}.` }, { status: 500 });
+                    }
+                }
+
+                processedQuestions.push({
+                    questionText: q.questionText,
+                    imageUrl: currentImgUrl,
+                    options: q.options,
+                    correctOptionIndex: q.correctOptionIndex,
+                    releasedAt: q.releasedAt || null
+                });
+            }
+        }
+
+        const newQuiz = await QuizEvent.create({
+            _id: generatedEventId,
+            clanId: clanId.toUpperCase(),
+            clanName: targetClan.name,
+            leaderDeviceId: deviceId,
+            moderatedBy: [deviceId],
+            title,
+            description,
+            visibility: visibility?.toUpperCase() === "PRIVATE" ? "PRIVATE" : "PUBLIC",
+            status: "COMING_SOON",
+            deliveryMode: deliveryMode === "STREAMED" ? "STREAMED" : "BATCH",
+            streamGapMinutes: deliveryMode === "STREAMED" ? Math.min(parseInt(streamGapMinutes) || 5, 15) : null,
+            scheduledStartTime: scheduledTime,
+            expiresAt: maxLifespan,
+            quizQuestions: processedQuestions,
+            leaderboard: [],
+            participants: [],
+            blacklistedDeviceIds: [],
+            acknowledgeCount: 0,
+            acknowledgedBy: []
+        });
+
+        return NextResponse.json({ success: true, data: newQuiz }, { status: 201 });
+    } catch (err) {
+        console.error("⛔ QUIZ_CREATION_CRASH:", err);
+        return NextResponse.json({ message: "Server error during creation." }, { status: 500 });
+    }
 }
 
 export async function PATCH(req) {
-await connectDB();
-try {
-const body = await req.json();
-const { eventId, action, username, userAnswers, answerIndex, questionIndex, ...payload } = body;
+    await connectDB();
+    try {
+        const body = await req.json();
+        const { eventId, action, username, userAnswers, answerIndex, questionIndex, ...payload } = body;
 
-const deviceId = req.headers.get("x-user-deviceId");
-if (!deviceId) return NextResponse.json({ message: "Authentication missing." }, { status: 401 });
-if (!eventId || !action) return NextResponse.json({ message: "Missing request details." }, { status: 400 });
+        const deviceId = req.headers.get("x-user-deviceId");
+        if (!deviceId) return NextResponse.json({ message: "Authentication missing." }, { status: 401 });
+        if (!eventId || !action) return NextResponse.json({ message: "Missing request details." }, { status: 400 });
 
-const event = await QuizEvent.findById(eventId);
-if (!event) return NextResponse.json({ message: "Quiz not found." }, { status: 404 });
+        const event = await QuizEvent.findById(eventId);
+        if (!event) return NextResponse.json({ message: "Quiz not found." }, { status: 404 });
 
-const now = new Date();
+        const now = new Date();
 
-// ⚡️ GLOBAL CHRONOLOGICAL CHECK: Organically completes quiz if time runs out
-if (event.status !== "COMPLETED" && event.status !== "CANCELLED") {
-const isTimeUp = event.endsAt && now > event.endsAt;
-const hasExceededFailsafe = now > event.expiresAt;
+        // ⚡️ GLOBAL CHRONOLOGICAL CHECK: Organically completes quiz if time runs out
+        if (event.status !== "COMPLETED" && event.status !== "CANCELLED") {
+            const isTimeUp = event.endsAt && now > event.endsAt;
+            const hasExceededFailsafe = now > event.expiresAt;
 
-if (isTimeUp || hasExceededFailsafe) {
-event.status = event.quizQuestions.length > 0 && event.status === "LIVE" ? "COMPLETED" : "CANCELLED";
-// ⚡️ TIMELINE: 12 Hours Leaderboard Viewing Period after completion
-event.expiresAt = new Date(now.getTime() + 12 * 60 * 60 * 1000);
-await event.save();
-return NextResponse.json({ message: "This quiz has concluded." }, { status: 410 });
-}
-}
+            if (isTimeUp || hasExceededFailsafe) {
+                event.status = event.quizQuestions.length > 0 && event.status === "LIVE" ? "COMPLETED" : "CANCELLED";
+                // ⚡️ TIMELINE: 12 Hours Leaderboard Viewing Period after completion
+                event.expiresAt = new Date(now.getTime() + 12 * 60 * 60 * 1000);
+                await event.save();
+                return NextResponse.json({ message: "This quiz has concluded." }, { status: 410 });
+            }
+        }
 
-if (event.visibility === "PRIVATE") {
-const isFollower = await ClanFollower.findOne({ userId: deviceId, clanTag: event.clanId }).lean();
-const targetClan = await Clan.findById(event.clanId).lean();
-const isMember = targetClan?.members?.includes(deviceId) || targetClan?.leader === deviceId;
-if (!isFollower && !isMember) return NextResponse.json({ message: "Access Denied: Clan clearance required." }, { status: 403 });
-}
+        if (event.visibility === "PRIVATE") {
+            const isFollower = await ClanFollower.findOne({ userId: deviceId, clanTag: event.clanId }).lean();
+            const targetClan = await Clan.findById(event.clanId).lean();
+            const isMember = targetClan?.members?.includes(deviceId) || targetClan?.leader === deviceId;
+            if (!isFollower && !isMember) return NextResponse.json({ message: "Access Denied: Clan clearance required." }, { status: 403 });
+        }
 
-const isLeader = event.leaderDeviceId === deviceId;
-const isModerator = event.moderatedBy.includes(deviceId);
+        const isLeader = event.leaderDeviceId === deviceId;
+        const isModerator = event.moderatedBy.includes(deviceId);
 
-switch (action.toUpperCase()) {
-case "UPDATE_MODERATORS": {
-if (!isLeader && !isModerator) return NextResponse.json({ message: "Access Denied." }, { status: 403 });
-if (payload.moderators && Array.isArray(payload.moderators)) {
-let newMods = payload.moderators;
-if (!newMods.includes(event.leaderDeviceId)) newMods.push(event.leaderDeviceId);
-event.moderatedBy = newMods;
-await event.save();
-}
-return NextResponse.json({ success: true, message: "Staff updated." }, { status: 200 });
-}
+        switch (action.toUpperCase()) {
+            case "UPDATE_MODERATORS": {
+                if (!isLeader && !isModerator) return NextResponse.json({ message: "Access Denied." }, { status: 403 });
+                if (payload.moderators && Array.isArray(payload.moderators)) {
+                    let newMods = payload.moderators;
+                    if (!newMods.includes(event.leaderDeviceId)) newMods.push(event.leaderDeviceId);
+                    event.moderatedBy = newMods;
+                    await event.save();
+                }
+                return NextResponse.json({ success: true, message: "Staff updated." }, { status: 200 });
+            }
 
-case "UPDATE_QUIZ": {
-if (!isLeader && !isModerator) return NextResponse.json({ message: "Access Denied." }, { status: 403 });
-if (event.status !== "COMING_SOON") return NextResponse.json({ message: "Cannot modify an active quiz." }, { status: 400 });
+            case "UPDATE_QUIZ": {
+                if (!isLeader && !isModerator) return NextResponse.json({ message: "Access Denied." }, { status: 403 });
+                if (event.status !== "COMING_SOON") return NextResponse.json({ message: "Cannot modify an active quiz." }, { status: 400 });
 
-if (payload.title) event.title = payload.title;
-if (payload.description) event.description = payload.description;
-if (payload.deliveryMode) event.deliveryMode = payload.deliveryMode;
-if (payload.streamGapMinutes !== undefined) event.streamGapMinutes = Math.min(payload.streamGapMinutes, 15);
+                if (payload.title) event.title = payload.title;
+                if (payload.description) event.description = payload.description;
+                if (payload.deliveryMode) event.deliveryMode = payload.deliveryMode;
+                if (payload.streamGapMinutes !== undefined) event.streamGapMinutes = Math.min(payload.streamGapMinutes, 15);
 
-if (payload.quizQuestions && Array.isArray(payload.quizQuestions)) {
-if (payload.quizQuestions.length > event.maxQuestions) return NextResponse.json({ message: `Max allowed questions is ${event.maxQuestions}.` }, { status: 400 });
-event.quizQuestions = payload.quizQuestions;
-}
+                if (payload.quizQuestions && Array.isArray(payload.quizQuestions)) {
+                    if (payload.quizQuestions.length > event.maxQuestions) return NextResponse.json({ message: `Max allowed questions is ${event.maxQuestions}.` }, { status: 400 });
 
-await event.save();
-return NextResponse.json({ success: true, message: "Settings updated." }, { status: 200 });
-}
+                    // ⚡️ NEW: Process any incoming image uploads during update context
+                    const updatedQuestions = [];
+                    for (let i = 0; i < payload.quizQuestions.length; i++) {
+                        const q = payload.quizQuestions[i];
+                        let currentImgUrl = q.imageUrl || null;
 
-case "ACKNOWLEDGE": {
-if (event.status !== "COMING_SOON") return NextResponse.json({ message: "Sign-up period is over." }, { status: 400 });
-if (event.acknowledgedBy.includes(deviceId)) return NextResponse.json({ message: "You have already joined." }, { status: 409 });
-if (event.blacklistedDeviceIds?.includes(deviceId)) return NextResponse.json({ message: "You are banned from this event." }, { status: 403 });
+                        if (currentImgUrl && currentImgUrl.startsWith("data:image")) {
+                            try {
+                                currentImgUrl = await uploadQuestionImageToR2(currentImgUrl, event._id.toString(), i);
+                            } catch (uploadErr) {
+                                console.error(`⛔ R2_PATCH_UPLOAD_FAILED at index ${i}:`, uploadErr);
+                                return NextResponse.json({ message: `Failed to process image upload for question ${i + 1}.` }, { status: 500 });
+                            }
+                        }
 
-event.acknowledgedBy.push(deviceId);
-event.acknowledgeCount += 1;
+                        updatedQuestions.push({
+                            questionText: q.questionText,
+                            imageUrl: currentImgUrl,
+                            options: q.options,
+                            correctOptionIndex: q.correctOptionIndex,
+                            releasedAt: q.releasedAt || null
+                        });
+                    }
+                    event.quizQuestions = updatedQuestions;
+                }
 
-const user = await MobileUser.findOne({ deviceId }).lean();
-if (user && !event.participants.find(p => p.deviceId === deviceId)) {
-event.participants.push({ deviceId, username: user.username });
-}
+                await event.save();
+                return NextResponse.json({ success: true, message: "Settings updated." }, { status: 200 });
+            }
 
-await event.save();
-return NextResponse.json({ success: true, message: "You joined the quiz!" }, { status: 200 });
-}
+            case "ACKNOWLEDGE": {
+                if (event.status !== "COMING_SOON") return NextResponse.json({ message: "Sign-up period is over." }, { status: 400 });
+                if (event.acknowledgedBy.includes(deviceId)) return NextResponse.json({ message: "You have already joined." }, { status: 409 });
+                if (event.blacklistedDeviceIds?.includes(deviceId)) return NextResponse.json({ message: "You are banned from this event." }, { status: 403 });
 
-case "START_QUIZ": {
-if (!isLeader && !isModerator) return NextResponse.json({ message: "Access Denied." }, { status: 403 });
-if (event.status !== "COMING_SOON") return NextResponse.json({ message: "Quiz cannot be started now." }, { status: 400 });
-if (event.quizQuestions.length === 0) return NextResponse.json({ message: "Cannot start an empty quiz." }, { status: 400 });
+                event.acknowledgedBy.push(deviceId);
+                event.acknowledgeCount += 1;
 
-event.status = "LIVE";
-event.startedAt = now;
+                const user = await MobileUser.findOne({ deviceId }).lean();
+                if (user && !event.participants.find(p => p.deviceId === deviceId)) {
+                    event.participants.push({ deviceId, username: user.username });
+                }
 
-// ⚡️ TIMELINE: Set Max Quiz Duration based on mode to calculate endsAt
-if (event.deliveryMode === "STREAMED") {
-const streamGapMs = (event.streamGapMinutes || 5) * 60 * 1000;
-event.endsAt = new Date(now.getTime() + (event.quizQuestions.length * streamGapMs));
-event.currentStreamIndex = 0;
-event.quizQuestions[0].releasedAt = now;
-if (event.quizQuestions.length > 1) {
-event.quizQuestions[1].releasedAt = new Date(now.getTime() + streamGapMs);
-}
-} else {
-event.endsAt = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours default batch
-}
+                await event.save();
+                return NextResponse.json({ success: true, message: "You joined the quiz!" }, { status: 200 });
+            }
 
-// Remove the 1-hour grace period TTL and set the Leaderboard + Failsafe TTL
-event.expiresAt = new Date(event.endsAt.getTime() + 12 * 60 * 60 * 1000);
-await event.save();
+            case "START_QUIZ": {
+                if (!isLeader && !isModerator) return NextResponse.json({ message: "Access Denied." }, { status: 403 });
+                if (event.status !== "COMING_SOON") return NextResponse.json({ message: "Quiz cannot be started now." }, { status: 400 });
+                if (event.quizQuestions.length === 0) return NextResponse.json({ message: "Cannot start an empty quiz." }, { status: 400 });
 
-if (event.acknowledgedBy && event.acknowledgedBy.length > 0) {
-try {
-const registeredUsers = await MobileUser.find({ deviceId: { $in: event.acknowledgedBy }, pushToken: { $ne: null } }).select("deviceId pushToken").lean();
-const notifyPromises = registeredUsers.map(u =>
-// Fixed: Added eventId to the deep link
-sendPillParallel([u.pushToken], `🟢 Quiz LIVE: ${event.title}`, `The quiz in ${event.clanName} has just started! Jump in now to secure your spot.`, { screen: `/screens/events?id=${eventId}` }, { type: 'event', targetAudience: 'user', targetId: u.deviceId, singleUser: true, groupId: event._id.toString(), expiresInHours: 2 })
-);
-await Promise.all(notifyPromises);
-} catch (notifyErr) {
-console.error("Failed to send quiz start notifications:", notifyErr);
-}
-}
-return NextResponse.json({ success: true, message: "Quiz is now LIVE!" }, { status: 200 });
-}
+                event.status = "LIVE";
+                event.startedAt = now;
 
-case "SUBMIT_ENTRY": {
-if (event.status !== "LIVE") return NextResponse.json({ message: "Quiz is not accepting answers." }, { status: 400 });
-if (!username?.trim()) return NextResponse.json({ message: "Missing player name." }, { status: 400 });
+                // ⚡️ TIMELINE: Set Max Quiz Duration based on mode to calculate endsAt
+                if (event.deliveryMode === "STREAMED") {
+                    const streamGapMs = (event.streamGapMinutes || 5) * 60 * 1000;
+                    event.endsAt = new Date(now.getTime() + (event.quizQuestions.length * streamGapMs));
+                    event.currentStreamIndex = 0;
+                    event.quizQuestions[0].releasedAt = now;
+                    if (event.quizQuestions.length > 1) {
+                        event.quizQuestions[1].releasedAt = new Date(now.getTime() + streamGapMs);
+                    }
+                } else {
+                    event.endsAt = new Date(now.getTime() + 2 * 60 * 60 * 1000); // 2 hours default batch
+                }
 
-if (event.deliveryMode === "BATCH") {
-if (!Array.isArray(userAnswers)) return NextResponse.json({ message: "Invalid format." }, { status: 400 });
+                // Remove the 1-hour grace period TTL and set the Leaderboard + Failsafe TTL
+                event.expiresAt = new Date(event.endsAt.getTime() + 12 * 60 * 60 * 1000);
+                await event.save();
 
-let batchScore = 0;
-let batchIndexes = [];
-let batchResponses = [];
+                if (event.acknowledgedBy && event.acknowledgedBy.length > 0) {
+                    try {
+                        const registeredUsers = await MobileUser.find({ deviceId: { $in: event.acknowledgedBy }, pushToken: { $ne: null } }).select("deviceId pushToken").lean();
+                        const notifyPromises = registeredUsers.map(u =>
+                            // Fixed: Added eventId to the deep link
+                            sendPillParallel([u.pushToken], `🟢 Quiz LIVE: ${event.title}`, `The quiz in ${event.clanName} has just started! Jump in now to secure your spot.`, { screen: `/screens/events?id=${eventId}` }, { type: 'event', targetAudience: 'user', targetId: u.deviceId, singleUser: true, groupId: event._id.toString(), expiresInHours: 2 })
+                        );
+                        await Promise.all(notifyPromises);
+                    } catch (notifyErr) {
+                        console.error("Failed to send quiz start notifications:", notifyErr);
+                    }
+                }
+                return NextResponse.json({ success: true, message: "Quiz is now LIVE!" }, { status: 200 });
+            }
 
-event.quizQuestions.forEach((q, idx) => {
-if (userAnswers[idx] !== undefined && userAnswers[idx] !== -1) {
-const isCorrect = userAnswers[idx] === q.correctOptionIndex;
-if (isCorrect) batchScore += 1;
-batchIndexes.push(idx);
-batchResponses.push({ questionIndex: idx, selectedOptionIndex: userAnswers[idx], isCorrect });
-}
-});
+            case "SUBMIT_ENTRY": {
+                if (event.status !== "LIVE") return NextResponse.json({ message: "Quiz is not accepting answers." }, { status: 400 });
+                if (!username?.trim()) return NextResponse.json({ message: "Missing player name." }, { status: 400 });
 
-const updateResult = await QuizEvent.updateOne(
-{ _id: eventId, "leaderboard.deviceId": { $ne: deviceId } },
-{ $push: { leaderboard: { deviceId, username: username.trim(), score: batchScore, answeredQuestionIndexes: batchIndexes, responses: batchResponses } } }
-);
+                if (event.deliveryMode === "BATCH") {
+                    if (!Array.isArray(userAnswers)) return NextResponse.json({ message: "Invalid format." }, { status: 400 });
 
-if (updateResult.modifiedCount === 0) {
-return NextResponse.json({ message: "You have already finished." }, { status: 409 });
-}
+                    let batchScore = 0;
+                    let batchIndexes = [];
+                    let batchResponses = [];
 
-} else if (event.deliveryMode === "STREAMED") {
-if (questionIndex === undefined || answerIndex === undefined) return NextResponse.json({ message: "Parameters missing." }, { status: 400 });
+                    event.quizQuestions.forEach((q, idx) => {
+                        if (userAnswers[idx] !== undefined && userAnswers[idx] !== -1) {
+                            const isCorrect = userAnswers[idx] === q.correctOptionIndex;
+                            if (isCorrect) batchScore += 1;
+                            batchIndexes.push(idx);
+                            batchResponses.push({ questionIndex: idx, selectedOptionIndex: userAnswers[idx], isCorrect });
+                        }
+                    });
 
-// ⚡️ ORGANIC STREAM PROGRESSION: Allow users to push the stream forward if time has passed
-if (questionIndex > event.currentStreamIndex) {
-const targetQ = event.quizQuestions[questionIndex];
-if (targetQ && targetQ.releasedAt && now >= targetQ.releasedAt) {
+                    const updateResult = await QuizEvent.updateOne(
+                        { _id: eventId, "leaderboard.deviceId": { $ne: deviceId } },
+                        { $push: { leaderboard: { deviceId, username: username.trim(), score: batchScore, answeredQuestionIndexes: batchIndexes, responses: batchResponses } } }
+                    );
 
-const nextReleaseTime = new Date(now.getTime() + (event.streamGapMinutes || 5) * 60 * 1000);
-let streamUpdatePayload = { $set: { currentStreamIndex: questionIndex } };
+                    if (updateResult.modifiedCount === 0) {
+                        return NextResponse.json({ message: "You have already finished." }, { status: 409 });
+                    }
 
-if (questionIndex + 1 < event.quizQuestions.length) {
-streamUpdatePayload.$set[`quizQuestions.${questionIndex + 1}.releasedAt`] = nextReleaseTime;
-}
-// Notice: We do NOT complete the quiz here. Only the moderator or time limit handles that.
+                } else if (event.deliveryMode === "STREAMED") {
+                    if (questionIndex === undefined || answerIndex === undefined) return NextResponse.json({ message: "Parameters missing." }, { status: 400 });
 
-// Fire & forget atomic stream update (only the first concurrent request modifies it)
-await QuizEvent.updateOne(
-{ _id: eventId, currentStreamIndex: { $lt: questionIndex } },
-streamUpdatePayload
-);
-} else {
-return NextResponse.json({ message: "Hold up, this question is not active yet." }, { status: 400 });
-}
-} else if (questionIndex < event.currentStreamIndex) {
-return NextResponse.json({ message: "This question has already passed." }, { status: 400 });
-}
+                    // ⚡️ ORGANIC STREAM PROGRESSION: Allow users to push the stream forward if time has passed
+                    if (questionIndex > event.currentStreamIndex) {
+                        const targetQ = event.quizQuestions[questionIndex];
+                        if (targetQ && targetQ.releasedAt && now >= targetQ.releasedAt) {
 
-// Proceed to atomically log their answer
-const targetQuestion = event.quizQuestions[questionIndex];
-const isCorrect = targetQuestion && targetQuestion.correctOptionIndex === answerIndex;
-const userExists = event.leaderboard.some(l => l.deviceId === deviceId);
+                            const nextReleaseTime = new Date(now.getTime() + (event.streamGapMinutes || 5) * 60 * 1000);
+                            let streamUpdatePayload = { $set: { currentStreamIndex: questionIndex } };
 
-if (!userExists) {
-const insertResult = await QuizEvent.updateOne(
-{ _id: eventId, "leaderboard.deviceId": { $ne: deviceId } },
-{ $push: { leaderboard: { deviceId, username: username.trim(), score: isCorrect ? 1 : 0, answeredQuestionIndexes: [questionIndex], responses: [{ questionIndex, selectedOptionIndex: answerIndex, isCorrect }] } } }
-);
-if (insertResult.modifiedCount === 0) return NextResponse.json({ message: "Double submission detected." }, { status: 409 });
-} else {
-const updateResult = await QuizEvent.updateOne(
-{ _id: eventId, "leaderboard.deviceId": deviceId, "leaderboard.answeredQuestionIndexes": { $ne: questionIndex } },
-{
-$inc: { "leaderboard.$.score": isCorrect ? 1 : 0 },
-$push: {
-"leaderboard.$.answeredQuestionIndexes": questionIndex,
-"leaderboard.$.responses": { questionIndex, selectedOptionIndex: answerIndex, isCorrect }
-}
-}
-);
-if (updateResult.modifiedCount === 0) return NextResponse.json({ message: "You already answered." }, { status: 409 });
-}
-}
+                            if (questionIndex + 1 < event.quizQuestions.length) {
+                                streamUpdatePayload.$set[`quizQuestions.${questionIndex + 1}.releasedAt`] = nextReleaseTime;
+                            }
+                            // Notice: We do NOT complete the quiz here. Only the moderator or time limit handles that.
 
-// ⚡️ PERFORMANCE FIX: Sort in memory before sending
-const updatedEvent = await QuizEvent.findById(eventId).select("leaderboard").lean();
-const sortedLeaderboard = updatedEvent.leaderboard.sort((a, b) => b.score - a.score);
+                            // Fire & forget atomic stream update (only the first concurrent request modifies it)
+                            await QuizEvent.updateOne(
+                                { _id: eventId, currentStreamIndex: { $lt: questionIndex } },
+                                streamUpdatePayload
+                            );
+                        } else {
+                            return NextResponse.json({ message: "Hold up, this question is not active yet." }, { status: 400 });
+                        }
+                    } else if (questionIndex < event.currentStreamIndex) {
+                        return NextResponse.json({ message: "This question has already passed." }, { status: 400 });
+                    }
 
-return NextResponse.json({ success: true, leaderboard: sortedLeaderboard }, { status: 200 });
-}
+                    // Proceed to atomically log their answer
+                    const targetQuestion = event.quizQuestions[questionIndex];
+                    const isCorrect = targetQuestion && targetQuestion.correctOptionIndex === answerIndex;
+                    const userExists = event.leaderboard.some(l => l.deviceId === deviceId);
 
-case "STREAM_NEXT": {
-if (!isLeader && !isModerator) return NextResponse.json({ message: "Access Denied." }, { status: 403 });
-if (event.deliveryMode !== "STREAMED" || event.status !== "LIVE") return NextResponse.json({ message: "Invalid action." }, { status: 400 });
+                    if (!userExists) {
+                        const insertResult = await QuizEvent.updateOne(
+                            { _id: eventId, "leaderboard.deviceId": { $ne: deviceId } },
+                            { $push: { leaderboard: { deviceId, username: username.trim(), score: isCorrect ? 1 : 0, answeredQuestionIndexes: [questionIndex], responses: [{ questionIndex, selectedOptionIndex: answerIndex, isCorrect }] } } }
+                        );
+                        if (insertResult.modifiedCount === 0) return NextResponse.json({ message: "Double submission detected." }, { status: 409 });
+                    } else {
+                        const updateResult = await QuizEvent.updateOne(
+                            { _id: eventId, "leaderboard.deviceId": deviceId, "leaderboard.answeredQuestionIndexes": { $ne: questionIndex } },
+                            {
+                                $inc: { "leaderboard.$.score": isCorrect ? 1 : 0 },
+                                $push: {
+                                    "leaderboard.$.answeredQuestionIndexes": questionIndex,
+                                    "leaderboard.$.responses": { questionIndex, selectedOptionIndex: answerIndex, isCorrect }
+                                }
+                            }
+                        );
+                        if (updateResult.modifiedCount === 0) return NextResponse.json({ message: "You already answered." }, { status: 409 });
+                    }
+                }
 
-if (event.currentStreamIndex + 1 >= event.quizQuestions.length) {
-event.status = "COMPLETED";
-event.expiresAt = new Date(now.getTime() + 12 * 60 * 60 * 1000);
-} else {
-event.currentStreamIndex += 1;
-event.quizQuestions[event.currentStreamIndex].releasedAt = now;
-if (event.currentStreamIndex + 1 < event.quizQuestions.length) {
-event.quizQuestions[event.currentStreamIndex + 1].releasedAt = new Date(now.getTime() + (event.streamGapMinutes || 5) * 60 * 1000);
-}
-}
-await event.save();
-return NextResponse.json({ success: true, currentStreamIndex: event.currentStreamIndex, status: event.status }, { status: 200 });
-}
+                // ⚡️ PERFORMANCE FIX: Sort in memory before sending
+                const updatedEvent = await QuizEvent.findById(eventId).select("leaderboard").lean();
+                const sortedLeaderboard = updatedEvent.leaderboard.sort((a, b) => b.score - a.score);
 
-case "BLACKLIST_USER": {
-if (!isLeader && !isModerator) return NextResponse.json({ message: "Access Denied." }, { status: 403 });
-const { targetDeviceId } = payload;
-if (!targetDeviceId) return NextResponse.json({ message: "Target player ID required." }, { status: 400 });
+                return NextResponse.json({ success: true, leaderboard: sortedLeaderboard }, { status: 200 });
+            }
 
-if (!event.blacklistedDeviceIds.includes(targetDeviceId)) event.blacklistedDeviceIds.push(targetDeviceId);
-event.participants = event.participants.filter(p => p.deviceId !== targetDeviceId);
-event.leaderboard = event.leaderboard.filter(p => p.deviceId !== targetDeviceId);
+            case "STREAM_NEXT": {
+                if (!isLeader && !isModerator) return NextResponse.json({ message: "Access Denied." }, { status: 403 });
+                if (event.deliveryMode !== "STREAMED" || event.status !== "LIVE") return NextResponse.json({ message: "Invalid action." }, { status: 400 });
 
-await event.save();
-return NextResponse.json({ success: true, message: "Player removed and banned." }, { status: 200 });
-}
+                if (event.currentStreamIndex + 1 >= event.quizQuestions.length) {
+                    event.status = "COMPLETED";
+                    event.expiresAt = new Date(now.getTime() + 12 * 60 * 60 * 1000);
+                } else {
+                    event.currentStreamIndex += 1;
+                    event.quizQuestions[event.currentStreamIndex].releasedAt = now;
+                    if (event.currentStreamIndex + 1 < event.quizQuestions.length) {
+                        event.quizQuestions[event.currentStreamIndex + 1].releasedAt = new Date(now.getTime() + (event.streamGapMinutes || 5) * 60 * 1000);
+                    }
+                }
+                await event.save();
+                return NextResponse.json({ success: true, currentStreamIndex: event.currentStreamIndex, status: event.status }, { status: 200 });
+            }
 
-case "TERMINATE": {
-if (!isLeader && !isModerator) return NextResponse.json({ message: "Access Denied." }, { status: 403 });
-event.status = "COMPLETED";
-event.expiresAt = new Date(now.getTime() + 12 * 60 * 60 * 1000);
-await event.save();
-return NextResponse.json({ success: true, message: "Quiz ended early." }, { status: 200 });
-}
+            case "BLACKLIST_USER": {
+                if (!isLeader && !isModerator) return NextResponse.json({ message: "Access Denied." }, { status: 403 });
+                const { targetDeviceId } = payload;
+                if (!targetDeviceId) return NextResponse.json({ message: "Target player ID required." }, { status: 400 });
 
-default: return NextResponse.json({ message: "Unknown action." }, { status: 400 });
-}
-} catch (err) {
-console.error("⛔ QUIZ_PATCH_CRASH:", err);
-return NextResponse.json({ message: "Server error during update." }, { status: 500 });
-}
+                if (!event.blacklistedDeviceIds.includes(targetDeviceId)) event.blacklistedDeviceIds.push(targetDeviceId);
+                event.participants = event.participants.filter(p => p.deviceId !== targetDeviceId);
+                event.leaderboard = event.leaderboard.filter(p => p.deviceId !== targetDeviceId);
+
+                await event.save();
+                return NextResponse.json({ success: true, message: "Player removed and banned." }, { status: 200 });
+            }
+
+            case "TERMINATE": {
+                if (!isLeader && !isModerator) return NextResponse.json({ message: "Access Denied." }, { status: 403 });
+                event.status = "COMPLETED";
+                event.expiresAt = new Date(now.getTime() + 12 * 60 * 60 * 1000);
+                await event.save();
+                return NextResponse.json({ success: true, message: "Quiz ended early." }, { status: 200 });
+            }
+
+            default: return NextResponse.json({ message: "Unknown action." }, { status: 400 });
+        }
+    } catch (err) {
+        console.error("⛔ QUIZ_PATCH_CRASH:", err);
+        return NextResponse.json({ message: "Server error during update." }, { status: 500 });
+    }
 }

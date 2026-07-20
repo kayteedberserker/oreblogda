@@ -1,7 +1,20 @@
 import { finalizeAndPublishPost } from "@/app/api/posts/route"; // Adjust this path!
 import connectDB from "@/app/lib/mongodb";
+import PostEvent from "@/app/models/PostEventModel"; // 🌟 NEW IMPORT
 import Post from "@/app/models/PostModel";
 import { NextResponse } from "next/server";
+
+// 🌟 Local logging helper if needed in this isolated file
+async function logEvent(postId, type, message, metadata = {}) {
+    try {
+        await PostEvent.create({
+            postId: postId ? postId.toString() : "SYSTEM",
+            type,
+            message,
+            metadata: { ...metadata, timestamp: new Date() }
+        });
+    } catch (error) { }
+}
 
 export async function POST(req, { params }) {
     await connectDB();
@@ -22,6 +35,8 @@ export async function POST(req, { params }) {
         if (!post) {
             return NextResponse.json({ message: "Post not found" }, { status: 404 });
         }
+
+        await logEvent(postId, "UPLOAD_COMPLETED", "Client requested finalize route execution", { isEdit, mediaCount: media.length });
 
         // 2. ONLY mutate and save media if this is an Edit.
         // For new posts, the POST route already saved the correct URLs.

@@ -1,178 +1,411 @@
 import mongoose from 'mongoose';
 
+
+
 // --- 💬 NEW: CLAN MESSAGE SCHEMA ---
+
 const ClanMessageSchema = new mongoose.Schema({
+
     _id: {
+
         type: mongoose.Schema.Types.ObjectId,
+
         default: () => new mongoose.Types.ObjectId()
+
     },
+
     authorId: { type: String }, // Device ID / Fingerprint
+
     authorUserId: {
+
         type: mongoose.Schema.Types.ObjectId,
+
         ref: "MobileUser",
+
         required: true
+
     },
+
     authorName: { type: String, required: true },
+
     text: { type: String, required: true },
-    date: { type: Date, default: Date.now }
+
+    date: { type: Date, default: Date.now },
+
+
+
+    // 💬 NEW: Reply Context
+
+    replyToCommentId: { type: String, default: null },
+
+    replyToName: { type: String, default: null },
+
+    replyToText: { type: String, default: null }
+
 });
+
+
 
 const InventoryItemSchema = new mongoose.Schema({
+
     itemId: { type: String, required: true },
+
     name: { type: String, required: true },
+
     category: { type: String, required: true },
+
     rarity: {
+
         type: String,
+
         default: 'Common'
+
     },
+
     description: { type: String, default: null }, // ⚡️ Fixed typo from 'descriptiom'
+
     hypeType: { type: String, default: null },
+
     url: { type: String, default: null },
+
     visualConfig: {
+
         svgCode: { type: String },
+
         lottieUrl: { type: String }, // ⚡️ Added Lottie support
+
         primaryColor: { type: String },
+
         secondaryColor: { type: String, default: null },
+
         animationType: { type: String, default: "singleSnake" },
+
         opacity: { type: Number },
+
         zoom: { type: Number },
+
         scale: { type: Number },
+
         rotation: { type: String },
+
         offsetY: { type: Number },
+
         duration: { type: Number, default: 3000 },
+
         snakeLength: { type: Number, default: 120 },
+
         isAnimated: { type: Boolean, default: false }
+
     },
+
     itemCount: { type: Number, default: 1 },
+
     isConsumable: { type: Boolean, default: false },
+
     isEquipped: { type: Boolean, default: false },
+
     acquiredAt: { type: Date, default: Date.now },
+
     expiresAt: { type: Date, default: null },
+
 });
 
+
+
 const ClanSchema = new mongoose.Schema({
+
     name: { type: String, required: true },
+
     canonicalName: { type: String, default: null, index: true },
+
     canonicalTag: { type: String, default: null, index: true },
+
     tag: { type: String, required: true, unique: true, uppercase: true },
+
     description: { type: String, default: "" },
 
+
+
     // Roles
+
     leader: { type: mongoose.Schema.Types.ObjectId, ref: 'MobileUser' },
+
     viceLeader: { type: mongoose.Schema.Types.ObjectId, ref: 'MobileUser' },
+
     members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'MobileUser' }],
 
+
+
     // --- 💬 NEW: THE CHAT ROOM ---
+
     messages: [ClanMessageSchema],
 
+
+
     // Public Stats
+
     followerCount: { type: Number, default: 0 },
 
+
+
     // Stats for Point Generation & Badges
+
     stats: {
+
         views: { type: Number, default: 0 },
+
         likes: { type: Number, default: 0 },
+
         shares: { type: Number, default: 0 },
+
         comments: { type: Number, default: 0 },
+
         totalPosts: { type: Number, default: 0 },
+
         warLikes: { type: Number, default: 0 },
+
         warComments: { type: Number, default: 0 },
+
         warHypes: { type: Number, default: 0 },
+
     },
+
     totalPoints: { type: Number, default: 0 },
+
     totalPurchasedCoins: { type: Number, default: 0 },
+
     spendablePoints: { type: Number, default: 0 },
+
     lockedPoints: { type: Number, default: 0 },
+
     activeMultiplier: { type: Number, default: 0 },
+
     multiplierExpiresAt: { type: Date, default: null },
+
     rank: { type: Number, default: 1 },
+
     isRecruiting: { type: Boolean, default: true },
+
     maxSlots: { type: Number, default: 5 },
+
     joinRequests: [{
+
         userId: { type: mongoose.Schema.Types.ObjectId, ref: 'MobileUser' },
+
         username: String,
+
         appliedAt: { type: Date, default: Date.now }
+
     }],
+
+
 
     // Weekly Tracking
+
     currentWeeklyPoints: { type: Number, default: 0 },
+
     weeklyPointHistory: [{
+
         weekEnding: Date,
+
         points: Number,
+
         rankAtTime: Number
+
     }],
+
     country: {
+
         type: String,
+
         default: "Global",
+
         index: true
+
     },
+
     isInWar: { type: Boolean, default: false },
+
     activeWarId: {
+
         type: String,
+
         default: null,
+
         index: true
+
     },
+
     hasBounty: { type: Boolean, default: false },
+
     bountyAmount: { type: Number, default: 0 },
+
     bountyType: {
+
         type: String,
+
         enum: ["SYSTEM", "PLAYER_PLACED", null],
+
         default: null
+
     },
+
     bountyExpiry: { type: Date },
 
+
+
     // Inventory & Customization
+
     specialInventory: [InventoryItemSchema],
+
     activeCustomizations: {
+
         frame: { type: String, default: null },
+
         theme: { type: String, default: null },
+
         effect: { type: String, default: null },
+
         verifiedBadgeXml: { type: String, default: null },
+
         verifiedTier: { type: String, default: 'none' }
+
     },
+
     verifiedUntil: { type: Date, default: null },
+
     purchasedPacks: [{ type: String }],
 
+
+
     // --- 🆕 CLAN VERIFIED ALLOWANCES (Monthly Perks) ---
+
     allowances: {
+
         freeNameChanges: { type: Number, default: 0 }, // Unlocks 1 if buying 30-day Basic+
+
         passiveStreakFreezeActive: { type: Boolean, default: false }, // Unlocks if buying 30-day Standard+
+
         postResurrections: { type: Number, default: 0 }, // Unlocks 1 if buying 30-day Premium
+
         bonfireActive: { type: Boolean, default: false } // Active while Premium tier verified
+
     },
 
+
+
     totalHypePointsReceived: { type: Number, default: 0 },
+
     consecutiveWeeksNoDerank: { type: Number, default: 0 },
+
     lastActive: { type: Date, default: Date.now },
 
+
+
     // 🛡️ NEW VERIFICATION FIELD FOR COLLABS LOGINS
+
     verifiedClan: { type: Boolean, default: false },
+
     collabType: { type: String, enum: ['followers', 'referrals'], default: 'followers' },
+
     collabPercentage: { type: Number, default: 20 },
 
+
+
     // 💎 CONTINUOUS WEEKLY COLLAB PAYOUT
+
     monthlyCollabAllowance: { type: Number, default: 0 },
+
     nameLockedUntil: { type: Date, default: null },
+
+
 
     badges: [String],
 
+
+
+    // --- 👑 OPTIONAL TIED PRIME STATUS LEVEL CONFIGURATION ---
+
+    primeLevel: {
+
+        type: Number,
+
+        enum: [0, 1, 2, 3],
+
+        default: 0,
+
+        index: true
+
+    },
+
+    primeApplication: {
+
+        status: {
+
+            type: String,
+
+            enum: ['none', 'pending', 'approved', 'declined'],
+
+            default: 'none'
+
+        },
+
+        requestedLevel: {
+
+            type: Number,
+
+            enum: [1, 2, 3],
+
+            default: 1
+
+        },
+
+        appliedAt: { type: Date, default: null }
+
+    },
+
+    primeQuota: { type: Number, default: 0 },
+
+    primeQuotaMissed: { type: Number, default: 0 },
+
+
+
     // --- 🗑️ DELETION LOGIC ---
+
     willBeDeleted: { type: Boolean, default: false },
+
     deleteAt: { type: Date, default: null, index: { expires: 0 } },
+
 }, { timestamps: true });
 
+
+
 // Index for the War/Bounty system
+
 ClanSchema.index({ isInWar: 1, hasBounty: 1, rank: 1, canonicalName: 1, verifiedClan: 1, nameLockedUntil: 1 });
 
+
+
 // --- 🛡️ MIDDLEWARE: Enforce 250 Message Limit ---
+
 ClanSchema.pre('save', function (next) {
+
     // If the messages array exists and has more than 250 items, 
+
     // slice it to keep only the 250 MOST RECENT messages (the end of the array)
+
     if (this.messages && this.messages.length > 250) {
+
         this.messages = this.messages.slice(-250);
+
     }
+
     next();
+
 });
 
+
+
 const Clan = mongoose.models.Clan || mongoose.model('Clan', ClanSchema);
+
 export default Clan;

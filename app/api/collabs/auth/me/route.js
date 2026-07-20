@@ -54,7 +54,7 @@ export async function POST(req) {
         }
 
         // 6. Verify structural confirmation of the Clan
-        if (userClan.verifiedClan !== true) {
+        if (userClan.verifiedClan !== true || userClan.primeLevel < 2) {
             return NextResponse.json(
                 { error: "Access Denied. Your Clan has not been verified for external dashboard permissions yet." },
                 { status: 403 }

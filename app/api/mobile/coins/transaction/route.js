@@ -13,7 +13,7 @@ const OC_VALUES = {
     'daily_login_7': 50,
     "1kpostevent": 1000,
     'create_clan': 250,
-    'extra_slot': 20,
+    'extra_slot': 50,
     'clan_war': 20,
 };
 
@@ -398,7 +398,7 @@ export async function POST(req) {
                 const activeMemberships = await ClanFollower.find({ userId: updatedUser._id });
                 for (const membership of activeMemberships) {
                     const clan = await Clan.findOne({ tag: membership.clanTag });
-                    if (clan && clan.verifiedClan && (!clan.collabType || clan.collabType === 'followers')) {
+                    if (clan && clan.verifiedClan && clan.primeLevel >= 2 && (!clan.collabType || clan.collabType === 'followers')) {
                         clansToReward.set(clan._id.toString(), clan);
                     }
                 }
@@ -407,7 +407,7 @@ export async function POST(req) {
                     const referringLeader = await MobileUser.findOne({ referralCode: updatedUser.referredBy });
                     if (referringLeader) {
                         const referralClan = await Clan.findOne({ leader: referringLeader._id });
-                        if (referralClan && referralClan.verifiedClan && referralClan.collabType === 'referrals') {
+                        if (referralClan && referralClan.verifiedClan && referralClan.primeLevel >= 2 && referralClan.collabType === 'referrals') {
                             clansToReward.set(referralClan._id.toString(), referralClan);
                         }
                     }
