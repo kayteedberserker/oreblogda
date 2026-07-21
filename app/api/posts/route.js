@@ -10,6 +10,7 @@ import MobileUser from "@/app/models/MobileUserModel";
 import Newsletter from "@/app/models/Newsletter";
 import Post from "@/app/models/PostModel";
 import userModel from "@/app/models/UserModel";
+import PostEvent from "@/app/models/PostEventModel";
 import { v2 as cloudinary } from "cloudinary";
 import geoip from "geoip-lite";
 import mongoose from "mongoose";
