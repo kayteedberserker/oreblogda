@@ -398,7 +398,6 @@ export async function POST(req) {
         let referredClan = null;
         if (referredBy) {
             const referrer = await MobileUser.findOne({ referralCode: referredBy }).lean();
-
             if (referrer) {
                 const clan = await Clan.findOne({
                     $or: [{ leader: referrer._id }, { viceLeader: referrer._id }, { members: referrer._id }]

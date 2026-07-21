@@ -3,6 +3,7 @@ import connectDB from "@/app/lib/mongodb";
 import Clan from "@/app/models/ClanModel"; // ⚡️ ADDED: For cross-checking Faction locks
 import MobileUser from "@/app/models/MobileUserModel";
 import ReferralEvent from "@/app/models/ReferralEvent";
+import SecurityEvent from "@/app/models/SecurityEvent";
 import crypto from "crypto";
 import geoip from "geoip-lite";
 import jwt from "jsonwebtoken";
@@ -55,7 +56,7 @@ export async function POST(req) {
 
         if (activeLock) {
             return NextResponse.json({
-                message: `Identity lock active. A variation of '${normalizedUsername}' is reserved by a premium operator.`
+                message: `Identity lock active. A variation of '${normalizedUsername}' is reserved by a Player.`
             }, { status: 403 });
         }
 
@@ -67,7 +68,7 @@ export async function POST(req) {
 
         if (activeClanLock) {
             return NextResponse.json({
-                message: `Identity lock active. A variation of '${normalizedUsername}' is reserved by a premium faction.`
+                message: `Identity lock active. A variation of '${normalizedUsername}' is reserved by a CLAN.`
             }, { status: 403 });
         }
 
@@ -95,9 +96,18 @@ export async function POST(req) {
         const existingAccounts = await MobileUser.find({ hardwareId });
 
         if (existingAccounts.length >= 5) {
-            return NextResponse.json({
-                message: "SECURITY_PROTOCOL: Device limit reached. Maximum 5 players allowed per device."
-            }, { status: 403 });
+            const warningMsg = `[SECURITY] ${existingAccounts.length} accounts share hardware fingerprint ${hardwareId}`;
+            await SecurityEvent.create({
+                eventType: "HARDWARE_LIMIT_WARNING",
+                severity: "moderate",
+                hardwareId: hardwareId,
+                username: username,
+                ipAddress: ip,
+                message: warningMsg,
+                metadata: {
+                    associatedAccountsCount: existingAccounts.length
+                }
+            });
         }
 
         const suffix = generateSecureSuffix();
