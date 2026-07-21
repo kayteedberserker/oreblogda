@@ -37,17 +37,17 @@ export async function POST(req) {
 
         const stake = war.prizePool;
 
-        if (challenger.spendablePoints < stake || defender.spendablePoints < stake) {
+        if (challenger.totalPoints < stake || defender.totalPoints < stake) {
             return NextResponse.json({ message: "One clan lacks sufficient points to cover the stake" }, { status: 400 });
         }
 
         // 🛡️ LOCK POINTS & ACTIVATE WAR
-        challenger.spendablePoints -= stake;
+        challenger.totalPoints -= stake;
         challenger.lockedPoints += stake;
         challenger.isInWar = true;
         challenger.activeWarId = war.warId;
 
-        defender.spendablePoints -= stake;
+        defender.totalPoints -= stake;
         defender.lockedPoints += stake;
         defender.isInWar = true;
         defender.activeWarId = war.warId;

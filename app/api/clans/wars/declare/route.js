@@ -16,7 +16,7 @@ export async function POST(req) {
         const challengerClan = await Clan.findOne({ tag: challengerTag });
         if (!challengerClan) return NextResponse.json({ message: "Challenger clan not found" }, { status: 404 });
 
-        if (challengerClan.spendablePoints < stake) {
+        if (challengerClan.totalPoints < stake) {
             return NextResponse.json({ message: "Insufficient spendable points to challenge" }, { status: 400 });
         }
 
@@ -24,7 +24,7 @@ export async function POST(req) {
         const defenderClan = await Clan.findOne({ tag: targetTag });
         if (!defenderClan) return NextResponse.json({ message: "Target clan does not exist" }, { status: 404 });
 
-        if (defenderClan.spendablePoints < stake) {
+        if (defenderClan.totalPoints < stake) {
             return NextResponse.json({ message: "Target clan cannot afford this stake" }, { status: 400 });
         }
 
