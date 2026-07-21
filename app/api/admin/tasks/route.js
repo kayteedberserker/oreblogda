@@ -337,7 +337,7 @@ export async function POST(req) {
                         await sendPillParallel(
                             [author.pushToken],
                             "Scroll Deleted ❌",
-                            `Your log "${deletedPost.title}" was deleted due to not following platform rules.`,
+                            `Your log "${deletedPost.title}" was deleted because it has been pending too long or not following platform rules.`,
                             { type: 'POST_STATUS', postId: deletedPost._id, mediaUrl: deletedPost.mediaUrl, authorPfp: author.profilePic?.url },
                             { type: 'warning', targetAudience: 'user', targetId: author._id.toString(), singleUser: true, priority: 10 }
                         );
