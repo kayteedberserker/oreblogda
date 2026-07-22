@@ -240,6 +240,39 @@ export async function POST(req) {
             };
         });
 
+        // =======================================================================
+        // ⚡️ RAW EVENTS (MANUAL CONFIG)
+        // =======================================================================
+        const rawEvents = [
+            {
+                id: "claim-3k-posts-event",
+                type: "CLAIM",
+                title: "3K Posts Celebration!",
+                description:
+                    "Oreblogda has officially reached 3,000 community posts! Thank you for every post, comment, and moment shared. Celebrate this milestone by claiming 100 OC and an exclusive mystery reward. 3,000 posts ago, Oreblogda was just an idea. Today, it's a growing community. Thank you for helping us reach this milestone!",
+                isSystem: true,
+                rewards: {
+                    oc: 100,
+                    mysteryItem: true
+                },
+                startsAt: new Date('2026-07-22T19:00:00Z').toISOString(),
+                themeColor: '#F59E0B',
+                endsAt: new Date('2026-07-25T23:59:59Z').toISOString(),
+                visibility: "PUBLIC"
+            }
+        ];
+        const activeEvents = rawEvents
+            .filter(event => (event.endsAt ? new Date(event.endsAt) > now : true))
+            .map(event => {
+                let isComing = false;
+                let currentStatus = 'active';
+                if (event.startsAt && new Date(event.startsAt) > now) {
+                    isComing = true;
+                    currentStatus = 'coming_soon';
+                }
+                return { ...event, isComing, status: currentStatus };
+            });
+
         const formattedShoutouts = activeShoutouts.map(e => ({
             ...e,
             id: e._id.toString(),
@@ -385,7 +418,7 @@ export async function POST(req) {
             };
         });
 
-        const dynamicEvents = [...formattedShoutouts, ...formattedQuizzes, ...formattedTournaments];
+        const dynamicEvents = [...activeEvents, ...formattedShoutouts, ...formattedQuizzes, ...formattedTournaments];
         const systemVersion = versionConfig || { appVersion: "1.0.0", runtimeVersion: "v1", critical: false };
 
         const safeInventoryPayload = validInventory.map(item => {
