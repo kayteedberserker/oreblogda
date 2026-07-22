@@ -38,10 +38,10 @@ export async function generateMetadata({ params }) {
 
         if (isVideo) {
             // Generate an OG thumbnail from the video
-            postImage = `https://res.cloudinary.com/donakg9he/image/fetch/f_jpg,q_auto,so_auto,c_pad,b_black/${encodedUrl}`;
+            postImage = `https://res.cloudinary.com/dxqsvqhgl/image/fetch/f_jpg,q_auto,so_auto,c_pad,b_black/${encodedUrl}`;
         } else {
             // Optimize image for social previews
-            postImage = `https://res.cloudinary.com/donakg9he/image/fetch/c_fill,w_1200,h_630,f_auto,q_auto/${encodedUrl}`;
+            postImage = `https://res.cloudinary.com/dxqsvqhgl/image/fetch/c_fill,w_1200,h_630,f_auto,q_auto/${encodedUrl}`;
         }
     }
 

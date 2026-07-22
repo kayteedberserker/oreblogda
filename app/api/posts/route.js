@@ -8,9 +8,9 @@ import ClanFollower from "@/app/models/ClanFollower";
 import Clan from "@/app/models/ClanModel";
 import MobileUser from "@/app/models/MobileUserModel";
 import Newsletter from "@/app/models/Newsletter";
+import PostEvent from "@/app/models/PostEventModel";
 import Post from "@/app/models/PostModel";
 import userModel from "@/app/models/UserModel";
-import PostEvent from "@/app/models/PostEventModel";
 import { v2 as cloudinary } from "cloudinary";
 import geoip from "geoip-lite";
 import mongoose from "mongoose";
@@ -1368,7 +1368,7 @@ export async function POST(req) {
  */
 
 cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "donakg9he",
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "dxqsvqhgl",
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET,
 });

@@ -125,7 +125,7 @@ const getVideoThumbnail = (mediaUrl) => {
     }
 
     // 3. For raw Cloudflare R2 videos, pass through the proxy Fetch delivery architecture safely
-    const cloudName = "donakg9he";
+    const cloudName = "dxqsvqhgl";
 
     // The "f_jpg" transformation tells Cloudinary to automatically handle the conversion internally 
     // without distorting the resource payload link attached below.
@@ -152,7 +152,7 @@ const getImageOptimizedUrl = (mediaUrl) => {
     }
 
     // 3. For raw third-party/Cloudflare R2 images via Fetch API
-    const cloudName = "donakg9he";
+    const cloudName = "dxqsvqhgl";
 
     // f_auto: delivers webp/avif automatically
     // q_auto: heavily optimizes byte size
@@ -179,7 +179,7 @@ const getVideoPlaybackUrl = (mediaUrl) => {
     }
 
     // 3. For raw third-party/Cloudflare R2 videos via Fetch API
-    const cloudName = "donakg9he";
+    const cloudName = "dxqsvqhgl";
 
     // f_auto: yields webm/mp4 contextually based on browser support
     // q_auto: compresses smartly without visible quality loss

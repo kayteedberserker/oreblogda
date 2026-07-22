@@ -83,7 +83,7 @@ async function sendDirectToFcmV1(token, title, message, data, groupId) {
 
         if (nativeExpandableImage) {
             const isVideo = /\.(mp4|mov|webm)(\?.*)?$/i.test(nativeExpandableImage);
-            const cloudName = process.env.CLOUDINARY_CLOUD_NAME || "donakg9he";
+            const cloudName = process.env.CLOUDINARY_CLOUD_NAME || "dxqsvqhgl";
 
             // 1. Handle Legacy Direct Cloudinary URLs
             if (nativeExpandableImage.includes('cloudinary.com') && nativeExpandableImage.includes('/upload/')) {

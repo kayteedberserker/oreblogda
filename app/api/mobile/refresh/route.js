@@ -24,11 +24,6 @@ export async function POST(req) {
 
         // 2. Find user in MongoDB and verify token + deviceId match
         const user = await MobileUser.findOne({ uid: decoded.uid });
-        console.log(
-            "the user refreshToken in database is ", user.refreshToken,
-            "the user refreshToken sent from app is ", refreshToken,
-            "the user deviceId is ", user.deviceId, "sent from phone is ", deviceId
-        )
         if (!user || user.refreshToken !== refreshToken || user.deviceId !== deviceId) {
             return NextResponse.json({ message: "SESSION_COMPROMISED: Neural Link Severed" }, { status: 405 });
         }
