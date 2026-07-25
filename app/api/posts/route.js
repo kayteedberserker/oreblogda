@@ -564,12 +564,12 @@ export async function GET(req) {
         let blockedClanTags = [];
 
         let dynamicWeights = {
-            fresh: 0.35,
-            author: 0.20,
+            fresh: 0.1,
+            author: 0.15,
             clan: 0.15,
             interest: 0.15,
-            trending: 0.10,
-            explore: 0.05
+            trending: 0.15,
+            explore: 0.3
         };
 
         if (deviceId) {
@@ -834,8 +834,35 @@ export async function GET(req) {
         if (targetAuthor) {
             posts = await Post.aggregate([
                 { $match: query },
-                { $addFields: { effectiveDate: { $max: ["$createdAt", { $ifNull: ["$resurrectedAt", "$createdAt"] }] } } },
-                { $sort: { boostedUntil: -1, isAdminPost: -1, effectiveDate: -1 } },
+                {
+                    $addFields: {
+                        effectiveDate: {
+                            $max: [
+                                "$createdAt",
+                                { $ifNull: ["$resurrectedAt", "$createdAt"] }
+                            ]
+                        },
+                        isActiveBoost: {
+                            $cond: [
+                                {
+                                    $and: [
+                                        { $ne: ["$boostedUntil", null] },
+                                        { $gt: ["$boostedUntil", now] }
+                                    ]
+                                },
+                                1,
+                                0
+                            ]
+                        }
+                    }
+                },
+                {
+                    $sort: {
+                        isActiveBoost: -1,
+                        isAdminPost: -1,
+                        effectiveDate: -1
+                    }
+                },
                 { $skip: skip },
                 { $limit: limit }
             ]);
@@ -845,7 +872,7 @@ export async function GET(req) {
                 freshnessBoost: 20, freshnessWindow: 3, gravityPower: 1.2, staticPrefBonus: 3,
                 staticLocalBonus: 4, clanBonus: 20, affinityMultiplier: 1.0, tierBasicWeight: 4,
                 tierEpicWeight: 7, tierLegendaryWeight: 10, tierFollowerMultiplier: 1.5,
-                partnerClanBonus: 20, postBoostMultiplier: 3.0, boostIgnitionScore: 15,
+                partnerClanBonus: 20, postBoostMultiplier: 3.0, boostIgnitionScore: 25,
                 trendingThreshold: TRENDING_THRESHOLD
             };
 
