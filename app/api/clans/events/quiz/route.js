@@ -383,7 +383,6 @@ export async function PATCH(req) {
                                 }
                             }
                         );
-                        if (updateResult.modifiedCount === 0) return NextResponse.json({ message: "You already answered." }, { status: 409 });
                     }
                 }
 
