@@ -12,27 +12,27 @@ export async function GET(req, { params }) {
         // ⚡️ PERFORMANCE OPTIMIZATION: Only fetch the necessary payload chunks required for polling
         const event = await QuizEvent.findById(id)
             .select(`
-                status 
-                title 
-                description 
-                currentStreamIndex 
-                quizQuestions 
-                leaderboard 
-                acknowledgedBy 
-                acknowledgeCount 
-                deliveryMode 
-                endsAt 
-                expiresAt 
-                themeColor 
-                visibility 
-                clanId 
-                clanName 
-                leaderDeviceId 
-                moderatedBy 
-                blacklistedDeviceIds 
-                participants
-                streamGapMinutes
-            `)
+status 
+title 
+description 
+currentStreamIndex 
+quizQuestions 
+leaderboard 
+acknowledgedBy 
+acknowledgeCount 
+deliveryMode 
+endsAt 
+expiresAt 
+themeColor 
+visibility 
+clanId 
+clanName 
+leaderDeviceId 
+moderatedBy 
+blacklistedDeviceIds 
+participants
+streamGapMinutes
+`)
             .lean();
 
         if (!event) return NextResponse.json({ message: "Event not found" }, { status: 404 });
