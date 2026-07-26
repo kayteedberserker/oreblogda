@@ -859,7 +859,6 @@ export async function GET(req) {
                 {
                     $sort: {
                         isActiveBoost: -1,
-                        isAdminPost: -1,
                         effectiveDate: -1
                     }
                 },
@@ -991,7 +990,7 @@ export async function GET(req) {
                     }
                 },
                 { $addFields: { finalScore: { $divide: [{ $add: ["$engagementScore", "$relevanceBonus", "$noveltyScore"] }, { $pow: ["$ageInHours", CONFIG.gravityPower] }] } } },
-                { $sort: { isAdminPost: -1, finalScore: -1, effectiveDate: -1 } }
+                { $sort: { finalScore: -1, effectiveDate: -1 } }
             ];
 
             posts = await Post.aggregate(pipeline);

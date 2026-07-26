@@ -2,6 +2,7 @@ import connectDB from "@/app/lib/mongodb";
 import ClanFollower from "@/app/models/ClanFollower";
 import Clan from '@/app/models/ClanModel';
 import MobileUser from '@/app/models/MobileUserModel';
+import Post from "@/app/models/PostModel"; // ⚡️ ADDED: Import your Post model
 import QuizEvent from "@/app/models/QuizEvent";
 import ShoutoutEvent from "@/app/models/ShoutoutEvent";
 import Tournament from "@/app/models/Tournament";
@@ -83,10 +84,11 @@ export async function GET(request) {
         // =======================================================================
         // ⚡️ FETCH LIVE SECURE DATABASE EVENTS
         // =======================================================================
-        const [activeShoutouts, activeQuizzes, activeTournaments] = await Promise.all([
+        const [activeShoutouts, activeQuizzes, activeTournaments, adminPosts] = await Promise.all([
             ShoutoutEvent.find({ expiresAt: { $gt: now }, ...eventVisibilityFilter }).lean(),
             QuizEvent.find({ status: { $in: ["COMING_SOON", "LIVE", "COMPLETED", "CANCELLED"] }, ...eventVisibilityFilter }).lean(),
-            Tournament.find({ status: { $in: ["REGISTRATION", "LIVE", "COMPLETED"] }, ...eventVisibilityFilter }).lean()
+            Tournament.find({ status: { $in: ["REGISTRATION", "LIVE", "COMPLETED"] }, ...eventVisibilityFilter }).lean(),
+            Post.find({ isAdminPost: true, status: "approved" }).sort({ createdAt: -1 }).limit(3).lean()
         ]);
 
         const allModDeviceIds = new Set();
@@ -109,6 +111,22 @@ export async function GET(request) {
                 profilePic: mod.profilePic || null
             };
         });
+
+        // ⚡️ NEW: Format Admin Posts to act like Events
+        const formattedAdminPosts = adminPosts.map(post => ({
+            id: post._id.toString(),
+            type: "ADMIN_POST",
+            title: post.title,
+            description: post.message,
+            // Fallback to old mediaUrl if new media array is empty
+            imageUrl: post.media?.length > 0 ? post.media[0].url : post.mediaUrl || null,
+            startsAt: post.createdAt,
+            status: "active",
+            visibility: "PUBLIC",
+            themeColor: "#8b5cf6", // Give Admin Posts a distinct purple theme
+            slug: post.slug, // Pass slug in case frontend needs it for routing
+            noAction: false
+        }));
 
         const formattedShoutouts = activeShoutouts.map(e => ({
             ...e,
@@ -255,7 +273,7 @@ export async function GET(request) {
             };
         });
 
-        const allDynamicEvents = [...activeEvents, ...formattedShoutouts, ...formattedQuizzes, ...formattedTournaments];
+        const allDynamicEvents = [...formattedAdminPosts, ...activeEvents, ...formattedShoutouts, ...formattedQuizzes, ...formattedTournaments];
 
         let referredClan = null;
         if (referredBy) {

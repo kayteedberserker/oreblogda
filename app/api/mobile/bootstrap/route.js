@@ -7,6 +7,7 @@ import MobileUser from "@/app/models/MobileUserModel";
 import QuizEvent from "@/app/models/QuizEvent";
 import ShoutoutEvent from "@/app/models/ShoutoutEvent";
 import Tournament from "@/app/models/Tournament";
+import Post from "@/app/models/PostModel"; // ⚡️ ADDED: Import your Post model
 import UserStreak from "@/app/models/UserStreak";
 import mongoose from 'mongoose';
 import { NextResponse } from "next/server";
@@ -195,6 +196,7 @@ export async function POST(req) {
         if (clanId) audienceConditions.push({ targetAudience: 'clan', targetId: clanId });
 
         const [
+            adminPosts,
             updateResult,
             streakDoc,
             versionConfig,
@@ -203,6 +205,7 @@ export async function POST(req) {
             activeTournaments,
             activePills
         ] = await Promise.all([
+            Post.find({ isAdminPost: true, status: "approved" }).sort({ createdAt: -1 }).limit(3).lean(),
             MobileUser.updateOne({ _id: user._id }, updateQuery),
             UserStreak.findOne({ userId: user._id }).lean(),
             VersionModel.findOne({ key: 'latest_app_version' }).lean(),
@@ -418,7 +421,23 @@ export async function POST(req) {
             };
         });
 
-        const dynamicEvents = [...activeEvents, ...formattedShoutouts, ...formattedQuizzes, ...formattedTournaments];
+        // ⚡️ NEW: Format Admin Posts to act like Events
+        const formattedAdminPosts = adminPosts.map(post => ({
+            id: post._id.toString(),
+            type: "ADMIN_POST",
+            title: post.title,
+            description: post.message,
+            // Fallback to old mediaUrl if new media array is empty
+            imageUrl: post.media?.length > 0 ? post.media[0].url : post.mediaUrl || null,
+            startsAt: post.createdAt,
+            status: "active",
+            visibility: "PUBLIC",
+            themeColor: "#8b5cf6", // Give Admin Posts a distinct purple theme
+            slug: post.slug, // Pass slug in case frontend needs it for routing
+            noAction: false
+        }));
+
+        const dynamicEvents = [...formattedAdminPosts, ...activeEvents, ...formattedShoutouts, ...formattedQuizzes, ...formattedTournaments];
         const systemVersion = versionConfig || { appVersion: "1.0.0", runtimeVersion: "v1", critical: false };
 
         const safeInventoryPayload = validInventory.map(item => {
