@@ -100,11 +100,11 @@ export const RAW_SYSTEM_EVENTS = Object.freeze([
             "Recruit allies, earn Chakra Orbs, and use them to summon limited rewards.",
         startsAt:
             new Date(
-                "2026-07-17T00:00:00Z"
+                "2026-08-01T00:00:00Z"
             ).toISOString(),
         endsAt:
             new Date(
-                "2026-08-01T00:00:00Z"
+                "2026-09-01T00:00:00Z"
             ).toISOString(),
         eventType: "seasonal",
 

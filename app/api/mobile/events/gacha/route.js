@@ -8,20 +8,20 @@ const GACHA_POOLS = {
         // ==========================================
         // 👑 MYTHIC (1% Total) - Animated Lottie
         // ==========================================
-        {
-            id: 'mythic_style_amaterasu',
-            name: "Mythic Style: Amaterasu",
-            category: 'avatar_vfx',
-            keepBaseRate: true,
-            rarity: 'Mythic',
-            baseDropRate: 0.1,
-            url: 'https://res.cloudinary.com/donakg9he/image/upload/v1785242219/oreblogda/avatar_vfxs/mythic/vfx_ninpo_system_geminigeneratedimageqvw1wnqvw1wnqvw1.webp',
-            exchangePrice: 800, // ⚡️ High weight
-            visualConfig: {
-                zoom: 1.8,
-                offsetY: -10,
-            }
-        },
+        // {
+        //     id: 'mythic_style_amaterasu',
+        //     name: "Mythic Style: Amaterasu",
+        //     category: 'avatar_vfx',
+        //     keepBaseRate: true,
+        //     rarity: 'Mythic',
+        //     baseDropRate: 0.1,
+        //     url: 'https://res.cloudinary.com/donakg9he/image/upload/v1785242219/oreblogda/avatar_vfxs/mythic/vfx_ninpo_system_geminigeneratedimageqvw1wnqvw1wnqvw1.webp',
+        //     exchangePrice: 800, // ⚡️ High weight
+        //     visualConfig: {
+        //         zoom: 1.8,
+        //         offsetY: -10,
+        //     }
+        // },
 
         // ==========================================
         // 🟡 LEGENDARY (6% Total) - Animated Lottie
