@@ -97,7 +97,7 @@ export const RAW_SYSTEM_EVENTS = Object.freeze([
         gachaType: "GRID",
         title: "Ninja Arts",
         description:
-            "Recruit allies, earn Chakra Orbs, and use them to summon limited rewards.",
+            "Harness elemental avatar effects inspired by iconic shinobi techniques. Summon blazing flames, crashing waves, raging storms, shifting sands, and more to transform your profile into a true legend. Which element will answer your call?",
         startsAt:
             new Date(
                 "2026-08-01T00:00:00Z"
