@@ -1,142 +1,416 @@
 import connectDB from "@/app/lib/mongodb";
 import MessagePillModel from "../models/MessagePillModel";
 
+const MAX_PILL_TEXT_LENGTH = 100;
+const DEFAULT_PILL_EXPIRY_HOURS = 6;
+
+const normalizeTokenList = (tokens) => {
+    const tokenArray = Array.isArray(tokens)
+        ? tokens
+        : tokens
+            ? [tokens]
+            : [];
+
+    return [
+        ...new Set(
+            tokenArray
+                .map(token => String(token || "").trim())
+                .filter(Boolean)
+        ),
+    ];
+};
+
+const truncatePillText = (text) => {
+    const normalized = String(text || "").trim();
+
+    if (normalized.length <= MAX_PILL_TEXT_LENGTH) {
+        return normalized;
+    }
+
+    return `${normalized.slice(0, MAX_PILL_TEXT_LENGTH - 3)}...`;
+};
+
+const appendNavigationParams = (rawLink, data = {}) => {
+    if (!rawLink) return null;
+
+    try {
+        const originalLink = String(rawLink);
+        const isAbsolute = /^[a-z][a-z0-9+.-]*:\/\//i.test(originalLink);
+        const url = new URL(
+            originalLink,
+            "https://oreblogda.local"
+        );
+
+        if (
+            data.tab
+            && !url.searchParams.has("tab")
+        ) {
+            url.searchParams.set("tab", String(data.tab));
+        }
+
+        if (
+            data.commentId
+            && !url.searchParams.has("commentId")
+            && !url.searchParams.has("discussion")
+            && !url.searchParams.has("discussionId")
+        ) {
+            url.searchParams.set(
+                "commentId",
+                String(data.commentId)
+            );
+        } else if (
+            (data.discussionId || data.discussion)
+            && !url.searchParams.has("discussion")
+            && !url.searchParams.has("discussionId")
+            && !url.searchParams.has("commentId")
+        ) {
+            url.searchParams.set(
+                "discussion",
+                String(
+                    data.discussionId
+                    || data.discussion
+                )
+            );
+        } else if (
+            data.comment
+            && !url.searchParams.has("comment")
+            && !url.searchParams.has("commentId")
+            && !url.searchParams.has("discussion")
+        ) {
+            url.searchParams.set(
+                "comment",
+                String(data.comment)
+            );
+        }
+
+        if (isAbsolute) {
+            return url.toString();
+        }
+
+        return `${url.pathname}${url.search}${url.hash}`;
+    } catch (error) {
+        if (process.env.NODE_ENV !== "production") {
+            console.warn(
+                "Unable to append MessagePill navigation params:",
+                error
+            );
+        }
+
+        return String(rawLink);
+    }
+};
+
+const extractAccumulatedAmount = (text) => {
+    const match = String(text || "").match(/-?\d[\d,]*/);
+    if (!match) return null;
+
+    const amount = Number(
+        match[0].replace(/,/g, "")
+    );
+
+    return Number.isFinite(amount)
+        ? amount
+        : null;
+};
+
+const createAccumulatedPill = async ({
+    text,
+    type,
+    link,
+    targetAudience,
+    targetId,
+    groupId,
+    priority,
+    expiresAt,
+}) => {
+    const filter = {
+        targetAudience,
+        targetId,
+        type,
+        groupId,
+        isActive: true,
+    };
+
+    const existingPill = await MessagePillModel.findOne(
+        filter
+    );
+
+    let finalText = text;
+
+    if (existingPill) {
+        const oldAmount =
+            extractAccumulatedAmount(existingPill.text);
+        const incomingAmount =
+            extractAccumulatedAmount(text);
+
+        if (
+            oldAmount !== null
+            && incomingAmount !== null
+        ) {
+            const totalAmount =
+                oldAmount + incomingAmount;
+
+            finalText =
+                type === "aura_gain"
+                    ? `+${totalAmount} Aura Gained.`
+                    : `+${totalAmount} Clan Points Gained!`;
+        }
+
+        existingPill.text = finalText;
+        existingPill.link = link;
+        existingPill.priority = priority;
+        existingPill.expiresAt = expiresAt;
+        existingPill.isActive = true;
+
+        return existingPill.save();
+    }
+
+    return MessagePillModel.create({
+        text: finalText,
+        type,
+        link,
+        targetAudience,
+        targetId:
+            targetAudience !== "global"
+                ? targetId
+                : null,
+        groupId,
+        priority,
+        isActive: true,
+        expiresAt,
+    });
+};
+
 export async function createMessagePill({
     text,
-    type = 'system',
+    type = "system",
     link = null,
-    targetAudience = 'global',
+    targetAudience = "global",
     targetId = null,
     groupId = null,
     priority = 0,
     expiresInHours = null,
-    replaceExistingType = false
+    replaceExistingType = false,
 }) {
-    // console.log("the link inside cmpill is: ", link);
-
     try {
         await connectDB();
 
-        let expiresAt = null;
-        if (expiresInHours) {
-            expiresAt = new Date(Date.now() + (expiresInHours * 60 * 60 * 1000));
+        const normalizedText = String(text || "").trim();
+
+        if (!normalizedText) {
+            return null;
         }
 
-        let finalText = text;
-
-        // ⚡️ PER-POST/GROUP ANTI-STACKING: composite key type_targetId_groupId
-        if (replaceExistingType && targetId) {
-            const uniqueKey = `${type}_${targetAudience}_${targetId}_${groupId || 'default'}`;
-
-            // Accumulators still work as before
-            if (type === 'aura_gain' || type === 'clan_points') {
-                const existingPill = await MessagePillModel.findOne({
-                    targetAudience, targetId, type
-                });
-                if (existingPill) {
-                    const oldMatch = existingPill.text.match(/\d+/);
-                    const newMatch = text.match(/\d+/);
-                    if (oldMatch && newMatch) {
-                        const oldAmount = parseInt(oldMatch[0], 10);
-                        // Change 'const newMatch' to 'const newAmount'
-                        const newAmount = parseInt(newMatch[0], 10);
-
-                        // Now this calculation works perfectly
-                        const totalAmount = oldAmount + newAmount;
-
-                        finalText = type === 'aura_gain'
-                            ? `+${totalAmount} Aura Gained.`
-                            : `+${totalAmount} Clan Points Gained!`;
-                    }
-                    await MessagePillModel.deleteOne({ _id: existingPill._id });
-                }
-            } else {
-                // Replace same post/group only
-                await MessagePillModel.deleteMany({
-                    targetAudience,
-                    targetId,
+        if (
+            targetAudience !== "global"
+            && !targetId
+        ) {
+            console.warn(
+                "MessagePill skipped because a non-global audience requires targetId.",
+                {
                     type,
-                    groupId
-                });
-            }
+                    targetAudience,
+                    groupId,
+                }
+            );
+            return null;
         }
 
-        const newPill = await MessagePillModel.create({
-            text: finalText,
+        const normalizedGroupId =
+            groupId ? String(groupId) : "default";
+
+        const expiresAt =
+            Number(expiresInHours) > 0
+                ? new Date(
+                    Date.now()
+                    + Number(expiresInHours)
+                    * 60
+                    * 60
+                    * 1000
+                )
+                : null;
+
+        const commonDocument = {
+            text: normalizedText,
             type,
             link,
             targetAudience,
-            targetId: targetAudience !== 'global' ? targetId : null,
-            groupId,
+            targetId:
+                targetAudience !== "global"
+                    ? targetId
+                    : null,
+            groupId: normalizedGroupId,
             priority,
             isActive: true,
-            expiresAt
-        });
+            expiresAt,
+        };
 
-        return newPill;
-    } catch (err) {
-        console.error("MessagePill Creation Service Error:", err);
+        if (
+            replaceExistingType
+            && (
+                type === "aura_gain"
+                || type === "clan_points"
+            )
+        ) {
+            return createAccumulatedPill({
+                ...commonDocument,
+            });
+        }
+
+        if (replaceExistingType) {
+            return MessagePillModel.findOneAndUpdate(
+                {
+                    targetAudience,
+                    targetId:
+                        targetAudience !== "global"
+                            ? targetId
+                            : null,
+                    type,
+                    groupId: normalizedGroupId,
+                },
+                {
+                    $set: commonDocument,
+                },
+                {
+                    new: true,
+                    upsert: true,
+                    setDefaultsOnInsert: true,
+                    runValidators: true,
+                }
+            );
+        }
+
+        return MessagePillModel.create(
+            commonDocument
+        );
+    } catch (error) {
+        console.error(
+            "MessagePill Creation Service Error:",
+            error
+        );
         return null;
     }
 }
 
-/**
- * Sends push + parallel MessagePill for user/clan sync
- * @param {string[]} tokens - Expo tokens (determines audience)
- * @param {string} title - Push title  
- * @param {string} body - Pill text base
- * @param {object} data - Push data (screen, postId, 🌟 mediaUrl)
- * @param {object} pillContext - {type, targetId, link, singleUser?}
- */
-export async function sendPillParallel(tokens, title, body, data = {}, pillContext = {}) {
-    if (!tokens || tokens.length === 0) return;
-
-    // ⚡️ FIX 1: Construct a URL string that actually includes the query parameters
-    let generatedLink = data.screen ? data.screen : pillContext.link;
-
-    // Append the relevant IDs to the URL so the Marquee can use useLocalSearchParams
-    if (generatedLink) {
-        if (data.commentId) generatedLink += `?commentId=${data.commentId}`;
-        else if (data.discussion) generatedLink += `?discussion=${data.discussion}`;
-        else if (data.comment) generatedLink += `?comment=${data.comment}`;
-    }
+export async function sendPillParallel(
+    tokens,
+    title,
+    body,
+    data = {},
+    pillContext = {}
+) {
+    const uniqueTokens = normalizeTokenList(tokens);
 
     const {
-        type = 'system',
-        targetId,
-        link = generatedLink, // <-- Use the newly constructed link
-        targetAudience = 'user',
-        singleUser = false,
+        type = "system",
+        targetId = null,
+        link: explicitLink = null,
+        targetAudience = "user",
         priority = 1,
-        expiresInHours = 6
+        expiresInHours = DEFAULT_PILL_EXPIRY_HOURS,
+        groupId: explicitGroupId = null,
+        replaceExistingType = true,
     } = pillContext;
 
-    // Determine audience from tokens/targetId
-    const audience = targetAudience;
-    const pillTarget = singleUser ? targetId : (tokens.length === 1 ? tokens[0].split('[')[1]?.split(']')[0] : targetId); // Crude token parse fallback
+    const resolvedGroupId = String(
+        explicitGroupId
+        || data.groupId
+        || data.conversationId
+        || data.postId
+        || data.clanTag
+        || `${type}:${targetId || "default"}`
+    );
 
-    const pillText = body.length > 100 ? `${body.substring(0, 97)}...` : body;
+    const generatedLink = appendNavigationParams(
+        explicitLink || data.screen || null,
+        data
+    );
 
-    // 🌟 Push Execution (If data contains { mediaUrl: "..." }, it's securely handed off here)
-    const pushPromise = import('@/app/lib/pushNotifications').then(({ sendPushNotification, sendMultiplePushNotifications }) => {
-        return tokens.length === 1
-            ? sendPushNotification(tokens[0], title, body, data, data.postId || data.clanTag) // Injected groupId logic
-            : sendMultiplePushNotifications(tokens, title, body, data, data.postId || data.clanTag);
-    });
+    const pillPromise =
+        targetAudience === "global"
+            || targetId
+            ? createMessagePill({
+                text: truncatePillText(body),
+                type,
+                link: generatedLink,
+                groupId: resolvedGroupId,
+                targetAudience,
+                targetId,
+                priority,
+                expiresInHours,
+                replaceExistingType,
+            })
+            : Promise.resolve(null);
 
-    // Parallel pill
-    await createMessagePill({
-        text: pillText,
-        type,
-        link: generatedLink,
-        groupId: data.postId || data.clanTag || 'default',
-        targetAudience: audience,
-        targetId: pillTarget,
-        priority,
-        expiresInHours,
-        replaceExistingType: true
-    });
+    const pushPromise =
+        uniqueTokens.length > 0
+            ? import("@/app/lib/pushNotifications")
+                .then(({
+                    sendPushNotification,
+                    sendMultiplePushNotifications,
+                }) => (
+                    uniqueTokens.length === 1
+                        ? sendPushNotification(
+                            uniqueTokens[0],
+                            title,
+                            body,
+                            {
+                                ...data,
+                                groupId: resolvedGroupId,
+                            },
+                            resolvedGroupId
+                        )
+                        : sendMultiplePushNotifications(
+                            uniqueTokens,
+                            title,
+                            body,
+                            {
+                                ...data,
+                                groupId: resolvedGroupId,
+                            },
+                            resolvedGroupId
+                        )
+                ))
+            : Promise.resolve([]);
 
-    // Await push for logging
-    await pushPromise;
+    const [
+        pillResult,
+        pushResult,
+    ] = await Promise.allSettled([
+        pillPromise,
+        pushPromise,
+    ]);
+
+    if (pillResult.status === "rejected") {
+        console.error(
+            "Parallel MessagePill creation failed:",
+            pillResult.reason
+        );
+    }
+
+    if (pushResult.status === "rejected") {
+        console.error(
+            "Parallel push delivery failed:",
+            pushResult.reason
+        );
+    }
+
+    return {
+        pill:
+            pillResult.status === "fulfilled"
+                ? pillResult.value
+                : null,
+        push:
+            pushResult.status === "fulfilled"
+                ? pushResult.value
+                : null,
+        pillError:
+            pillResult.status === "rejected"
+                ? pillResult.reason
+                : null,
+        pushError:
+            pushResult.status === "rejected"
+                ? pushResult.reason
+                : null,
+    };
 }

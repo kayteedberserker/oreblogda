@@ -73,6 +73,71 @@ const sourceStatSchema = new mongoose.Schema({
     skips: { type: Number, default: 0 }
 }, { _id: false });
 
+const invitedUserSchema = new mongoose.Schema(
+    {
+        userId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "MobileUsers",
+            default: null,
+        },
+        username: {
+            type: String,
+            required: true,
+            trim: true,
+        },
+        date: {
+            type: Date,
+            default: Date.now,
+        },
+    },
+    {
+        _id: false,
+    }
+);
+
+const referralCampaignProgressSchema = new mongoose.Schema(
+    {
+        // All verified referrals during this exact event.
+        referralCount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+
+        // Referrals that actually received a spin-token milestone.
+        rewardedReferralCount: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+
+        // Historical earnings. Current balance is eventSpinTokens[eventId].
+        spinTokensEarned: {
+            type: Number,
+            default: 0,
+            min: 0,
+        },
+
+        lastReferralAt: {
+            type: Date,
+            default: null,
+        },
+
+        reviewRewardClaimed: {
+            type: Boolean,
+            default: false,
+        },
+
+        reviewRewardClaimedAt: {
+            type: Date,
+            default: null,
+        },
+    },
+    {
+        _id: false,
+    }
+);
+
 const mobileUserSchema = new mongoose.Schema(
     {
         // --- 🔑 IDENTITY & SECURITY SYSTEM ---
@@ -207,8 +272,37 @@ const mobileUserSchema = new mongoose.Schema(
         }],
 
         // ⚡️ DYNAMIC EVENT TRACKERS
-        gachaPityCounters: { type: Map, of: Number, default: {} },
-        eventPoints: { type: Map, of: Number, default: {} },
+
+        // Pity counter for each gacha event.
+        gachaPityCounters: {
+            type: Map,
+            of: Number,
+            default: () => new Map(),
+        },
+
+        // Exchange fragments/points earned from EVENT_POINT pull rewards.
+        // These are never used to pay for spins.
+        eventPoints: {
+            type: Map,
+            of: Number,
+            default: () => new Map(),
+        },
+
+        // Referral/review spin currency for each event.
+        // These are used only to pay for 1x/10x/11x summons.
+        eventSpinTokens: {
+            type: Map,
+            of: Number,
+            default: () => new Map(),
+        },
+
+        // Per-event referral progress and review-claim history.
+        referralCampaigns: {
+            type: Map,
+            of: referralCampaignProgressSchema,
+            default: () => new Map(),
+        },
+
         nameLockedUntil: { type: Date, default: null },
         coinTransactionHistory: {
             type: [{
@@ -250,10 +344,10 @@ const mobileUserSchema = new mongoose.Schema(
         // --- 🔗 REFERRAL SYSTEM ---
         referralCode: { type: String, unique: true, sparse: true },
         doubleStreakUntil: { type: Date, default: null },
-        invitedUsers: [{
-            username: String,
-            date: { type: Date, default: Date.now }
-        }],
+        invitedUsers: {
+            type: [invitedUserSchema],
+            default: [],
+        },
         canonicalUsername: {
             type: String,
             index: true

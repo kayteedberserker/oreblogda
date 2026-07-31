@@ -1,10 +1,10 @@
 import mongoose from "mongoose";
 
 /* =====================================================
-1. COMMENT SCHEMA (Infinite nesting, web + mobile)
+1. COMMENT SCHEMAS (One root level + flat replies)
 ===================================================== */
 
-const commentSchema = new mongoose.Schema({
+const sharedCommentFields = {
     _id: {
         type: mongoose.Schema.Types.ObjectId,
         default: () => new mongoose.Types.ObjectId()
@@ -16,25 +16,83 @@ const commentSchema = new mongoose.Schema({
         ref: "MobileUser",
         default: null
     },
-    reportCount: { type: Number, default: 0 }, // 🌟 NEW: Tracks total reports
-    reportedBy: [{ type: String }], // 🌟 NEW: Tracks fingerprints of reporters
-    name: { type: String, required: true },
-    text: { type: String, default: "" },
-    stickerId: { type: String, default: null },
-    imageUrl: { type: String, default: null }, // 🌟 NEW: Added to support image comment uploads
-    replyToCommentId: { type: String, default: null }, // 🌟 NEW: Direct target reply ID tracking
-    replyToName: { type: String, default: null }, // 🌟 NEW: Target reply user display name
-    replyToText: { type: String, default: null }, // 🌟 NEW: Context preview snippet of what's replied to
-    date: { type: Date, default: Date.now },
-    isEdited: { type: Boolean, default: false },
-    isHidden: { type: Boolean, default: false },
-    replies: { type: Array, default: [] },
-    type: { type: String, enum: ["text", "sticker", "image"], default: "text" } // 🌟 UPDATED: Added "image" enum
-});
+    reportCount: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
+    reportedBy: {
+        type: [String],
+        default: []
+    },
+    name: {
+        type: String,
+        required: true
+    },
+    text: {
+        type: String,
+        default: ""
+    },
+    stickerId: {
+        type: String,
+        default: null
+    },
+    imageUrl: {
+        type: String,
+        default: null
+    },
+    date: {
+        type: Date,
+        default: Date.now
+    },
+    isEdited: {
+        type: Boolean,
+        default: false
+    },
+    isHidden: {
+        type: Boolean,
+        default: false
+    },
+    type: {
+        type: String,
+        enum: ["text", "sticker", "image"],
+        default: "text"
+    }
+};
 
-commentSchema.add({
-    replies: [commentSchema]
-});
+const replySchema = new mongoose.Schema(
+    {
+        ...sharedCommentFields,
+        replyToCommentId: {
+            type: String,
+            default: null
+        },
+        replyToName: {
+            type: String,
+            default: null
+        },
+        replyToText: {
+            type: String,
+            default: null
+        }
+    },
+    {
+        _id: false
+    }
+);
+
+const commentSchema = new mongoose.Schema(
+    {
+        ...sharedCommentFields,
+        replies: {
+            type: [replySchema],
+            default: []
+        }
+    },
+    {
+        _id: false
+    }
+);
 
 /* =====================================================
 2. LIKE SCHEMA (Supports old + new formats)
@@ -83,22 +141,122 @@ const viewDataSchema = new mongoose.Schema({
 });
 
 /* =====================================================
-5. NEW: MEDIA ITEM SCHEMA
+5. MEDIA ITEM SCHEMA
 ===================================================== */
 
-const mediaItemSchema = new mongoose.Schema({
-    url: { type: String, required: true },
-    type: { type: String, default: "image" },
-    public_id: { type: String, default: null }, // 🌟 Added to track Cloudinary assets safely
-    order: { type: Number, default: 0 }, // 🌟 Added to preserve upload order
-
-    // New: store R2 object key so feed/cron can HEAD-check reliably
-    r2Key: { type: String, default: null }
-}, { _id: false });
-
+const mediaItemSchema = new mongoose.Schema(
+    {
+        url: { type: String, required: true },
+        type: { type: String, default: "image" },
+        public_id: { type: String, default: null },
+        order: { type: Number, default: 0 },
+        r2Key: { type: String, default: null },
+        mimeType: { type: String, default: null },
+        extension: { type: String, default: null },
+        expectedSize: { type: Number, default: 0, min: 0 }
+    },
+    { _id: false }
+);
 
 /* =====================================================
-6. MAIN POST SCHEMA
+6. COUNTER HELPERS
+===================================================== */
+
+const DISCUSSION_MIN_REPLIES = 5;
+const DISCUSSION_MIN_PARTICIPANTS = 2;
+
+function getCommentParticipantKey(comment) {
+    if (!comment) {
+        return null;
+    }
+
+    if (comment.authorFingerprint) {
+        return `device:${comment.authorFingerprint}`;
+    }
+
+    const userId =
+        comment.authorUserId?._id
+        || comment.authorUserId;
+
+    if (userId) {
+        return `user:${userId.toString()}`;
+    }
+
+    if (comment.authorId) {
+        return `legacy:${comment.authorId.toString()}`;
+    }
+
+    const normalizedName =
+        typeof comment.name === "string"
+            ? comment.name.trim().toLowerCase()
+            : "";
+
+    return normalizedName
+        ? `name:${normalizedName}`
+        : null;
+}
+
+function countAllComments(comments) {
+    if (!Array.isArray(comments)) {
+        return 0;
+    }
+
+    return comments.reduce(
+        (total, rootComment) => (
+            total
+            + 1
+            + (
+                Array.isArray(rootComment?.replies)
+                    ? rootComment.replies.length
+                    : 0
+            )
+        ),
+        0
+    );
+}
+
+function countQualifiedDiscussions(topLevelComments) {
+    if (!Array.isArray(topLevelComments)) {
+        return 0;
+    }
+
+    return topLevelComments.reduce(
+        (total, rootComment) => {
+            const replies =
+                Array.isArray(rootComment?.replies)
+                    ? rootComment.replies
+                    : [];
+
+            const participants = new Set();
+            const rootParticipantKey =
+                getCommentParticipantKey(rootComment);
+
+            if (rootParticipantKey) {
+                participants.add(rootParticipantKey);
+            }
+
+            replies.forEach(reply => {
+                const participantKey =
+                    getCommentParticipantKey(reply);
+
+                if (participantKey) {
+                    participants.add(participantKey);
+                }
+            });
+
+            const qualifies =
+                replies.length >= DISCUSSION_MIN_REPLIES
+                && participants.size
+                >= DISCUSSION_MIN_PARTICIPANTS;
+
+            return total + (qualifies ? 1 : 0);
+        },
+        0
+    );
+}
+
+/* =====================================================
+7. MAIN POST SCHEMA
 ===================================================== */
 
 const postSchema = new mongoose.Schema(
@@ -124,25 +282,65 @@ const postSchema = new mongoose.Schema(
         },
 
         /* ---------- INTERACTIONS ---------- */
-        likes: [likeSchema],
-        likeCount: { type: Number, default: 0 },
-        // ⚡️ HYPE SYSTEM FIELDS
+        likes: {
+            type: [likeSchema],
+            default: []
+        },
+
+        // Canonical feed/ranking counter.
+        likesCount: {
+            type: Number,
+            default: 0,
+            min: 0
+        },
+
+        // Legacy compatibility. Keep synchronized while older routes still read it.
+        likeCount: {
+            type: Number,
+            default: 0,
+            min: 0
+        },
+
         hypePoints: {
             type: Number,
             default: 0,
-            index: true // Useful if you want to sort posts by "Most Hyped"
+            index: true
         },
+
+        // Number of hype actions. This is not the same as hypePoints.
         hypeCount: {
             type: Number,
             default: 0,
+            min: 0
         },
-        comments: [commentSchema],
-        shares: { type: Number, default: 0 },
-        reportCount: { type: Number, default: 0 }, // 🌟 NEW: Tracks total reports
-        reportedBy: [{ type: String }], // 🌟 NEW: Tracks fingerprints of reporters
+
+        comments: {
+            type: [commentSchema],
+            default: []
+        },
+
+        // Total visible comment messages: top-level comments plus every reply.
+        commentsCount: {
+            type: Number,
+            default: 0,
+            min: 0
+        },
+
+        // Number of qualifying top-level discussion threads.
+        // A thread qualifies after at least 5 nested replies from at least
+        // 2 distinct participants, including the root commenter.
+        discussionCount: {
+            type: Number,
+            default: 0,
+            min: 0
+        },
+
+        shares: { type: Number, default: 0, min: 0 },
+        reportCount: { type: Number, default: 0 },
+        reportedBy: [{ type: String }],
 
         /* ---------- VIEWS ---------- */
-        views: { type: Number, default: 0 },
+        views: { type: Number, default: 0, min: 0 },
         viewsFingerprints: [{ type: String }],
         viewsIPs: [{ type: String }],
         viewsData: [viewDataSchema],
@@ -150,12 +348,16 @@ const postSchema = new mongoose.Schema(
         /* ---------- POLLS ---------- */
         poll: pollSchema,
         voters: {
-            type: [mongoose.Schema.Types.Mixed], // Allows both "fingerprint-string" and { fingerprint, selectedOptions }
+            type: [mongoose.Schema.Types.Mixed],
             default: []
         },
 
         /* ---------- META ---------- */
-        slug: { type: String, unique: true, trim: true },
+        slug: {
+            type: String,
+            unique: true,
+            trim: true
+        },
 
         interests: {
             type: [String],
@@ -163,16 +365,21 @@ const postSchema = new mongoose.Schema(
             index: true
         },
 
-        // 🌟 ADD THIS FIELD TO YOUR META BLOCK
         totalFilesExpected: {
             type: Number,
-            default: 0
+            default: 0,
+            min: 0,
+            max: 15
         },
 
-        // ⚡️ NEW: Idempotency Key to prevent duplicate posts
         requestId: {
             type: String,
-            index: true,
+            trim: true,
+            default: null
+        },
+
+        rewardsGrantedAt: {
+            type: Date,
             default: null
         },
 
@@ -186,56 +393,80 @@ const postSchema = new mongoose.Schema(
             default: null,
             index: true
         },
+
         country: {
             type: String,
             default: "Global",
             index: true
         },
 
-        // Final flag for UI/feed gating
-        // - "approved" / "rejected" are outcomes of moderation
-        // - "pending" means recoverable moderation (e.g. AI failed or waiting)
-        // - "pending_media" is kept for legacy compatibility
         status: {
             type: String,
             enum: ["pending", "approved", "rejected", "pending_media"],
             default: "approved"
         },
 
-        // New: upload/moderation independent pipeline state
         uploadStatus: {
             type: String,
-            enum: ["pending", "uploading", "uploaded", "failed"],
-            default: "pending"
+            enum: ["pending", "uploading", "finalizing", "uploaded", "failed"],
+            default: "uploaded",
+            index: true
         },
+
         moderationStatus: {
             type: String,
             enum: ["pending", "processing", "approved", "rejected", "failed"],
-            default: "pending"
+            default: "pending",
+            index: true
         },
 
-        uploadStatusChangedAt: { type: Date, default: Date.now },
-        moderationStatusChangedAt: { type: Date, default: Date.now },
+        uploadStatusChangedAt: {
+            type: Date,
+            default: Date.now
+        },
 
+        moderationStatusChangedAt: {
+            type: Date,
+            default: Date.now
+        },
 
         statusChangedAt: {
             type: Date,
             default: Date.now
         },
-        rejectionReason: { type: String, default: "" },
-        isAdminPost: { type: Boolean, default: false },
 
-        // ⚡️ NEW: Post Boost Economy Field
-        boostedUntil: { type: Date, default: null, index: true },
-        // Add this around the same place as your boostedUntil field
+        rejectionReason: {
+            type: String,
+            default: ""
+        },
+
+        isAdminPost: {
+            type: Boolean,
+            default: false
+        },
+
+        boostedUntil: {
+            type: Date,
+            default: null,
+            index: true
+        },
+
         resurrectedAt: {
             type: Date,
             default: null,
             index: true
         },
-        // --- 🗑️ DELETION LOGIC ---
-        willBeDeleted: { type: Boolean, default: false },
-        deleteAt: { type: Date, default: null, index: { expires: 0 } },
+
+        willBeDeleted: {
+            type: Boolean,
+            default: false
+        },
+
+        deleteAt: {
+            type: Date,
+            default: null,
+            index: { expires: 0 }
+        },
 
         expiresAt: {
             type: Date,
@@ -246,38 +477,105 @@ const postSchema = new mongoose.Schema(
 );
 
 /* =====================================================
-7. MIDDLEWARE: Sync status and multi-media compatibility
+8. FEED QUERY INDEXES
+
+Inspect existing indexes with Post.collection.indexes() before deploying.
+These compound indexes match the actual candidate-pool query shapes.
 ===================================================== */
 
-postSchema.pre('save', function (next) {
-    if (this.isModified('status')) {
+postSchema.index({ status: 1, createdAt: -1 });
+postSchema.index({ status: 1, category: 1, createdAt: -1 });
+postSchema.index({ status: 1, clanId: 1, createdAt: -1 });
+postSchema.index({ status: 1, authorUserId: 1, createdAt: -1 });
+postSchema.index({ status: 1, authorId: 1, createdAt: -1 });
+postSchema.index({ status: 1, interests: 1, createdAt: -1 });
+postSchema.index({ status: 1, boostedUntil: 1 });
+postSchema.index({ status: 1, resurrectedAt: -1 });
+
+// Only posts with a real string requestId participate in this unique index.
+// This prevents old posts with requestId: null from colliding.
+postSchema.index(
+    { authorUserId: 1, requestId: 1 },
+    {
+        unique: true,
+        partialFilterExpression: {
+            requestId: { $type: "string" }
+        },
+        name: "unique_author_request_id"
+    }
+);
+
+/* =====================================================
+9. MIDDLEWARE: Status, media compatibility and counters
+===================================================== */
+
+postSchema.pre("save", function syncPostState(next) {
+    if (this.isModified("status")) {
         this.statusChangedAt = new Date();
     }
 
-    if (this.isModified('uploadStatus')) {
+    if (this.isModified("uploadStatus")) {
         this.uploadStatusChangedAt = new Date();
     }
 
-    if (this.isModified('moderationStatus')) {
+    if (this.isModified("moderationStatus")) {
         this.moderationStatusChangedAt = new Date();
     }
 
-    // Only auto-map indices if media items actually exist or status isn't awaiting files
     if (this.media && this.media.length > 0) {
         this.mediaUrl = this.media[0].url;
         this.mediaType = this.media[0].type;
+    } else if (
+        this.mediaUrl
+        && (!this.media || this.media.length === 0)
+    ) {
+        this.media = [
+            {
+                url: this.mediaUrl,
+                type: this.mediaType || "image",
+                public_id: null,
+                order: 0,
+                r2Key: null,
+                mimeType: null,
+                extension: null,
+                expectedSize: 0
+            }
+        ];
     }
-    else if (this.mediaUrl && (!this.media || this.media.length === 0)) {
-        this.media = [{ url: this.mediaUrl, type: this.mediaType || "image", public_id: null, order: 0, r2Key: null }];
+
+    if (this.isModified("likes")) {
+        const nextLikesCount = Array.isArray(this.likes)
+            ? this.likes.length
+            : 0;
+
+        this.likesCount = nextLikesCount;
+        this.likeCount = nextLikesCount;
     }
+
+    if (this.isModified("comments")) {
+        const topLevelComments = Array.isArray(this.comments)
+            ? this.comments
+            : [];
+
+        this.commentsCount = countAllComments(topLevelComments);
+        this.discussionCount = countQualifiedDiscussions(
+            topLevelComments
+        );
+    }
+
+    this.likesCount = Math.max(0, this.likesCount || 0);
+    this.likeCount = Math.max(0, this.likeCount || 0);
+    this.commentsCount = Math.max(0, this.commentsCount || 0);
+    this.discussionCount = Math.max(0, this.discussionCount || 0);
 
     next();
 });
 
-
 /* =====================================================
-8. HOT RELOAD SAFE EXPORT
+10. HOT RELOAD SAFE EXPORT
 ===================================================== */
 
-const Post = mongoose.models.Post || mongoose.model("Post", postSchema);
+const Post = mongoose.models.Post
+    || mongoose.model("Post", postSchema);
+
 export default Post;

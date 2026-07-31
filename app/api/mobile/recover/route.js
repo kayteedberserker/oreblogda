@@ -260,7 +260,7 @@ export async function POST(req) {
         }, { status: 200 });
 
     } catch (err) {
-        console.error("Login/Recovery Error:", err);
+        console.log("Login/Recovery Error:", err);
         return NextResponse.json({
             message: "Uplink synchronization failed",
             error: err.message

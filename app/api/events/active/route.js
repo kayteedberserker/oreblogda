@@ -1,3 +1,4 @@
+import { getAvailableSystemEvents } from "@/app/lib/eventRegistry";
 import connectDB from "@/app/lib/mongodb";
 import ClanFollower from "@/app/models/ClanFollower";
 import Clan from '@/app/models/ClanModel';
@@ -9,6 +10,7 @@ import Tournament from "@/app/models/Tournament";
 import mongoose from 'mongoose';
 import { NextResponse } from 'next/server';
 
+
 export async function GET(request) {
     await connectDB();
     try {
@@ -19,37 +21,11 @@ export async function GET(request) {
         const deviceId = searchParams.get('deviceId');
 
         // =======================================================================
-        // ⚡️ RAW EVENTS (MANUAL CONFIG)
+        // ⚡️ SHARED MANUAL/SYSTEM EVENTS
         // =======================================================================
-        const rawEvents = [
-            {
-                id: "claim-3k-posts-event",
-                type: "CLAIM",
-                title: "3K Posts Celebration!",
-                description:
-                    "Oreblogda has officially reached 3,000 community posts! Thank you for every post, comment, and moment shared. Celebrate this milestone by claiming 100 OC and an exclusive mystery reward. 3,000 posts ago, Oreblogda was just an idea. Today, it's a growing community. Thank you for helping us reach this milestone!",
-                isSystem: true,
-                rewards: {
-                    oc: 100,
-                    mysteryItem: true
-                },
-                startsAt: new Date('2026-07-22T19:00:00Z').toISOString(),
-                themeColor: '#F59E0B',
-                endsAt: new Date('2026-07-25T23:59:59Z').toISOString(),
-                visibility: "PUBLIC"
-            }
-        ];
-        const activeEvents = rawEvents
-            .filter(event => (event.endsAt ? new Date(event.endsAt) > now : true))
-            .map(event => {
-                let isComing = false;
-                let currentStatus = 'active';
-                if (event.startsAt && new Date(event.startsAt) > now) {
-                    isComing = true;
-                    currentStatus = 'coming_soon';
-                }
-                return { ...event, isComing, status: currentStatus };
-            });
+        // The same source is imported by registration and gacha routes.
+        const activeEvents =
+            getAvailableSystemEvents(now);
 
         // =======================================================================
         // ⚡️ VISIBILITY CLEARANCE ENGINE
