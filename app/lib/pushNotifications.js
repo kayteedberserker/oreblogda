@@ -18,6 +18,8 @@ const EXPO_CHUNK_SIZE = 100;
 const FCM_BATCH_SIZE = 500;
 const DEFAULT_ANDROID_CHANNEL = "default";
 const MESSAGE_ANDROID_CHANNEL = "messages";
+const GENERAL_NOTIFICATION_GROUP_ID =
+    "oreblogda.general.notifications";
 const DEFAULT_SMALL_ICON = "notification_icon";
 const DEFAULT_NOTIFICATION_COLOR = "#10B981";
 const MAX_MESSAGING_TEXT_LENGTH = 1200;
@@ -306,11 +308,28 @@ const buildNativeNotification = ({
     data = {},
     groupId = null,
 }) => {
-    const sanitizedData =
-        sanitizeNotificationData(data, groupId);
-
     const messagingNotification =
         isMessagingNotification(data);
+
+    /*
+     * Generic notifications all belong to one Oreblogda group. Messaging
+     * notifications use their conversation ID instead and are intentionally
+     * excluded from the global application group.
+     */
+    const resolvedGenericGroupId =
+        messagingNotification
+            ? null
+            : String(
+                data?.groupId
+                || groupId
+                || GENERAL_NOTIFICATION_GROUP_ID
+            );
+
+    const sanitizedData =
+        sanitizeNotificationData(
+            data,
+            resolvedGenericGroupId
+        );
 
     const type =
         getNotificationType(data) || "general";
@@ -413,16 +432,16 @@ const buildNativeNotification = ({
         smallIcon:
             data?.smallIcon
             || DEFAULT_SMALL_ICON,
-        largeIcon: messagingNotification
-            ? optimizedSenderAvatar || undefined
-            : (
-                contentImage
-                || optimizedSenderAvatar
-                || undefined
-            ),
+        largeIcon:
+            optimizedSenderAvatar
+            || undefined,
         color:
             data?.color
             || DEFAULT_NOTIFICATION_COLOR,
+        groupId:
+            messagingNotification
+                ? undefined
+                : resolvedGenericGroupId,
         pressAction: {
             id: "default",
             launchActivity: "default",
@@ -460,9 +479,13 @@ const buildNativeNotification = ({
             ios: {
                 sound: "default",
                 threadId:
-                    groupId
-                    || conversationId
-                    || "oreblogda",
+                    messagingNotification
+                        ? (
+                            groupId
+                            || conversationId
+                            || "oreblogda.messages"
+                        )
+                        : resolvedGenericGroupId,
                 attachments:
                     iosAttachments,
             },
@@ -581,6 +604,11 @@ const sendExpoNotification = async (
     data,
     groupId
 ) => {
+    const resolvedGroupId =
+        groupId
+        || data?.groupId
+        || GENERAL_NOTIFICATION_GROUP_ID;
+
     const payload = {
         to: token,
         sound: "default",
@@ -588,11 +616,10 @@ const sendExpoNotification = async (
         body: message,
         data: {
             ...(data || {}),
-            groupId,
+            groupId: resolvedGroupId,
         },
         threadIdentifier:
-            groupId
-            || "default_group",
+            resolvedGroupId,
         mutableContent: true,
     };
 
@@ -755,6 +782,11 @@ const sendExpoBatch = async (
 
     const results = [];
 
+    const resolvedGroupId =
+        groupId
+        || data?.groupId
+        || GENERAL_NOTIFICATION_GROUP_ID;
+
     for (const chunk of chunks) {
         const messages = chunk.map(token => ({
             to: token,
@@ -763,11 +795,10 @@ const sendExpoBatch = async (
             body: message,
             data: {
                 ...(data || {}),
-                groupId,
+                groupId: resolvedGroupId,
             },
             threadIdentifier:
-                groupId
-                || "broadcast_group",
+                resolvedGroupId,
             mutableContent: true,
         }));
 

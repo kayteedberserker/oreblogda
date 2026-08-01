@@ -523,7 +523,6 @@ const applyDiversityPass = (posts, maxConsecutive = 2) => {
 
 
 import FeedSession from "@/app/models/FeedSessionSchema";
-
 const FEED_SESSION_IDLE_TTL_MS = 10 * 60 * 1000;
 const FEED_SESSION_MAX_AGE_MS = 30 * 60 * 1000;
 const FEED_SESSION_SNAPSHOT_SIZE = 240;
@@ -1104,6 +1103,8 @@ async function fetchFullPostsInOrder(rankedRows, deviceId = "") {
         .map(id => fullPostMap.get(id))
         .filter(Boolean);
 }
+
+
 
 export async function GET(req) {
     const requestStartedAt = Date.now();
