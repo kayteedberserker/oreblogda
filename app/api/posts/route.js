@@ -3185,8 +3185,6 @@ export async function POST(req) {
         const {
             title,
             message,
-            mediaUrl,
-            mediaType,
             media,
             hasPoll,
             pollMultiple,
@@ -3234,6 +3232,36 @@ export async function POST(req) {
             0,
             Number(totalFiles) || 0
         );
+
+        const hasMediaDescriptors =
+            Array.isArray(media) &&
+            media.length > 0;
+
+        const hasLegacyMediaUrl =
+            typeof body?.mediaUrl === "string" &&
+            Boolean(body.mediaUrl.trim());
+
+        // Media-bearing posts must always initialize through the R2
+        // pending-media pipeline. Client-provided permanent URLs are rejected.
+        if (
+            !mediaPending &&
+            (
+                requestedTotalFiles > 0 ||
+                hasMediaDescriptors ||
+                hasLegacyMediaUrl
+            )
+        ) {
+            return addCorsHeaders(
+                NextResponse.json(
+                    {
+                        code: "R2_PIPELINE_REQUIRED",
+                        message:
+                            "All post media must use the R2 upload pipeline."
+                    },
+                    { status: 400 }
+                )
+            );
+        }
 
         let mediaDescriptors = [];
 
@@ -3514,91 +3542,7 @@ export async function POST(req) {
         }
 
         // ------------------------------------------------------------
-        // 4. Legacy/non-pending media normalization
-        // ------------------------------------------------------------
-        const primaryMediaUrl =
-            !mediaPending
-                ? mediaUrl ||
-                (
-                    Array.isArray(media) &&
-                        media.length > 0
-                        ? media[0]?.url
-                        : null
-                )
-                : null;
-
-        const primaryMediaType =
-            !mediaPending
-                ? mediaType ||
-                (
-                    Array.isArray(media) &&
-                        media.length > 0
-                        ? media[0]?.type
-                        : "image"
-                )
-                : null;
-
-        const finalLegacyMediaArray =
-            !mediaPending &&
-                Array.isArray(media)
-                ? media
-                    .map((item, index) => ({
-                        url:
-                            typeof item?.url ===
-                                "string"
-                                ? item.url
-                                : null,
-                        type:
-                            item?.type === "video"
-                                ? "video"
-                                : "image",
-                        order:
-                            Number.isFinite(
-                                Number(item?.order)
-                            )
-                                ? Number(item.order)
-                                : index,
-                        r2Key:
-                            typeof item?.r2Key ===
-                                "string"
-                                ? item.r2Key
-                                : null,
-                        mimeType:
-                            typeof item?.mimeType ===
-                                "string"
-                                ? item.mimeType
-                                : null,
-                        extension:
-                            typeof item?.extension ===
-                                "string"
-                                ? item.extension
-                                : null,
-                        expectedSize:
-                            Number.isFinite(
-                                Number(
-                                    item?.expectedSize
-                                )
-                            )
-                                ? Number(
-                                    item.expectedSize
-                                )
-                                : 0
-                    }))
-                    .filter((item) => item.url)
-                : primaryMediaUrl
-                    ? [
-                        {
-                            url: primaryMediaUrl,
-                            type:
-                                primaryMediaType ||
-                                "image",
-                            order: 0
-                        }
-                    ]
-                    : [];
-
-        // ------------------------------------------------------------
-        // 5. Generate slug
+        // 4. Generate slug
         // ------------------------------------------------------------
         const newMessage = removeEmptyLines(
             normalizePostContent(message)
@@ -3658,7 +3602,7 @@ export async function POST(req) {
                 : "approved";
 
         // ------------------------------------------------------------
-        // 6. Create the logical post
+        // 5. Create the logical post
         // ------------------------------------------------------------
         let newPost;
 
@@ -3671,16 +3615,11 @@ export async function POST(req) {
                 slug,
                 message: newMessage,
 
-                // Never store local device URIs.
-                mediaUrl: mediaPending
-                    ? null
-                    : primaryMediaUrl,
-                mediaType: mediaPending
-                    ? null
-                    : primaryMediaType,
-                media: mediaPending
-                    ? []
-                    : finalLegacyMediaArray,
+                // Media URLs are server-owned and are populated only
+                // by buildR2UploadPlan below. Never trust client URLs.
+                mediaUrl: null,
+                mediaType: null,
+                media: [],
 
                 status: finalStatus,
                 uploadStatus: mediaPending
@@ -3729,7 +3668,7 @@ export async function POST(req) {
                 totalFilesExpected:
                     mediaPending
                         ? requestedTotalFiles
-                        : finalLegacyMediaArray.length
+                        : 0
             });
         } catch (error) {
             const duplicateRequest =
@@ -3775,7 +3714,7 @@ export async function POST(req) {
         );
 
         // ------------------------------------------------------------
-        // 7. R2 pending-media path
+        // 6. R2 pending-media path
         // ------------------------------------------------------------
         if (mediaPending) {
             try {
@@ -3861,7 +3800,7 @@ export async function POST(req) {
         }
 
         // ------------------------------------------------------------
-        // 8. Text-only/legacy path
+        // 7. Text-only path
         // ------------------------------------------------------------
         const evaluation =
             await finalizeAndPublishPost(
