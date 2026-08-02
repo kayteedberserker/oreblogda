@@ -1369,9 +1369,10 @@ export async function PATCH(req) {
                                 ),
                                 matches: {
                                     $elemMatch: {
-                                        matchNumber:
-                                            numericMatchNumber,
-                                        status: "LIVE",
+                                        matchNumber: numericMatchNumber,
+                                        status: {
+                                            $in: ["LIVE", "COMPLETED"],
+                                        },
                                     },
                                 },
                             }).session(session);
