@@ -229,14 +229,14 @@ const getTournamentFailureResponse = async ({
         }
     }
 
-    return NextResponse.json(
-        {
-            message:
-                "The tournament changed before this operation completed. Refresh and try again.",
-            code: "EVENT_STATE_CONFLICT",
-        },
-        { status: 409 }
-    );
+    // return NextResponse.json(
+    //     {
+    //         message:
+    //             "The tournament changed before this operation completed. Refresh and try again.",
+    //         code: "EVENT_STATE_CONFLICT",
+    //     },
+    //     { status: 409 }
+    // );
 };
 
 export async function POST(req) {
