@@ -133,6 +133,7 @@ const getTournamentFailureResponse = async ({
     deviceId,
     matchNumber = null,
     registration = false,
+    allowCompleted = false,
 }) => {
     const tournament = await Tournament.findById(
         eventId
@@ -165,6 +166,7 @@ const getTournamentFailureResponse = async ({
         CONCLUDED_EVENT_STATUSES.includes(
             tournament.status
         )
+        && !allowCompleted
     ) {
         return NextResponse.json(
             {
@@ -229,14 +231,14 @@ const getTournamentFailureResponse = async ({
         }
     }
 
-    // return NextResponse.json(
-    //     {
-    //         message:
-    //             "The tournament changed before this operation completed. Refresh and try again.",
-    //         code: "EVENT_STATE_CONFLICT",
-    //     },
-    //     { status: 409 }
-    // );
+    return NextResponse.json(
+        {
+            message:
+                "The tournament changed before this operation completed. Refresh and try again.",
+            code: "EVENT_STATE_CONFLICT",
+        },
+        { status: 409 }
+    );
 };
 
 export async function POST(req) {
@@ -1513,6 +1515,7 @@ export async function PATCH(req) {
                         deviceId,
                         matchNumber:
                             numericMatchNumber,
+                        allowCompleted: true,
                     });
                 }
 
