@@ -83,12 +83,51 @@ const FeedSessionSchema =
             entries: {
                 type: [FeedSessionEntrySchema],
                 default: [],
+                validate: [
+                    {
+                        validator(entries) {
+                            const ids = (
+                                Array.isArray(entries)
+                                    ? entries
+                                    : []
+                            )
+                                .map(entry =>
+                                    entry?.postId?.toString?.()
+                                )
+                                .filter(Boolean);
+
+                            return (
+                                ids.length
+                                === new Set(ids).size
+                            );
+                        },
+                        message:
+                            "A feed session cannot contain duplicate post IDs.",
+                    },
+                    {
+                        validator(entries) {
+                            return (
+                                !Array.isArray(entries)
+                                || entries.length <= 500
+                            );
+                        },
+                        message:
+                            "A feed session snapshot cannot exceed 500 entries.",
+                    },
+                ],
             },
 
             highestServedOffset: {
                 type: Number,
                 default: 0,
                 min: 0,
+                validate: {
+                    validator(value) {
+                        return Number.isInteger(value);
+                    },
+                    message:
+                        "highestServedOffset must be an integer.",
+                },
             },
 
             createdAt: {
@@ -133,12 +172,19 @@ FeedSessionSchema.index({
 });
 
 FeedSessionSchema.index({
+    viewerKey: 1,
+    scopeKey: 1,
+    algorithmVersion: 1,
+    maxExpiresAt: 1,
+});
+
+FeedSessionSchema.index({
     lastAccessedAt: 1,
 });
 
 export default (
-    mongoose.models.FeedSession ||
-    mongoose.model(
+    mongoose.models.FeedSession
+    || mongoose.model(
         "FeedSession",
         FeedSessionSchema
     )
