@@ -166,7 +166,7 @@ const optimizeNotificationImage = rawUrl => {
         /\.(mp4|mov|webm)(\?.*)?$/i.test(url);
     const cloudName =
         process.env.CLOUDINARY_CLOUD_NAME
-        || "dxqsvqhgl";
+        || "donakg9he";
 
     if (
         url.includes("cloudinary.com")

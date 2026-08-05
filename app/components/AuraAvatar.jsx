@@ -21,7 +21,7 @@ const getImageOptimizedUrl = (mediaUrl) => {
     }
 
     // 3. For raw third-party/Cloudflare R2 images via Fetch API
-    const cloudName = "dxqsvqhgl";
+    const cloudName = "donakg9he";
 
     // f_auto: delivers webp/avif automatically
     // q_auto: heavily optimizes byte size
